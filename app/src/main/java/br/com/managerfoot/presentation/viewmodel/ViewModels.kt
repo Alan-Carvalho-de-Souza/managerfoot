@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import br.com.managerfoot.data.dao.ArtilheiroDto
 import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
+import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.data.datasource.GameDataStore
@@ -140,6 +141,20 @@ class InicioViewModel @Inject constructor(
                 1 -> campeonatoAId; 2 -> campeonatoBId; 3 -> campeonatoCId; else -> campeonatoDId
             }
 
+            // Cria Copa do Brasil: top 64 por reputação
+            val todos = timeDao.observeTodos().first()
+            val copaParticipantes = todos.sortedByDescending { it.reputacao }.take(64).map { it.id }
+            val copaId = gameRepository.criarCopa(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Copa do Brasil 2026",
+                    tipo         = TipoCampeonato.COPA_NACIONAL,
+                    formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                    totalRodadas = 12
+                ),
+                copaParticipantes
+            )
+
             gameDataStore.salvarNovoJogo(
                 timeId = timeId,
                 temporadaId = temporadaId,
@@ -148,6 +163,7 @@ class InicioViewModel @Inject constructor(
                 campeonatoBId = campeonatoBId,
                 campeonatoCId = campeonatoCId,
                 campeonatoDId = campeonatoDId,
+                copaId = copaId,
                 ano = 2026
             )
             _uiState.value = InicioUiState.JogoIniciado(timeId)
@@ -211,6 +227,10 @@ class DashboardViewModel @Inject constructor(
     private val _escalacaoSimulacao = MutableStateFlow<Escalacao?>(null)
     val escalacaoSimulacao: StateFlow<Escalacao?> = _escalacaoSimulacao.asStateFlow()
 
+    // Resultado dos pênaltis (Copa): não nulo quando disputa de pênaltis foi simulada
+    private val _penaltisResultado = MutableStateFlow<ResultadoPenaltis?>(null)
+    val penaltisResultado: StateFlow<ResultadoPenaltis?> = _penaltisResultado.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
         // Carrega todos os times para resolver nomes
         launch {
@@ -225,7 +245,10 @@ class DashboardViewModel @Inject constructor(
         
         // Últimos resultados: busca pontual — não reage a mudanças do banco
         // durante a simulação para evitar exibir o resultado antes da animação finalizar
-        _ultimosResultados.value = gameRepository.buscarUltimosResultados(timeId, campeonatoId)
+        val copaIdInicial = save.copaId
+        _ultimosResultados.value = gameRepository.buscarUltimosResultados(
+            timeId, listOf(campeonatoId, copaIdInicial).filter { it > 0 }
+        )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
         _uiState.value = DashboardUiState.Pronto
     }
@@ -238,27 +261,45 @@ class DashboardViewModel @Inject constructor(
         _uiState.value = DashboardUiState.Simulando
 
         try {
-            // Carrega escalação para o painel do intervalo
-            val elenco = jogadorRepository.buscarDisponiveis(save.timeIdJogador)
-            val time = timeRepository.buscarPorId(save.timeIdJogador)
-            if (time != null) {
-                _escalacaoSimulacao.value = IATimeRival.gerarEscalacao(time, elenco)
-            }
+            // Carrega escalação salva pelo jogador (ou cai no IA se não houver)
+            val escalacaoJogador = gameRepository.gerarEscalacaoJogador(save.timeIdJogador)
+            _escalacaoSimulacao.value = escalacaoJogador
 
             // Simula a rodada inteira uma única vez: o mesmo resultado é persistido
             // no banco e exibido na animação, eliminando divergência de placar.
             val resultado = gameRepository.simularRodadaComJogador(
                 campeonatoId = campeonatoId,
                 rodada = rodada,
-                timeJogadorId = save.timeIdJogador
+                timeJogadorId = save.timeIdJogador,
+                escalacaoCasa = escalacaoJogador
             )
             _resultadoSimulado.value = resultado
 
-            // Simula a mesma rodada nas demais divisões (pura IA, sem jogador)
-            for (campId in listOf(save.campeonatoAId, save.campeonatoBId, save.campeonatoCId, save.campeonatoDId)) {
-                if (campId > 0 && campId != campeonatoId) {
-                    gameRepository.simularRodada(campId, rodada)
+            // Simula a mesma rodada nas demais divisões APENAS se for uma partida da liga
+            // (não da Copa). A Copa é independente e não deve arrastar o Brasileirão junto.
+            val ehPartidaCopa = save.copaId > 0 && campeonatoId == save.copaId
+            if (!ehPartidaCopa) {
+                for (campId in listOf(save.campeonatoAId, save.campeonatoBId, save.campeonatoCId, save.campeonatoDId)) {
+                    if (campId > 0 && campId != campeonatoId) {
+                        gameRepository.simularRodada(campId, rodada)
+                    }
                 }
+            }
+
+            // Verifica avanço de fase da Copa (se a rodada simulada era da Copa
+            // e NÃO há pênaltis pendentes — esses serão resolvidos pelo jogador)
+            if (save.copaId > 0 && campeonatoId == save.copaId && !resultado.precisaPenaltis) {
+                gameRepository.verificarEAvancarFaseCopa(save.copaId, save.anoAtual)
+            }
+
+            // Quando o jogador joga a liga e já foi eliminado da Copa,
+            // simula a fase Copa pendente para manter o chaveamento atualizado.
+            if (!ehPartidaCopa && save.copaId > 0) {
+                gameRepository.simularProximaFaseCopaSeJogadorEliminado(
+                    copaId        = save.copaId,
+                    timeJogadorId = save.timeIdJogador,
+                    anoAtual      = save.anoAtual
+                )
             }
         } catch (e: Exception) {
             // Ignora erro e volta para o estado normal
@@ -272,9 +313,32 @@ class DashboardViewModel @Inject constructor(
     fun fecharSimulacao() = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         // Atualiza últimos resultados só agora, após a animação ter sido exibida
-        _ultimosResultados.value = gameRepository.buscarUltimosResultados(save.timeIdJogador, save.campeonatoId)
+        _ultimosResultados.value = gameRepository.buscarUltimosResultados(
+            save.timeIdJogador, listOf(save.campeonatoId, save.copaId).filter { it > 0 }
+        )
         _resultadoSimulado.value = null
         _escalacaoSimulacao.value = null
+        _penaltisResultado.value = null
+    }
+
+    // Chamado quando o jogador confirma os cobradores de pênalti
+    fun simularPenaltisJogador(
+        cobradores: List<JogadorNaEscalacao>,
+        goleiroDefesa: Int
+    ) = viewModelScope.launch {
+        val save    = gameDataStore.saveState.first()
+        val resultado = _resultadoSimulado.value ?: return@launch
+        try {
+            val penaltis = gameRepository.simularEPersistirPenaltisJogador(
+                copaId               = save.copaId,
+                anoAtual             = save.anoAtual,
+                voltaPartidaId       = resultado.partidaId,
+                cobradoresJogador    = cobradores,
+                timeJogadorId        = save.timeIdJogador,
+                goleiroJogadorDefesa = goleiroDefesa
+            )
+            _penaltisResultado.value = penaltis
+        } catch (_: Exception) { }
     }
 
     fun fecharMes() = viewModelScope.launch {
@@ -307,12 +371,16 @@ class DashboardViewModel @Inject constructor(
                 campeonatoBId = novaInfo.campeonatoBId,
                 campeonatoCId = novaInfo.campeonatoCId,
                 campeonatoDId = novaInfo.campeonatoDId,
+                copaId        = novaInfo.copaId,
                 temporadaId   = novaInfo.temporadaId,
                 ano           = novaInfo.ano
             )
             val saveAtualizado = gameDataStore.saveState.first()
             _proximaPartida.value    = gameRepository.buscarProximaPartida(saveAtualizado.timeIdJogador)
-            _ultimosResultados.value = gameRepository.buscarUltimosResultados(saveAtualizado.timeIdJogador, saveAtualizado.campeonatoId)
+            _ultimosResultados.value = gameRepository.buscarUltimosResultados(
+                saveAtualizado.timeIdJogador,
+                listOf(saveAtualizado.campeonatoId, saveAtualizado.copaId).filter { it > 0 }
+            )
         } catch (e: Exception) {
             // Registrar erro sem travar a UI
         }
@@ -353,8 +421,15 @@ class EscalacaoViewModel @Inject constructor(
             _elenco.value = lista
             if (_escalacao.value == null) {
                 val time = timeRepository.buscarPorId(timeId) ?: return@collect
-                val escalacaoIA = IATimeRival.gerarEscalacao(time, lista)
-                _escalacao.value = escalacaoIA
+                val titularesSalvos = jogadorRepository.buscarTitularesSalvos(timeId)
+                if (titularesSalvos.isNotEmpty()) {
+                    val reservasSalvas = jogadorRepository.buscarReservasSalvas(timeId)
+                    val titulares = titularesSalvos.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
+                    val reservas  = reservasSalvas.map  { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
+                    _escalacao.value = Escalacao(time = time, titulares = titulares, reservas = reservas)
+                } else {
+                    _escalacao.value = IATimeRival.gerarEscalacao(time, lista)
+                }
             }
         }
     }
@@ -363,19 +438,49 @@ class EscalacaoViewModel @Inject constructor(
 
     fun moverParaTitular(jogador: Jogador, posicao: Posicao) {
         val atual = _escalacao.value ?: return
-        val novoTitular = JogadorNaEscalacao(jogador, posicao)
-        val novasReservas = atual.reservas.filter { it.jogador.id != jogador.id }.toMutableList()
-        val novosTitulares = atual.titulares.toMutableList()
-        if (novosTitulares.size < 11) novosTitulares.add(novoTitular)
+        // Guarda: não faz nada se já está nos titulares ou se está cheio
+        if (atual.titulares.size >= 11) return
+        if (atual.titulares.any { it.jogador.id == jogador.id }) return
+        val novosTitulares = atual.titulares + JogadorNaEscalacao(jogador, posicao)
+        val novasReservas  = atual.reservas.filter { it.jogador.id != jogador.id }
         _escalacao.value = atual.copy(titulares = novosTitulares, reservas = novasReservas)
+        val posToSave = if (posicao != jogador.posicao) posicao else null
+        persistirEscalacao(jogador.id, 1, posToSave)
     }
 
     fun moverParaReserva(jogador: Jogador) {
         val atual = _escalacao.value ?: return
         val novosTitulares = atual.titulares.filter { it.jogador.id != jogador.id }
-        val novaReserva = JogadorNaEscalacao(jogador, jogador.posicao)
-        val novasReservas = (atual.reservas + novaReserva).take(7)
+        // Não adiciona se já é reserva ou se o banco está cheio (7 jogadores)
+        val jaEhReserva = atual.reservas.any { it.jogador.id == jogador.id }
+        val novasReservas = if (jaEhReserva || atual.reservas.size >= 7) {
+            atual.reservas
+        } else {
+            atual.reservas + JogadorNaEscalacao(jogador, jogador.posicao)
+        }
         _escalacao.value = atual.copy(titulares = novosTitulares, reservas = novasReservas)
+        if (!jaEhReserva && atual.reservas.size < 7) persistirEscalacao(jogador.id, 2)
+    }
+
+    fun adicionarComoReserva(jogador: Jogador) {
+        val atual = _escalacao.value ?: return
+        if (atual.reservas.any { it.jogador.id == jogador.id }) return
+        if (atual.titulares.any { it.jogador.id == jogador.id }) return
+        if (atual.reservas.size >= 7) return
+        val novasReservas = atual.reservas + JogadorNaEscalacao(jogador, jogador.posicao)
+        _escalacao.value = atual.copy(reservas = novasReservas)
+        persistirEscalacao(jogador.id, 2)
+    }
+
+    fun removerDaEscalacao(jogador: Jogador) {
+        val atual = _escalacao.value ?: return
+        val novasReservas = atual.reservas.filter { it.jogador.id != jogador.id }
+        _escalacao.value = atual.copy(reservas = novasReservas)
+        persistirEscalacao(jogador.id, 0)
+    }
+
+    private fun persistirEscalacao(jogadorId: Int, status: Int, posicao: Posicao? = null) {
+        viewModelScope.launch { jogadorRepository.atualizarEscalacao(jogadorId, status, posicao) }
     }
 
     // Persiste a formação no banco e atualiza o Time em memória
@@ -568,40 +673,88 @@ class ArtilheirosViewModel @Inject constructor(
     private val _assistentesAllTime = MutableStateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>>(emptyList())
     val assistentesAllTime: StateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>> = _assistentesAllTime.asStateFlow()
 
+    private val _artilheirosHistorico = MutableStateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>>(emptyList())
+    val artilheirosHistorico: StateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>> = _artilheirosHistorico.asStateFlow()
+
+    private val _assistentesHistorico = MutableStateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>>(emptyList())
+    val assistentesHistorico: StateFlow<List<br.com.managerfoot.data.dao.ArtilheiroDto>> = _assistentesHistorico.asStateFlow()
+
     // IDs das quatro divisões
     private var campeonatoAId: Int = -1
     private var campeonatoBId: Int = -1
     private var campeonatoCId: Int = -1
     private var campeonatoDId: Int = -1
+    private var copaId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
+    val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
+
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
         campeonatoDId = campDId
+        this@ArtilheirosViewModel.copaId = copaId
         _divisaoSelecionada.value = divisaoInicial
-        val campId = campIdParaDivisao(divisaoInicial)
-        coletarArtilheiros(campId)
+        coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
         launch { gameRepository.observarAssistentesAllTime().collect { _assistentesAllTime.value = it } }
+        // histórico filtrado começa em "Todas" (flows de AllTime já populam _artilheirosAllTime)
     }
 
     fun selecionarDivisao(divisao: Int) = viewModelScope.launch {
         if (_divisaoSelecionada.value == divisao) return@launch
         _divisaoSelecionada.value = divisao
-        coletarArtilheiros(campIdParaDivisao(divisao))
+        coletarArtilheiros(divisao)
+    }
+
+    fun selecionarDivisaoHistorico(divisao: Int) = viewModelScope.launch {
+        if (_divisaoHistoricoSelecionada.value == divisao) return@launch
+        _divisaoHistoricoSelecionada.value = divisao
+        coletarHistoricoFiltrado(divisao)
     }
 
     private fun campIdParaDivisao(div: Int) = when (div) {
-        1 -> campeonatoAId; 2 -> campeonatoBId; 3 -> campeonatoCId; else -> campeonatoDId
+        1 -> campeonatoAId; 2 -> campeonatoBId; 3 -> campeonatoCId; 4 -> campeonatoDId; else -> copaId
     }
 
-    private fun coletarArtilheiros(campId: Int) = viewModelScope.launch {
-        launch { gameRepository.observarArtilheiros(campId).collect { _artilheiros.value = it } }
-        launch { gameRepository.observarAssistentes(campId).collect { _assistentes.value = it } }
+    /** Mapeia divisão → tipo(s) de campeonato para filtrar o histórico */
+    private fun tiposDaDiv(div: Int): List<String> = when (div) {
+        1 -> listOf("NACIONAL_DIVISAO1")
+        2 -> listOf("NACIONAL_DIVISAO2")
+        3 -> listOf("NACIONAL_DIVISAO3")
+        4 -> listOf("NACIONAL_DIVISAO4")
+        5 -> listOf("COPA_NACIONAL")
+        else -> emptyList()
+    }
+
+    /** div == 0 → todas as competições da temporada (multi-query) */
+    private fun coletarArtilheiros(div: Int) = viewModelScope.launch {
+        if (div == 0) {
+            val ids = listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId)
+                .filter { it > 0 }
+            launch { gameRepository.observarArtilheirosMulti(ids).collect { _artilheiros.value = it } }
+            launch { gameRepository.observarAssistentesMulti(ids).collect { _assistentes.value = it } }
+        } else {
+            val campId = campIdParaDivisao(div)
+            launch { gameRepository.observarArtilheiros(campId).collect { _artilheiros.value = it } }
+            launch { gameRepository.observarAssistentes(campId).collect { _assistentes.value = it } }
+        }
+    }
+
+    /** div == 0 → usa AllTime sem filtro (já populado no carregar); caso contrário filtra por tipo */
+    private fun coletarHistoricoFiltrado(div: Int) = viewModelScope.launch {
+        if (div == 0) {
+            _artilheirosHistorico.value = emptyList()
+            _assistentesHistorico.value = emptyList()
+            return@launch
+        }
+        val tipos = tiposDaDiv(div)
+        launch { gameRepository.observarArtilheirosHistoricoFiltrado(tipos).collect { _artilheirosHistorico.value = it } }
+        launch { gameRepository.observarAssistentesHistoricoFiltrado(tipos).collect { _assistentesHistorico.value = it } }
     }
 }
 
@@ -743,5 +896,213 @@ class CalendarioViewModel @Inject constructor(
 
     fun carregar(timeId: Int) = viewModelScope.launch {
         partidaDao.observeCalendario(timeId).collect { _partidas.value = it }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CopaChaveamentoViewModel
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class CopaChaveamentoViewModel @Inject constructor(
+    private val gameRepository: GameRepository
+) : ViewModel() {
+
+    private val _partidas = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidas: StateFlow<List<CopaPartidaDto>> = _partidas.asStateFlow()
+
+    fun carregar(copaId: Int) = viewModelScope.launch {
+        if (copaId <= 0) return@launch
+        gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RankingGeralViewModel
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class RankingGeralViewModel @Inject constructor(
+    private val gameRepository: GameRepository
+) : ViewModel() {
+
+    val ranking: StateFlow<List<RankingGeralEntity>> =
+        gameRepository.observarRankingGeral()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EstatisticasTimeViewModel
+// ═══════════════════════════════════════════════════════════
+data class TemporadaCompeticao(
+    val campeonatoId: Int,
+    val nome: String,
+    val vitorias: Int,
+    val empates: Int,
+    val derrotas: Int,
+    val golsPro: Int,
+    val golsContra: Int,
+    val pontos: Int,
+    val jogos: Int,
+    val jogadores: List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>,
+    val ehCopa: Boolean = false,
+    val faseAtingida: String? = null
+)
+
+data class HistoricoTemporada(
+    val campeonatoId: Int,
+    val nomeCampeonato: String,
+    val temporadaId: Int,
+    val tipo: String,
+    val posicao: Int,
+    val vitorias: Int,
+    val empates: Int,
+    val derrotas: Int,
+    val golsPro: Int,
+    val golsContra: Int,
+    val pontos: Int,
+    val jogos: Int,
+    val faseAtingida: String? = null
+)
+
+@HiltViewModel
+class EstatisticasTimeViewModel @Inject constructor(
+    private val gameDataStore: GameDataStore,
+    private val gameRepository: GameRepository
+) : ViewModel() {
+
+    private val _temporadaStats = MutableStateFlow<List<TemporadaCompeticao>>(emptyList())
+    val temporadaStats: StateFlow<List<TemporadaCompeticao>> = _temporadaStats.asStateFlow()
+
+    private val _historicoStats = MutableStateFlow<List<HistoricoTemporada>>(emptyList())
+    val historicoStats: StateFlow<List<HistoricoTemporada>> = _historicoStats.asStateFlow()
+
+    private val _jogadoresHistorico = MutableStateFlow<List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>>(emptyList())
+    val jogadoresHistorico: StateFlow<List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>> = _jogadoresHistorico.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+
+        // Nomeia o campeonato da liga do jogador
+        val nomeLiga = when (save.campeonatoId) {
+            save.campeonatoAId -> "Série A"
+            save.campeonatoBId -> "Série B"
+            save.campeonatoCId -> "Série C"
+            save.campeonatoDId -> "Série D"
+            else -> "Liga"
+        }
+        val temporadaList = mutableListOf<TemporadaCompeticao>()
+
+        // Liga do jogador na temporada corrente
+        if (save.campeonatoId > 0) {
+            val classif = gameRepository.buscarClassificacaoDoTime(save.campeonatoId, timeId)
+            if (classif != null) {
+                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.campeonatoId, timeId)
+                temporadaList.add(
+                    TemporadaCompeticao(
+                        campeonatoId = save.campeonatoId,
+                        nome         = nomeLiga,
+                        vitorias     = classif.vitorias,
+                        empates      = classif.empates,
+                        derrotas     = classif.derrotas,
+                        golsPro      = classif.golsPro,
+                        golsContra   = classif.golsContra,
+                        pontos       = classif.pontos,
+                        jogos        = classif.jogos,
+                        jogadores    = jogadores
+                    )
+                )
+            }
+        }
+
+        // Copa do Brasil da temporada corrente (sem clasificaçao — mata-mata)
+        if (save.copaId > 0) {
+            val partidas = gameRepository.buscarPartidasDaEquipe(save.copaId, timeId)
+            if (partidas.isNotEmpty()) {
+                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.copaId, timeId)
+                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
+                var faseAtingida: String? = null
+                for (p in partidas) {
+                    val ehCasa = p.timeCasaId == timeId
+                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
+                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
+                    gp += gf; gc += ga
+                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
+                    if (p.fase != null) faseAtingida = p.fase
+                }
+                temporadaList.add(
+                    TemporadaCompeticao(
+                        campeonatoId = save.copaId,
+                        nome         = "Copa do Brasil",
+                        vitorias     = v,
+                        empates      = e,
+                        derrotas     = d,
+                        golsPro      = gp,
+                        golsContra   = gc,
+                        pontos       = 0,
+                        jogos        = partidas.size,
+                        jogadores    = jogadores,
+                        ehCopa       = true,
+                        faseAtingida = faseAtingida
+                    )
+                )
+            }
+        }
+
+        _temporadaStats.value = temporadaList
+
+        // Histórico de ligas
+        val historico = gameRepository.buscarHistoricoDoTime(timeId)
+        val ligaEntries = historico.map { h ->
+            HistoricoTemporada(
+                campeonatoId   = h.campeonatoId,
+                nomeCampeonato = h.nomeCampeonato,
+                temporadaId    = h.temporadaId,
+                tipo           = h.tipo,
+                posicao        = h.posicao,
+                vitorias       = h.vitorias,
+                empates        = h.empates,
+                derrotas       = h.derrotas,
+                golsPro        = h.golsPro,
+                golsContra     = h.golsContra,
+                pontos         = h.pontos,
+                jogos          = h.jogos
+            )
+        }
+
+        // Histórico de Copas (grupo por campeonatoId, calcula W/D/L da sequência)
+        val copaHistoricoPartidas = gameRepository.buscarHistoricoCopaDoTime(timeId)
+        val copaEntries = copaHistoricoPartidas
+            .groupBy { it.campeonatoId }
+            .map { (campId, lista) ->
+                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
+                var faseAtingida: String? = null
+                for (p in lista) {
+                    val ehCasa = p.timeCasaId == timeId
+                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
+                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
+                    gp += gf; gc += ga
+                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
+                    if (p.fase != null) faseAtingida = p.fase
+                }
+                val first = lista.first()
+                HistoricoTemporada(
+                    campeonatoId   = campId,
+                    nomeCampeonato = first.nomeCampeonato,
+                    temporadaId    = first.temporadaId,
+                    tipo           = "COPA_NACIONAL",
+                    posicao        = 0,
+                    vitorias       = v,
+                    empates        = e,
+                    derrotas       = d,
+                    golsPro        = gp,
+                    golsContra     = gc,
+                    pontos         = 0,
+                    jogos          = lista.size,
+                    faseAtingida   = faseAtingida
+                )
+            }
+
+        _historicoStats.value = (ligaEntries + copaEntries).sortedByDescending { it.temporadaId }
+
+        _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
     }
 }

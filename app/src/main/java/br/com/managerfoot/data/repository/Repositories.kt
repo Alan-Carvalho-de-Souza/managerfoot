@@ -7,6 +7,7 @@ import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.domain.model.OfertaTransferencia
 import br.com.managerfoot.domain.model.Time
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +33,9 @@ class TimeRepository @Inject constructor(
 
     suspend fun buscarEntityPorId(id: Int): TimeEntity? =
         timeDao.buscarPorId(id)
+
+    suspend fun buscarTodosOrdenadosPorReputacao(): List<Time> =
+        timeDao.observeTodos().first().sortedByDescending { it.reputacao }.map { it.toDomain() }
 
     suspend fun inserir(time: TimeEntity): Long = timeDao.inserir(time)
 
@@ -121,6 +125,19 @@ class JogadorRepository @Inject constructor(
     suspend fun processarDesenvolvimentoAnual() =
         jogadorDao.processarDesenvolvimentoAnual()
 
+    suspend fun atualizarEscalacao(jogadorId: Int, status: Int, posicao: Posicao? = null) {
+        if (posicao != null) jogadorDao.atualizarEscalacaoComPosicao(jogadorId, status, posicao)
+        else jogadorDao.atualizarEscalacaoSemPosicao(jogadorId, status)
+    }
+
+    suspend fun buscarTitularesSalvos(timeId: Int): List<Jogador> =
+        jogadorDao.buscarTitularesSalvos(timeId).map { it.toDomain() }
+
+    suspend fun buscarReservasSalvas(timeId: Int): List<Jogador> =
+        jogadorDao.buscarReservasSalvas(timeId).map { it.toDomain() }
+
+    suspend fun limparEscalacaoTime(timeId: Int) = jogadorDao.limparEscalacaoTime(timeId)
+
     suspend fun processarExpiracaoContratos(timeId: Int) {
         jogadorDao.decrementarContratos()
         val expirados = jogadorDao.buscarComContratoExpirado()
@@ -151,6 +168,8 @@ class JogadorRepository @Inject constructor(
         valorMercado = valorMercado,
         lesionado = lesionado,
         suspenso = suspensoCicloAmarelos,
-        moraleEstado = moraleEstado
+        moraleEstado = moraleEstado,
+        escalarStatus = escalarStatus,
+        posicaoEscalado = posicaoEscalado
     )
 }

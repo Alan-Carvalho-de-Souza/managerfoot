@@ -22,6 +22,7 @@ data class SaveState(
     val campeonatoBId: Int,          // ID do campeonato Série B
     val campeonatoCId: Int,          // ID do campeonato Série C
     val campeonatoDId: Int,          // ID do campeonato Série D
+    val copaId: Int,                 // ID da Copa do Brasil ativa
     val anoAtual: Int,
     val mesAtual: Int,               // 1–12
     val jogoInicializado: Boolean
@@ -39,6 +40,7 @@ class GameDataStore @Inject constructor(
         val KEY_CAMPEONATO_B_ID = intPreferencesKey("campeonato_b_id")
         val KEY_CAMPEONATO_C_ID = intPreferencesKey("campeonato_c_id")
         val KEY_CAMPEONATO_D_ID = intPreferencesKey("campeonato_d_id")
+        val KEY_COPA_ID         = intPreferencesKey("copa_id")
         val KEY_ANO            = intPreferencesKey("ano_atual")
         val KEY_MES            = intPreferencesKey("mes_atual")
         val KEY_INICIALIZADO   = booleanPreferencesKey("jogo_inicializado")
@@ -55,6 +57,7 @@ class GameDataStore @Inject constructor(
                 campeonatoBId     = prefs[KEY_CAMPEONATO_B_ID] ?: -1,
                 campeonatoCId     = prefs[KEY_CAMPEONATO_C_ID] ?: -1,
                 campeonatoDId     = prefs[KEY_CAMPEONATO_D_ID] ?: -1,
+                copaId            = prefs[KEY_COPA_ID]          ?: -1,
                 anoAtual          = prefs[KEY_ANO]             ?: 2026,
                 mesAtual          = prefs[KEY_MES]             ?: 1,
                 jogoInicializado  = prefs[KEY_INICIALIZADO]    ?: false
@@ -63,7 +66,8 @@ class GameDataStore @Inject constructor(
 
     suspend fun salvarNovoJogo(
         timeId: Int, temporadaId: Int, campeonatoId: Int,
-        campeonatoAId: Int, campeonatoBId: Int, campeonatoCId: Int, campeonatoDId: Int, ano: Int
+        campeonatoAId: Int, campeonatoBId: Int, campeonatoCId: Int, campeonatoDId: Int,
+        copaId: Int, ano: Int
     ) {
         context.dataStore.edit { prefs ->
             prefs[KEY_TIME_ID]         = timeId
@@ -73,6 +77,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_CAMPEONATO_B_ID] = campeonatoBId
             prefs[KEY_CAMPEONATO_C_ID] = campeonatoCId
             prefs[KEY_CAMPEONATO_D_ID] = campeonatoDId
+            prefs[KEY_COPA_ID]         = copaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
             prefs[KEY_INICIALIZADO]    = true
@@ -94,7 +99,7 @@ class GameDataStore @Inject constructor(
 
     suspend fun salvarNovaTemporada(
         campeonatoId: Int, campeonatoAId: Int, campeonatoBId: Int,
-        campeonatoCId: Int, campeonatoDId: Int, temporadaId: Int, ano: Int
+        campeonatoCId: Int, campeonatoDId: Int, copaId: Int, temporadaId: Int, ano: Int
     ) {
         context.dataStore.edit { prefs ->
             prefs[KEY_CAMPEONATO_ID]   = campeonatoId
@@ -102,6 +107,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_CAMPEONATO_B_ID] = campeonatoBId
             prefs[KEY_CAMPEONATO_C_ID] = campeonatoCId
             prefs[KEY_CAMPEONATO_D_ID] = campeonatoDId
+            prefs[KEY_COPA_ID]         = copaId
             prefs[KEY_TEMPORADA_ID]    = temporadaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1

@@ -32,6 +32,7 @@ object DatabaseModule {
     @Provides fun provideClassificacaoDao(db: AppDatabase): ClassificacaoDao = db.classificacaoDao()
     @Provides fun provideFinancaDao(db: AppDatabase): FinancaDao = db.financaDao()
     @Provides fun provideHallDaFamaDao(db: AppDatabase): HallDaFamaDao = db.hallDaFamaDao()
+    @Provides fun provideRankingGeralDao(db: AppDatabase): RankingGeralDao = db.rankingGeralDao()
 }
 
 // ─────────────────────────────────────────────

@@ -25,6 +25,19 @@ fun HallDaFamaScreen(
     val hallDaFama by vm.hallDaFama.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
+    // Opções de competição — expansível para novas copas sem mudar o ViewModel
+    val opcoes = listOf(
+        0 to "Todas as competições",
+        1 to "Série A",
+        2 to "Série B",
+        3 to "Série C",
+        4 to "Série D",
+        5 to "Copa do Brasil"
+    )
+    val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
+        ?: opcoes.first().second
+    var expandido by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -42,20 +55,37 @@ fun HallDaFamaScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Seletor de divisão
-            Row(
+            // Seletor de competição (dropdown)
+            ExposedDropdownMenuBox(
+                expanded = expandido,
+                onExpandedChange = { expandido = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                listOf("Todas", "Série A", "Série B", "Série C", "Série D").forEachIndexed { idx, label ->
-                    FilterChip(
-                        selected = divisaoSelecionada == idx,
-                        onClick  = { vm.selecionarDivisao(idx) },
-                        label    = { Text(label, maxLines = 1) },
-                        modifier = Modifier.weight(1f)
-                    )
+                OutlinedTextField(
+                    value = labelSelecionado,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Competição") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expandido,
+                    onDismissRequest = { expandido = false }
+                ) {
+                    opcoes.forEach { (div, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                vm.selecionarDivisao(div)
+                                expandido = false
+                            }
+                        )
+                    }
                 }
             }
 

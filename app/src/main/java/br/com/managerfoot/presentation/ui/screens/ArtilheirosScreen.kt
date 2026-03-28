@@ -26,6 +26,7 @@ fun ArtilheirosScreen(
     campeonatoBId: Int,
     campeonatoCId: Int = -1,
     campeonatoDId: Int = -1,
+    copaId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -33,10 +34,13 @@ fun ArtilheirosScreen(
     val assistentes       by vm.assistentes.collectAsState()
     val artilheirosTotal  by vm.artilheirosAllTime.collectAsState()
     val assistentesTotal  by vm.assistentesAllTime.collectAsState()
-    val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
+    val artilheirosHist   by vm.artilheirosHistorico.collectAsState()
+    val assistentesHist   by vm.assistentesHistorico.collectAsState()
+    val divisaoSelecionada        by vm.divisaoSelecionada.collectAsState()
+    val divisaoHistoricoSelecionada by vm.divisaoHistoricoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId)
     }
 
     // Escopo: 0 = temporada atual, 1 = histórico total
@@ -79,27 +83,94 @@ fun ArtilheirosScreen(
                 }
             }
 
-            // Seletor de divisão (só visível em "Temporada atual")
+            // Seletor de competição (dropdown) — visível em ambos os escopos
+            val opcoesBase = buildList {
+                add(0 to "Todas as competições")
+                add(1 to "Série A")
+                add(2 to "Série B")
+                if (campeonatoCId > 0) add(3 to "Série C")
+                if (campeonatoDId > 0) add(4 to "Série D")
+                if (copaId > 0) add(5 to "Copa do Brasil")
+            }
+
+            // Seletor de competição (dropdown) — só visível em "Temporada atual"
             if (escopoSelecionado == 0) {
-                Row(
+                val opcoes = opcoesBase
+                val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
+                    ?: opcoes.first().second
+                var expandido by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = expandido,
+                    onExpandedChange = { expandido = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    val divisoes = buildList {
-                        add("Série A")
-                        add("Série B")
-                        if (campeonatoCId > 0) add("Série C")
-                        if (campeonatoDId > 0) add("Série D")
+                    OutlinedTextField(
+                        value = labelSelecionado,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Competição") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandido,
+                        onDismissRequest = { expandido = false }
+                    ) {
+                        opcoes.forEach { (div, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    vm.selecionarDivisao(div)
+                                    expandido = false
+                                }
+                            )
+                        }
                     }
-                    divisoes.forEachIndexed { idx, label ->
-                        FilterChip(
-                            selected = divisaoSelecionada == idx + 1,
-                            onClick  = { vm.selecionarDivisao(idx + 1) },
-                            label    = { Text(label, maxLines = 1) },
-                            modifier = Modifier.weight(1f)
-                        )
+                }
+            }
+
+            // Seletor de competição (dropdown) — só visível em "Histórico total"
+            if (escopoSelecionado == 1) {
+                val opcoes = opcoesBase
+                val labelSelecionado = opcoes.firstOrNull { it.first == divisaoHistoricoSelecionada }?.second
+                    ?: opcoes.first().second
+                var expandido by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = expandido,
+                    onExpandedChange = { expandido = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    OutlinedTextField(
+                        value = labelSelecionado,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Competição") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandido,
+                        onDismissRequest = { expandido = false }
+                    ) {
+                        opcoes.forEach { (div, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    vm.selecionarDivisaoHistorico(div)
+                                    expandido = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -117,8 +188,11 @@ fun ArtilheirosScreen(
             val lista = when {
                 escopoSelecionado == 0 && abaSelecionada == 0 -> artilheiros
                 escopoSelecionado == 0 && abaSelecionada == 1 -> assistentes
-                escopoSelecionado == 1 && abaSelecionada == 0 -> artilheirosTotal
-                else                                          -> assistentesTotal
+                // histórico: se div=0 usa AllTime completo; se filtrado e não vazio usa filtrado; senão AllTime
+                escopoSelecionado == 1 && abaSelecionada == 0 ->
+                    if (divisaoHistoricoSelecionada == 0) artilheirosTotal else artilheirosHist
+                else ->
+                    if (divisaoHistoricoSelecionada == 0) assistentesTotal else assistentesHist
             }
             val colTitulo = if (abaSelecionada == 0) "G" else "A"
 

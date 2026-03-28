@@ -13,6 +13,93 @@ import br.com.managerfoot.domain.model.ResultadoPartida
 // ─────────────────────────────────────────────
 object MotorCampeonato {
 
+    // ── Fases da Copa (em ordem) ──────────────────────────────────
+    val COPA_FASES = listOf(
+        "Primeira Fase",
+        "Segunda Fase",
+        "Oitavas",
+        "Quartas",
+        "Semi",
+        "Final"
+    )
+
+    // Retorna rodadaIda de uma fase (0-indexed faseIndex)
+    fun rodadaIdaDeFase(faseIndex: Int) = faseIndex * 2 + 1
+
+    fun proximaFaseCopa(faseAtual: String): String? {
+        val idx = COPA_FASES.indexOf(faseAtual)
+        return if (idx >= 0 && idx < COPA_FASES.size - 1) COPA_FASES[idx + 1] else null
+    }
+
+    // ── Geração de fase mata-mata ida e volta ─────────────────────
+    fun gerarFaseIdaVolta(
+        campeonatoId: Int,
+        pares: List<Pair<Int, Int>>,   // (timeMandanteIda, timeVisitanteIda)
+        fase: String,
+        rodadaIda: Int,
+        confrontoIdInicio: Int
+    ): List<PartidaEntity> {
+        val partidas = mutableListOf<PartidaEntity>()
+        pares.forEachIndexed { i, (casa, fora) ->
+            val confId = confrontoIdInicio + i
+            // Jogo de ida: casa joga em casa
+            partidas.add(
+                PartidaEntity(
+                    campeonatoId = campeonatoId,
+                    rodada = rodadaIda,
+                    timeCasaId = casa,
+                    timeForaId = fora,
+                    fase = fase,
+                    confrontoId = confId
+                )
+            )
+            // Jogo de volta: fora joga em casa (mandante invertido)
+            partidas.add(
+                PartidaEntity(
+                    campeonatoId = campeonatoId,
+                    rodada = rodadaIda + 1,
+                    timeCasaId = fora,
+                    timeForaId = casa,
+                    fase = fase,
+                    confrontoId = confId
+                )
+            )
+        }
+        return partidas
+    }
+
+    // ── Sorteia pares para uma fase mata-mata ─────────────────────
+    fun sortearPares(participantes: List<Int>): List<Pair<Int, Int>> {
+        val shuffled = participantes.shuffled()
+        return (shuffled.indices step 2).map { i ->
+            Pair(shuffled[i], shuffled.getOrElse(i + 1) { shuffled[0] })
+        }
+    }
+
+    // ── Determina vencedor de um confronto de ida+volta ───────────
+    // timeCasaIdaId joga em casa no jogo de ida (= fora no jogo de volta)
+    // timeForaIdaId joga fora no jogo de ida (= casa no jogo de volta)
+    // Retorna null quando o agregado está empatado e pênaltis são necessários.
+    fun determinarVencedorTie(
+        timeCasaIdaId: Int,
+        timeForaIdaId: Int,
+        golsCasaIda: Int,
+        golsForaIda: Int,
+        golsCasaVolta: Int,
+        golsForaVolta: Int
+    ): Int? {
+        // Gols do time A (casa na ida): golsCasaIda + golsForaVolta
+        val golsA = golsCasaIda + golsForaVolta
+        // Gols do time B (fora na ida): golsForaIda + golsCasaVolta
+        val golsB = golsForaIda + golsCasaVolta
+
+        if (golsA > golsB) return timeCasaIdaId
+        if (golsB > golsA) return timeForaIdaId
+
+        // Agregado empatado → pênaltis necessários
+        return null
+    }
+
     // ── Geração de calendário (pontos corridos - turno e returno) ──
     fun gerarCalendarioPontosCorridos(
         campeonatoId: Int,

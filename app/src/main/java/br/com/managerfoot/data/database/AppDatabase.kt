@@ -23,8 +23,9 @@ import br.com.managerfoot.data.database.entities.*
         FinancaEntity::class,
         TransferenciaEntity::class,
         HallDaFamaEntity::class,
+        RankingGeralEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -37,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun classificacaoDao(): ClassificacaoDao
     abstract fun financaDao(): FinancaDao
     abstract fun hallDaFamaDao(): HallDaFamaDao
+    abstract fun rankingGeralDao(): RankingGeralDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -60,6 +62,8 @@ abstract class AppDatabase : RoomDatabase() {
 class Converters {
     @TypeConverter fun posicaoToString(p: Posicao): String = p.name
     @TypeConverter fun stringToPosicao(s: String): Posicao = Posicao.valueOf(s)
+    @TypeConverter fun posicaoOptToString(p: Posicao?): String? = p?.name
+    @TypeConverter fun stringOptToPosicao(s: String?): Posicao? = s?.let { Posicao.valueOf(it) }
 
     @TypeConverter fun setorToString(s: Setor): String = s.name
     @TypeConverter fun stringToSetor(s: String): Setor = Setor.valueOf(s)

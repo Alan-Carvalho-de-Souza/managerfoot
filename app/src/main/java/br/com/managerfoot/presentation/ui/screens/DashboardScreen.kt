@@ -25,6 +25,9 @@ fun DashboardScreen(
     onIrParaHallDaFama: () -> Unit,
     onIrParaConfronto: () -> Unit,
     onIrParaCalendario: () -> Unit,
+    onIrParaCopaChaveamento: () -> Unit = {},
+    onIrParaRankingGeral: () -> Unit = {},
+    onIrParaEstatisticasTime: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsState()
@@ -35,6 +38,7 @@ fun DashboardScreen(
     val resultadoSimulado by vm.resultadoSimulado.collectAsState()
     val saveState by vm.saveState.collectAsState()
     val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsState()
+    val penaltisResultado by vm.penaltisResultado.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -53,6 +57,10 @@ fun DashboardScreen(
             escudoTimeFora = timeForaSim?.escudoRes ?: "",
             escalacaoJogador = escalacaoSimulacao,
             isTimeCasaOJogador = isTimeCasaOJogador,
+            penaltisResultado = penaltisResultado,
+            onPenaltisConfirmados = { cobradores, gkDefesa ->
+                vm.simularPenaltisJogador(cobradores, gkDefesa)
+            },
             onSimulacaoFinalizada = { vm.fecharSimulacao() }
         )
         return
@@ -81,8 +89,22 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                 ) {
                     Column(Modifier.padding(16.dp)) {
+                        val snap = saveState
+                        val ehCopa = snap != null && snap.copaId > 0 &&
+                            proximaPartida!!.campeonatoId == snap.copaId
+                        val competitionLabel = if (ehCopa) {
+                            "Copa do Brasil \u2014 ${proximaPartida!!.fase ?: "Copa"}"
+                        } else {
+                            when (proximaPartida!!.campeonatoId) {
+                                snap?.campeonatoAId -> "S\u00e9rie A"
+                                snap?.campeonatoBId -> "S\u00e9rie B"
+                                snap?.campeonatoCId -> "S\u00e9rie C"
+                                snap?.campeonatoDId -> "S\u00e9rie D"
+                                else -> "Brasileir\u00e3o"
+                            }
+                        }
                         Text(
-                            "Rodada ${proximaPartida!!.rodada}",
+                            "$competitionLabel \u2014 Rodada ${proximaPartida!!.rodada}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -178,19 +200,40 @@ fun DashboardScreen(
             item { SecaoHeader("Últimos resultados") }
             items(ultimosResultados.size.coerceAtMost(5)) { idx ->
                 val partida = ultimosResultados[idx]
+                val snap = saveState
                 val nomeCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.nome ?: "Time ${partida.timeCasaId}"
                 val nomeFora = todosOsTimes.find { it.id == partida.timeForaId }?.nome ?: "Time ${partida.timeForaId}"
                 val escudoCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.escudoRes ?: ""
                 val escudoFora = todosOsTimes.find { it.id == partida.timeForaId }?.escudoRes ?: ""
-                ResultadoCard(
-                    nomeCasa = nomeCasa,
-                    nomeVis = nomeFora,
-                    golsCasa = partida.golsCasa,
-                    golsVis = partida.golsFora,
-                    escudoCasa = escudoCasa,
-                    escudoVis = escudoFora,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
+                val ehCopaPartida = snap != null && snap.copaId > 0 && partida.campeonatoId == snap.copaId
+                val resultLabel = when {
+                    ehCopaPartida -> "Copa do Brasil \u2014 ${partida.fase ?: "Copa"}"
+                    partida.campeonatoId == snap?.campeonatoAId -> "S\u00e9rie A \u2014 Rodada ${partida.rodada}"
+                    partida.campeonatoId == snap?.campeonatoBId -> "S\u00e9rie B \u2014 Rodada ${partida.rodada}"
+                    partida.campeonatoId == snap?.campeonatoCId -> "S\u00e9rie C \u2014 Rodada ${partida.rodada}"
+                    partida.campeonatoId == snap?.campeonatoDId -> "S\u00e9rie D \u2014 Rodada ${partida.rodada}"
+                    else -> "Rodada ${partida.rodada}"
+                }
+                Column {
+                    Text(
+                        text = resultLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (ehCopaPartida)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp, top = 4.dp)
+                    )
+                    ResultadoCard(
+                        nomeCasa = nomeCasa,
+                        nomeVis = nomeFora,
+                        golsCasa = partida.golsCasa,
+                        golsVis = partida.golsFora,
+                        escudoCasa = escudoCasa,
+                        escudoVis = escudoFora,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
 
@@ -202,7 +245,10 @@ fun DashboardScreen(
             ) {
                 OutlinedButton(onClick = onIrParaTabela, modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") }
                 OutlinedButton(onClick = onIrParaArtilheiros, modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") }
+                OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") }
                 OutlinedButton(onClick = onIrParaCalendario, modifier = Modifier.fillMaxWidth()) { Text("Calendário") }
+                OutlinedButton(onClick = onIrParaCopaChaveamento, modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") }
+                OutlinedButton(onClick = onIrParaRankingGeral, modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") }
                 OutlinedButton(onClick = onIrParaHallDaFama, modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") }
                 OutlinedButton(onClick = onIrParaConfronto, modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") }
                 OutlinedButton(onClick = onIrParaMercado, modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") }

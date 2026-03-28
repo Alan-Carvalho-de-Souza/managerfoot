@@ -44,7 +44,9 @@ data class Jogador(
     val valorMercado: Long,
     val lesionado: Boolean,
     val suspenso: Boolean,
-    val moraleEstado: MoraleEstado
+    val moraleEstado: MoraleEstado,
+    val escalarStatus: Int = 0,          // 0=não escalado, 1=titular, 2=reserva
+    val posicaoEscalado: Posicao? = null // posição salva na escalação manual
 ) {
     // Força efetiva: penaliza improvisos e considera morale
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {
@@ -86,6 +88,22 @@ data class JogadorNaEscalacao(
     val posicaoUsada: Posicao
 )
 
+data class EventoPenalti(
+    val jogadorId: Int,
+    val nomeAbrev: String,
+    val convertido: Boolean
+)
+
+data class ResultadoPenaltis(
+    val cobrancasCasa: List<EventoPenalti>,
+    val cobrancasFora: List<EventoPenalti>,
+    val golsCasa: Int,
+    val golsFora: Int,
+    val vencedorId: Int,
+    val timeCasaId: Int,
+    val timeForaId: Int
+)
+
 data class ResultadoPartida(
     val partidaId: Int,
     val timeCasaId: Int,
@@ -94,7 +112,10 @@ data class ResultadoPartida(
     val golsFora: Int,
     val eventos: List<EventoSimulado>,
     val estatisticasCasa: EstatisticasTime,
-    val estatisticasFora: EstatisticasTime
+    val estatisticasFora: EstatisticasTime,
+    val precisaPenaltis: Boolean = false,
+    val golsAgregadoCasa: Int = 0,
+    val golsAgregadoFora: Int = 0
 )
 
 data class EventoSimulado(

@@ -151,7 +151,7 @@
       "estado": "MG",
       "divisao": "A",
       "nivel": 8,
-      "saldo":42000000000,
+      "saldo":4200000000,
       "estadio_nome": "Mineirao",
       "estadio_capacidade": 61170,
       "preco_ingresso": 5500,
@@ -317,7 +317,7 @@
       "preco_ingresso": 2500,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 62,
+      "reputacao": 76,
       "escudo_res": "escudo_vitoria"
     },
     {
@@ -413,7 +413,7 @@
       "preco_ingresso": 2800,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 65,
+      "reputacao": 76,
       "escudo_res": "escudo_goias"
     },
     {
@@ -429,7 +429,7 @@
       "preco_ingresso": 2500,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 62,
+      "reputacao": 73,
       "escudo_res": "escudo_crb"
     },
     {
@@ -439,7 +439,7 @@
       "estado": "SC",
       "divisao": "A",
       "nivel": 6,
-      "saldo": 180000000,
+      "saldo": 1800000000,
       "estadio_nome": "Arena Conda",
       "estadio_capacidade": 22600,
       "preco_ingresso": 2500,
@@ -461,7 +461,7 @@
       "preco_ingresso": 2600,
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
-      "reputacao": 70,
+      "reputacao": 77,
       "escudo_res": "escudo_pontepreta"
     },
     {
@@ -477,8 +477,8 @@
       "preco_ingresso": 2400,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 61,
-      "escudo_res": ""
+      "reputacao": 77,
+      "escudo_res": "escudo_guarani"
     },
     {
       "id": 31,
@@ -486,22 +486,22 @@
       "cidade": "Sao Luis",
       "estado": "MA",
       "divisao": "B",
-      "nivel": 4,
+      "nivel": 5,
       "saldo": 350000000,
       "estadio_nome": "Estadio Castelao",
       "estadio_capacidade": 11000,
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 55,
-      "escudo_res": ""
+      "reputacao": 67,
+      "escudo_res": "escudo_sampaiocorrea"
     },
     {
       "id": 32,
       "nome": "Ituano",
       "cidade": "Itu",
       "estado": "SP",
-      "divisao": "B",
+      "divisao": "C",
       "nivel": 4,
       "saldo": 320000000,
       "estadio_nome": "Estadio Novelli Junior",
@@ -509,8 +509,8 @@
       "preco_ingresso": 1900,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 53,
-      "escudo_res": ""
+      "reputacao": 68,
+      "escudo_res": "escudo_ituano"
     },
     {
       "id": 33,
@@ -518,15 +518,15 @@
       "cidade": "Novo Horizonte",
       "estado": "SP",
       "divisao": "B",
-      "nivel": 4,
-      "saldo": 300000000,
+      "nivel": 5,
+      "saldo": 1000000000,
       "estadio_nome": "Estadio Jorge Ismael",
       "estadio_capacidade": 7500,
       "preco_ingresso": 1800,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 52,
-      "escudo_res": ""
+      "reputacao": 67,
+      "escudo_res": "escudo_novorizontino"
     },
     {
       "id": 34,
@@ -541,8 +541,8 @@
       "preco_ingresso": 1800,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 50,
-      "escudo_res": ""
+      "reputacao": 68,
+      "escudo_res": "escudo_operario"
     },
     {
       "id": 35,
@@ -550,15 +550,15 @@
       "cidade": "Ribeirao Preto",
       "estado": "SP",
       "divisao": "B",
-      "nivel": 4,
+      "nivel": 5,
       "saldo": 290000000,
       "estadio_nome": "Estadio Santa Cruz",
       "estadio_capacidade": 10600,
       "preco_ingresso": 1800,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 51,
-      "escudo_res": ""
+      "reputacao": 64,
+      "escudo_res": "escudo_botafogosp"
     },
     {
       "id": 36,
@@ -569,12 +569,12 @@
       "nivel": 4,
       "saldo": 270000000,
       "estadio_nome": "Estadio Frasqueirão",
-      "estadio_capacidade": 9200,
+      "estadio_capacidade": 11200,
       "preco_ingresso": 1700,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 49,
-      "escudo_res": ""
+      "reputacao": 66,
+      "escudo_res": "escudo_abc"
     },
     {
       "id": 37,
@@ -589,24 +589,24 @@
       "preco_ingresso": 1800,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 50,
-      "escudo_res": ""
+      "reputacao": 67,
+      "escudo_res": "escudo_vilanovago"
     },
     {
       "id": 38,
       "nome": "Paysandu",
       "cidade": "Belem",
       "estado": "PA",
-      "divisao": "B",
-      "nivel": 4,
-      "saldo": 310000000,
+      "divisao": "C",
+      "nivel": 6,
+      "saldo": 810000000,
       "estadio_nome": "Estadio da Curuzu",
-      "estadio_capacidade": 16700,
+      "estadio_capacidade": 19000,
       "preco_ingresso": 1900,
       "tatica": "4-4-2",
-      "estilo": "DEFENSIVO",
-      "reputacao": 52,
-      "escudo_res": ""
+      "estilo": "EQUILIBRADO",
+      "reputacao": 75,
+      "escudo_res": "escudo_paysandu"
     },
     {
       "id": 39,
@@ -621,8 +621,8 @@
       "preco_ingresso": 1500,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 44,
-      "escudo_res": ""
+      "reputacao": 64,
+      "escudo_res": "escudo_tombense"
     },
     {
       "id": 40,
@@ -677,16 +677,16 @@
       "nome": "Londrina",
       "cidade": "Londrina",
       "estado": "PR",
-      "divisao": "C",
-      "nivel": 4,
-      "saldo": 270000000,
+      "divisao": "B",
+      "nivel": 5,
+      "saldo": 750000000,
       "estadio_nome": "Estadio do Cafe",
       "estadio_capacidade": 19800,
       "preco_ingresso": 1500,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 50,
-      "escudo_res": ""
+      "reputacao": 66,
+      "escudo_res": "escudo_londrina"
     },
     {
       "id": 44,
@@ -741,16 +741,16 @@
       "nome": "Nautico",
       "cidade": "Recife",
       "estado": "PE",
-      "divisao": "C",
-      "nivel": 4,
-      "saldo": 280000000,
+      "divisao": "B",
+      "nivel": 6,
+      "saldo": 1200000000,
       "estadio_nome": "Estadio dos Aflitos",
       "estadio_capacidade": 17800,
       "preco_ingresso": 1600,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 52,
-      "escudo_res": ""
+      "reputacao": 74,
+      "escudo_res": "escudo_nautico"
     },
     {
       "id": 48,
@@ -10285,38 +10285,38 @@
     {
       "id": 501,
       "time_id": 21,
-      "nome": "Bruno Carvalho",
-      "nome_abrev": "B. Carvalho",
-      "idade": 24,
+      "nome": "Gabriel Brazão",
+      "nome_abrev": "G. Brazão",
+      "idade": 25,
       "posicao": "GOLEIRO",
-      "forca": 56,
-      "tecnica": 53,
-      "passe": 61,
-      "velocidade": 60,
-      "finalizacao": 60,
-      "defesa": 57,
-      "fisico": 56,
-      "salario": 196200,
-      "contrato": 2,
-      "valor_mercado": 5493600
+      "forca": 78,
+      "tecnica": 73,
+      "passe": 75,
+      "velocidade": 72,
+      "finalizacao": 70,
+      "defesa": 87,
+      "fisico": 86,
+      "salario": 19620000,
+      "contrato": 3,
+      "valor_mercado": 1200936000
     },
     {
       "id": 502,
       "time_id": 21,
-      "nome": "Vinicius Alves",
-      "nome_abrev": "V. Alves",
-      "idade": 25,
+      "nome": "Lucas Veríssimo",
+      "nome_abrev": "L. Veríssimo",
+      "idade": 30,
       "posicao": "ZAGUEIRO",
-      "forca": 55,
-      "tecnica": 66,
-      "passe": 54,
-      "velocidade": 53,
-      "finalizacao": 55,
-      "defesa": 59,
-      "fisico": 60,
-      "salario": 217800,
+      "forca": 81,
+      "tecnica": 84,
+      "passe": 78,
+      "velocidade": 79,
+      "finalizacao": 73,
+      "defesa": 88,
+      "fisico": 85,
+      "salario": 78780000,
       "contrato": 3,
-      "valor_mercado": 6098400
+      "valor_mercado": 609840000
     },
     {
       "id": 503,
@@ -10429,20 +10429,20 @@
     {
       "id": 509,
       "time_id": 21,
-      "nome": "Paulo Costa",
-      "nome_abrev": "P. Costa",
-      "idade": 32,
+      "nome": "Neymar",
+      "nome_abrev": "Neymar",
+      "idade": 34,
       "posicao": "MEIA_CENTRAL",
-      "forca": 58,
-      "tecnica": 64,
-      "passe": 64,
-      "velocidade": 59,
-      "finalizacao": 61,
-      "defesa": 55,
-      "fisico": 58,
-      "salario": 219600,
+      "forca": 83,
+      "tecnica": 95,
+      "passe": 92,
+      "velocidade": 83,
+      "finalizacao": 91,
+      "defesa": 60,
+      "fisico": 75,
+      "salario": 219600000,
       "contrato": 2,
-      "valor_mercado": 6148800
+      "valor_mercado": 1508800000
     },
     {
       "id": 510,
@@ -10501,20 +10501,20 @@
     {
       "id": 513,
       "time_id": 21,
-      "nome": "Rafael Santos",
-      "nome_abrev": "R. Santos",
+      "nome": "Gabriel Barbosa",
+      "nome_abrev": "G. Barbosa",
       "idade": 20,
-      "posicao": "PONTA_ESQUERDA",
-      "forca": 61,
-      "tecnica": 57,
-      "passe": 60,
-      "velocidade": 70,
-      "finalizacao": 61,
-      "defesa": 66,
-      "fisico": 65,
-      "salario": 212400,
-      "contrato": 2,
-      "valor_mercado": 5947200
+      "posicao": "CENTROAVANTE",
+      "forca": 82,
+      "tecnica": 87,
+      "passe": 79,
+      "velocidade": 84,
+      "finalizacao": 85,
+      "defesa": 73,
+      "fisico": 81,
+      "salario": 21240000,
+      "contrato": 1,
+      "valor_mercado": 594720000
     },
     {
       "id": 514,
@@ -10537,20 +10537,20 @@
     {
       "id": 515,
       "time_id": 21,
-      "nome": "Gustavo Rodrigues",
-      "nome_abrev": "G. Rodrigues",
-      "idade": 22,
+      "nome": "Rony",
+      "nome_abrev": "Rony",
+      "idade": 30,
       "posicao": "CENTROAVANTE",
-      "forca": 56,
-      "tecnica": 57,
-      "passe": 58,
-      "velocidade": 66,
-      "finalizacao": 55,
-      "defesa": 65,
-      "fisico": 65,
-      "salario": 203400,
+      "forca": 82,
+      "tecnica": 80,
+      "passe": 79,
+      "velocidade": 84,
+      "finalizacao": 83,
+      "defesa": 80,
+      "fisico": 81,
+      "salario": 20340000,
       "contrato": 4,
-      "valor_mercado": 5695200
+      "valor_mercado": 569520000
     },
     {
       "id": 516,

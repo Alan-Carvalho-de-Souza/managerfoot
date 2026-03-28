@@ -46,7 +46,11 @@ data class JogadorEntity(
     val lesionado: Boolean = false,
     val suspensoCicloAmarelos: Boolean = false,
     val moraleEstado: MoraleEstado = MoraleEstado.NORMAL,
-    val categoriaBase: Boolean = false  // true = sub-21
+    val categoriaBase: Boolean = false,  // true = sub-21
+
+    // Escalação pré-definida pelo jogador
+    val escalarStatus: Int = 0,          // 0=não escalado, 1=titular, 2=reserva
+    val posicaoEscalado: Posicao? = null // null = jogar na posição natural
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -108,6 +109,9 @@ fun EscalacaoScreen(
                                     IconButton(onClick = { vm.moverParaTitular(jne.jogador, jne.posicaoUsada) }, modifier = Modifier.size(24.dp)) {
                                         Icon(Icons.Default.Add, contentDescription = "Tornar titular", modifier = Modifier.size(16.dp))
                                     }
+                                    IconButton(onClick = { vm.removerDaEscalacao(jne.jogador) }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Close, contentDescription = "Remover do banco", modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             )
                             HorizontalDivider(thickness = 0.5.dp)
@@ -115,23 +119,53 @@ fun EscalacaoScreen(
                     }
                 }
             }
-            2 -> { // Elenco completo para arrastar
+            2 -> { // Elenco completo
+                val titularesCheios = (escalacao?.titulares?.size ?: 0) >= 11
+                val reservasCheias  = (escalacao?.reservas?.size  ?: 0) >= 7
                 LazyColumn {
                     items(elenco) { jogador ->
                         val naEscalacao = escalacao?.titulares?.any { it.jogador.id == jogador.id } == true
+                        val naReserva   = escalacao?.reservas?.any  { it.jogador.id == jogador.id } == true
                         JogadorRow(
                             jogador = jogador,
                             onClick = { vm.selecionarJogador(jogador) },
                             trailing = {
-                                if (!naEscalacao && !jogador.lesionado) {
-                                    IconButton(
-                                        onClick = { vm.moverParaTitular(jogador, jogador.posicao) },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Adicionar aos titulares", modifier = Modifier.size(16.dp))
+                                when {
+                                    jogador.lesionado -> Text(
+                                        "Lesão",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    naEscalacao -> Text(
+                                        "Titular",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    naReserva -> Text(
+                                        "Reserva",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                    else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        if (!titularesCheios) {
+                                            OutlinedButton(
+                                                onClick = { vm.moverParaTitular(jogador, jogador.posicao) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Titular", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                        if (!reservasCheias) {
+                                            OutlinedButton(
+                                                onClick = { vm.adicionarComoReserva(jogador) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Reserva", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
                                     }
-                                } else if (jogador.lesionado) {
-                                    Text("Lesão", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         )

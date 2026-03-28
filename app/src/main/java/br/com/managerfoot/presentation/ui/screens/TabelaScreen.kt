@@ -41,6 +41,17 @@ fun TabelaScreen(
         vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, divisaoJogador)
     }
 
+    // Opções de divisão: apenas as que têm campeonato ativo (Copa não tem tabela)
+    val opcoes = buildList {
+        add(1 to "Série A")
+        add(2 to "Série B")
+        if (campeonatoCId > 0) add(3 to "Série C")
+        if (campeonatoDId > 0) add(4 to "Série D")
+    }
+    val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
+        ?: opcoes.first().second
+    var expandido by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -58,26 +69,37 @@ fun TabelaScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Seletor de divisão
-            Row(
+            // Seletor de divisão (dropdown)
+            ExposedDropdownMenuBox(
+                expanded = expandido,
+                onExpandedChange = { expandido = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                val divisoes = buildList {
-                    add("Série A")
-                    add("Série B")
-                    if (campeonatoCId > 0) add("Série C")
-                    if (campeonatoDId > 0) add("Série D")
-                }
-                divisoes.forEachIndexed { idx, label ->
-                    FilterChip(
-                        selected = divisaoSelecionada == idx + 1,
-                        onClick  = { vm.selecionarDivisao(idx + 1) },
-                        label    = { Text(label, maxLines = 1) },
-                        modifier = Modifier.weight(1f)
-                    )
+                OutlinedTextField(
+                    value = labelSelecionado,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Divisão") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expandido,
+                    onDismissRequest = { expandido = false }
+                ) {
+                    opcoes.forEach { (div, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                vm.selecionarDivisao(div)
+                                expandido = false
+                            }
+                        )
+                    }
                 }
             }
 

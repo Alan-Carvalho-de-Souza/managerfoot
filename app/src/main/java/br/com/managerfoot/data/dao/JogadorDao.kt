@@ -3,6 +3,7 @@ package br.com.managerfoot.data.dao
 import androidx.room.*
 import br.com.managerfoot.data.database.entities.TimeEntity
 import br.com.managerfoot.data.database.entities.JogadorEntity
+import br.com.managerfoot.data.database.entities.Posicao
 import kotlinx.coroutines.flow.Flow
 
 // ─────────────────────────────────────────────
@@ -88,4 +89,21 @@ interface JogadorDao {
 
     @Query("DELETE FROM jogadores")
     suspend fun deleteAll()
+
+    // ─── Escalação pré-definida pelo jogador ───────────────────────────────────
+
+    @Query("UPDATE jogadores SET escalarStatus = :status, posicaoEscalado = :posicao WHERE id = :jogadorId")
+    suspend fun atualizarEscalacaoComPosicao(jogadorId: Int, status: Int, posicao: Posicao)
+
+    @Query("UPDATE jogadores SET escalarStatus = :status, posicaoEscalado = NULL WHERE id = :jogadorId")
+    suspend fun atualizarEscalacaoSemPosicao(jogadorId: Int, status: Int)
+
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND escalarStatus = 1 ORDER BY id")
+    suspend fun buscarTitularesSalvos(timeId: Int): List<JogadorEntity>
+
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND escalarStatus = 2 ORDER BY id")
+    suspend fun buscarReservasSalvas(timeId: Int): List<JogadorEntity>
+
+    @Query("UPDATE jogadores SET escalarStatus = 0, posicaoEscalado = NULL WHERE timeId = :timeId")
+    suspend fun limparEscalacaoTime(timeId: Int)
 }

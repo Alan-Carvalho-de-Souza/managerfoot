@@ -28,10 +28,12 @@ import br.com.managerfoot.domain.model.Escalacao
 import br.com.managerfoot.domain.model.EventoSimulado
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.domain.model.ResultadoPartida
+import br.com.managerfoot.domain.model.ResultadoPenaltis
 import br.com.managerfoot.presentation.ui.components.TeamBadge
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Dados de um evento enriquecido para exibiÃ§Ã£o
@@ -41,15 +43,18 @@ data class EventoExibicao(
     val tipo: TipoEvento,
     val descricao: String,
     val timeId: Int,
-    val nomeTime: String
+    val nomeTime: String,
+    val jogadorId: Int = -1,
+    val pularExibicao: Boolean = false
 )
 
-// Registra uma substituiÃ§Ã£o realizada no intervalo
+// Registra uma substituição realizada (intervalo ou lesão em jogo)
 data class SubstituicaoIntervalo(
     val minuto: Int = 46,
     val sai: JogadorNaEscalacao,
     val entra: JogadorNaEscalacao,
-    val timeId: Int
+    val timeId: Int,
+    val ehLesao: Boolean = false  // true = substituição forçada por lesão (não repetir no feed do intervalo)
 )
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -64,6 +69,8 @@ fun PartidaSimulacaoScreen(
     escudoTimeFora: String = "",
     escalacaoJogador: Escalacao? = null,
     isTimeCasaOJogador: Boolean = true,
+    penaltisResultado: ResultadoPenaltis? = null,
+    onPenaltisConfirmados: ((cobradores: List<JogadorNaEscalacao>, goleiroDefesa: Int) -> Unit)? = null,
     onSimulacaoFinalizada: () -> Unit
 ) {
     // Estado do placar
@@ -87,20 +94,52 @@ fun PartidaSimulacaoScreen(
     val titularesAtuais = remember { mutableStateListOf<JogadorNaEscalacao>() }
     val reservasDisponiveis = remember { mutableStateListOf<JogadorNaEscalacao>() }
 
-    // Feed de eventos jÃ¡ exibidos
+    // Feed de eventos já exibidos
     val eventosExibidos = remember { mutableStateListOf<EventoExibicao>() }
     val listState = rememberLazyListState()
 
-    // Enriquece eventos com o nome do time usando o timeId correto do evento
-    val eventosOrdenados = remember(resultado) {
-        resultado.eventos.sortedBy { it.minuto }.map { ev ->
+    // ID do time controlado pelo jogador (constante para esta composição)
+    val jogadorTimeId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+
+    // Lesão em campo: pausa a animação para o jogador escolher o substituto
+    var pausadoPorLesao by remember { mutableStateOf(false) }
+    var jogadorLesionadoAtual by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
+    val lesaoDeferred = remember { mutableStateOf<CompletableDeferred<JogadorNaEscalacao?>?>(null) }
+
+    // Enriquece eventos e pré-calcula quais sub-eventos da IA devem ser omitidos
+    // (os que seguem lesões do time do jogador — o usuário escolherá quem entra).
+    val eventosOrdenados = remember(resultado, isTimeCasaOJogador, escalacaoJogador) {
+        val sortedEvts = resultado.eventos.sortedBy { it.minuto }
+        val teamId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+        val skipIndices: Set<Int> = if (escalacaoJogador == null) emptySet() else buildSet {
+            sortedEvts.forEachIndexed { i, ev ->
+                if (ev.tipo == TipoEvento.LESAO && ev.timeId == teamId) {
+                    val lesionadoId = ev.jogadorId
+                    var k = i + 1; var saiDone = false; var entraDone = false
+                    while (k < sortedEvts.size && !(saiDone && entraDone)) {
+                        val ne = sortedEvts[k]
+                        if (ne.timeId == teamId) {
+                            if (!saiDone && ne.tipo == TipoEvento.SUBSTITUICAO_SAI && ne.jogadorId == lesionadoId) {
+                                add(k); saiDone = true
+                            } else if (saiDone && !entraDone && ne.tipo == TipoEvento.SUBSTITUICAO_ENTRA) {
+                                add(k); entraDone = true
+                            }
+                        }
+                        k++
+                    }
+                }
+            }
+        }
+        sortedEvts.mapIndexed { i, ev ->
             val ehCasa = ev.timeId == resultado.timeCasaId
             EventoExibicao(
                 minuto = ev.minuto,
                 tipo = ev.tipo,
                 descricao = ev.descricao,
                 timeId = ev.timeId,
-                nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora
+                nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora,
+                jogadorId = ev.jogadorId,
+                pularExibicao = i in skipIndices
             )
         }
     }
@@ -131,20 +170,48 @@ fun PartidaSimulacaoScreen(
         for (minuto in 1..limiteT1) {
             minutoAtual = minuto
 
-            // Exibir eventos desse minuto
-            eventosOrdenados
-                .filter { it.minuto == minuto && it.minuto <= 45 }
-                .forEach { ev ->
-                    eventosExibidos.add(0, ev)
-                    if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
-                        if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
-                        else golsForaAtual++
-                    }
-                    listState.animateScrollToItem(0)
-                    delay(800) // pausa extra em eventos
+            // Exibir eventos desse minuto — loop `for` para manter o CoroutineScope do
+            // LaunchedEffect como receptor implícito, permitindo usar `launch {}`.
+            for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto <= 45 }) {
+                if (ev.pularExibicao) continue  // sub automática da IA omitida — usuário escolhe
+                eventosExibidos.add(0, ev)
+                if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
+                    if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
+                    else golsForaAtual++
                 }
+                // Cartão vermelho: remove o expulso dos titulares (joga com um a menos, sem reposição)
+                if (ev.tipo == TipoEvento.CARTAO_VERMELHO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
+                    titularesAtuais.removeIf { it.jogador.id == ev.jogadorId }
+                }
+                // Lesão: pausa a animação e pede ao usuário para escolher o substituto
+                if (ev.tipo == TipoEvento.LESAO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
+                    val lesionado = titularesAtuais.find { it.jogador.id == ev.jogadorId }
+                    if (lesionado != null) {
+                        titularesAtuais.remove(lesionado)
+                        jogadorLesionadoAtual = lesionado
+                        val deferred = CompletableDeferred<JogadorNaEscalacao?>()
+                        lesaoDeferred.value = deferred
+                        pausadoPorLesao = true
+                        val substituto = deferred.await()
+                        pausadoPorLesao = false
+                        lesaoDeferred.value = null
+                        if (substituto != null) {
+                            val nomeTimeJog = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
+                            val minSub = (ev.minuto + 1).coerceAtMost(90)
+                            substituicoes.add(SubstituicaoIntervalo(minuto = minSub, sai = lesionado, entra = substituto, timeId = ev.timeId, ehLesao = true))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_SAI, "↓ ${lesionado.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_ENTRA, "↑ ${substituto.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            launch { listState.animateScrollToItem(0) }
+                        }
+                    }
+                }
+                // launch{} isola a animação: se o usuário scrollar manualmente,
+                // apenas o filho é cancelado — o loop do relógio continua.
+                launch { listState.animateScrollToItem(0) }
+                delay(800) // pausa extra em eventos
+            }
 
-            // Velocidade do relÃ³gio: eventos importantes = mais devagar
+            // Velocidade do relógio: eventos importantes = mais devagar
             val temEventoNesteMinuto = eventosOrdenados.any {
                 it.minuto == minuto && it.minuto <= 45
             }
@@ -166,11 +233,12 @@ fun PartidaSimulacaoScreen(
             // Injeta eventos de substituiÃ§Ã£o no feed
             val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
             val nomeTime = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
-            substituicoes.forEach { sub ->
+            // Apenas subs do intervalo — as de lesão já foram injetadas no feed durante o 1º tempo
+            substituicoes.filter { !it.ehLesao }.forEach { sub ->
                 eventosExibidos.add(0, EventoExibicao(sub.minuto, TipoEvento.SUBSTITUICAO_SAI, "↓ ${sub.sai.jogador.nomeAbreviado}", timeJogadorId, nomeTime))
                 eventosExibidos.add(0, EventoExibicao(sub.minuto, TipoEvento.SUBSTITUICAO_ENTRA, "↑ ${sub.entra.jogador.nomeAbreviado}", timeJogadorId, nomeTime))
             }
-            if (substituicoes.isNotEmpty()) listState.animateScrollToItem(0)
+            if (substituicoes.isNotEmpty()) launch { listState.animateScrollToItem(0) }
         } else {
             delay(2500)
         }
@@ -181,17 +249,42 @@ fun PartidaSimulacaoScreen(
         for (minuto in 46..limiteT2) {
             minutoAtual = minuto
 
-            eventosOrdenados
-                .filter { it.minuto == minuto && it.minuto > 45 }
-                .forEach { ev ->
-                    eventosExibidos.add(0, ev)
-                    if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
-                        if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
-                        else golsForaAtual++
-                    }
-                    listState.animateScrollToItem(0)
-                    delay(800)
+            for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto > 45 }) {
+                if (ev.pularExibicao) continue
+                eventosExibidos.add(0, ev)
+                if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
+                    if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
+                    else golsForaAtual++
                 }
+                // Cartão vermelho: remove o expulso dos titulares
+                if (ev.tipo == TipoEvento.CARTAO_VERMELHO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
+                    titularesAtuais.removeIf { it.jogador.id == ev.jogadorId }
+                }
+                // Lesão no 2º tempo: pausa e pede substituto
+                if (ev.tipo == TipoEvento.LESAO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
+                    val lesionado = titularesAtuais.find { it.jogador.id == ev.jogadorId }
+                    if (lesionado != null) {
+                        titularesAtuais.remove(lesionado)
+                        jogadorLesionadoAtual = lesionado
+                        val deferred = CompletableDeferred<JogadorNaEscalacao?>()
+                        lesaoDeferred.value = deferred
+                        pausadoPorLesao = true
+                        val substituto = deferred.await()
+                        pausadoPorLesao = false
+                        lesaoDeferred.value = null
+                        if (substituto != null) {
+                            val nomeTimeJog = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
+                            val minSub = (ev.minuto + 1).coerceAtMost(90)
+                            substituicoes.add(SubstituicaoIntervalo(minuto = minSub, sai = lesionado, entra = substituto, timeId = ev.timeId, ehLesao = true))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_SAI, "↓ ${lesionado.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_ENTRA, "↑ ${substituto.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            launch { listState.animateScrollToItem(0) }
+                        }
+                    }
+                }
+                launch { listState.animateScrollToItem(0) }
+                delay(800)
+            }
 
             val temEventoNesteMinuto = eventosOrdenados.any {
                 it.minuto == minuto && it.minuto > 45
@@ -202,6 +295,21 @@ fun PartidaSimulacaoScreen(
         // Fim de jogo
         faseAtual = "FIM DE JOGO"
         simulacaoEncerrada = true
+    }
+
+    // Painel de lesão — interrompe a animação para substituição imediata
+    if (pausadoPorLesao) {
+        LesaoPainel(
+            jogadorLesionado = jogadorLesionadoAtual,
+            reservas = reservasDisponiveis.toList(),
+            onSubstituicao = { entra ->
+                titularesAtuais.add(entra)
+                reservasDisponiveis.remove(entra)
+                lesaoDeferred.value?.complete(entra)
+            },
+            onSemReservas = { lesaoDeferred.value?.complete(null) }
+        )
+        return
     }
 
     // Painel do intervalo (mostrado sobre a tela de jogo)
@@ -403,8 +511,314 @@ fun PartidaSimulacaoScreen(
 
         // â”€â”€ BotÃ£o de encerrar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (simulacaoEncerrada) {
+            if (resultado.precisaPenaltis && penaltisResultado == null) {
+                PenaltiSelecaoPainel(
+                    titulares      = titularesAtuais.toList(),
+                    nomeTimeJogador    = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora,
+                    nomeAdversario     = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa,
+                    agregadoJogador    = if (isTimeCasaOJogador) resultado.golsAgregadoCasa else resultado.golsAgregadoFora,
+                    agregadoAdversario = if (isTimeCasaOJogador) resultado.golsAgregadoFora else resultado.golsAgregadoCasa,
+                    onConfirmar = { cobradores ->
+                        val gk = titularesAtuais.firstOrNull {
+                            it.posicaoUsada.setor == br.com.managerfoot.data.database.entities.Setor.GOLEIRO
+                        }
+                        onPenaltisConfirmados?.invoke(cobradores, gk?.jogador?.defesa ?: 70)
+                    }
+                )
+            } else if (resultado.precisaPenaltis && penaltisResultado != null) {
+                PenaltiResultadoPainel(
+                    penaltis      = penaltisResultado,
+                    nomeTimeCasa  = nomeTimeCasa,
+                    nomeTimeFora  = nomeTimeFora,
+                    timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId,
+                    onConcluir    = onSimulacaoFinalizada
+                )
+            } else {
+                Button(
+                    onClick = onSimulacaoFinalizada,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Voltar ao painel")
+                }
+            }
+        }
+    }
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
+//  PenaltiSelecaoPainel  ─  jogador escolhe os 5 cobradores
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun PenaltiSelecaoPainel(
+    titulares: List<JogadorNaEscalacao>,
+    nomeTimeJogador: String,
+    nomeAdversario: String,
+    agregadoJogador: Int,
+    agregadoAdversario: Int,
+    onConfirmar: (cobradores: List<JogadorNaEscalacao>) -> Unit
+) {
+    val selecionados = remember { mutableStateListOf<JogadorNaEscalacao>() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Card(
+            Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+        ) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "DISPUTA DE PÊNALTIS",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "$nomeTimeJogador $agregadoJogador × $agregadoAdversario $nomeAdversario",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Agregado empatado — decisão nos pênaltis",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        Text(
+            "Escolha os 5 cobradores (em ordem):",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+        ) {
+            items(titulares) { jne ->
+                val ordem = selecionados.indexOf(jne) + 1
+                val selecionado = ordem > 0
+                ListItem(
+                    headlineContent = { Text(jne.jogador.nome) },
+                    supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Fin: ${jne.jogador.finalizacao}") },
+                    trailingContent = {
+                        if (selecionado) {
+                            OutlinedButton(
+                                onClick = { selecionados.remove(jne) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text("#$ordem  ✕", style = MaterialTheme.typography.labelMedium)
+                            }
+                        } else if (selecionados.size < 5) {
+                            Button(
+                                onClick = { selecionados.add(jne) },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("+", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                )
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+        }
+
+        Text(
+            "${selecionados.size}/5 selecionados",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selecionados.size >= 5) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(Modifier.height(4.dp))
+        Button(
+            onClick = { onConfirmar(selecionados.toList()) },
+            enabled = selecionados.size >= 5,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text("Confirmar e disputar pênaltis")
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PenaltiResultadoPainel  ─  exibe animação da disputa
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun PenaltiResultadoPainel(
+    penaltis: ResultadoPenaltis,
+    nomeTimeCasa: String,
+    nomeTimeFora: String,
+    timeJogadorId: Int,
+    onConcluir: () -> Unit
+) {
+    data class ItemCobranca(val ehCasa: Boolean, val evento: br.com.managerfoot.domain.model.EventoPenalti)
+    val cobrancasExibidas  = remember { mutableStateListOf<ItemCobranca>() }
+    var animacaoFinalizada by remember { mutableStateOf(false) }
+    var golsCasaAtual      by remember { mutableIntStateOf(0) }
+    var golsForaAtual      by remember { mutableIntStateOf(0) }
+    val listState          = rememberLazyListState()
+    val scope              = rememberCoroutineScope()
+
+    val cobrancasIntercaladas = remember(penaltis) {
+        val lista = mutableListOf<Pair<Boolean, br.com.managerfoot.domain.model.EventoPenalti>>()
+        val n = maxOf(penaltis.cobrancasCasa.size, penaltis.cobrancasFora.size)
+        for (i in 0 until n) {
+            penaltis.cobrancasCasa.getOrNull(i)?.let { lista.add(true to it) }
+            penaltis.cobrancasFora.getOrNull(i)?.let { lista.add(false to it) }
+        }
+        lista
+    }
+
+    LaunchedEffect(penaltis) {
+        delay(500)
+        cobrancasIntercaladas.forEach { (ehCasa, ev) ->
+            if (ehCasa) { if (ev.convertido) golsCasaAtual++ }
+            else         { if (ev.convertido) golsForaAtual++ }
+            cobrancasExibidas.add(ItemCobranca(ehCasa, ev))
+            scope.launch { listState.animateScrollToItem(cobrancasExibidas.size - 1) }
+            delay(900)
+        }
+        animacaoFinalizada = true
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Card(
+            Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "DISPUTA DE PÊNALTIS",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        nomeTimeCasa,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                    AnimatedContent(
+                        targetState = golsCasaAtual,
+                        transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
+                        label = "pc"
+                    ) { g ->
+                        Text(
+                            g.toString(), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Text(
+                        " – ",
+                        fontSize = 24.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                    )
+                    AnimatedContent(
+                        targetState = golsForaAtual,
+                        transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
+                        label = "pf"
+                    ) { g ->
+                        Text(
+                            g.toString(), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Text(
+                        nomeTimeFora,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                if (animacaoFinalizada) {
+                    Spacer(Modifier.height(8.dp))
+                    val vencedorNome = if (penaltis.vencedorId == penaltis.timeCasaId) nomeTimeCasa else nomeTimeFora
+                    Text(
+                        "🏆 $vencedorNome avança!",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (penaltis.vencedorId == timeJogadorId)
+                            Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(cobrancasExibidas) { item ->
+                AnimatedVisibility(visible = true, enter = slideInVertically { -it } + fadeIn()) {
+                    val icone    = if (item.evento.convertido) "✅" else "❌"
+                    val nomeTime = if (item.ehCasa) nomeTimeCasa else nomeTimeFora
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (item.evento.convertido) Color(0xFF1B5E20).copy(alpha = 0.12f)
+                                else Color(0xFFC62828).copy(alpha = 0.10f)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = if (item.ehCasa) Arrangement.Start else Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (item.ehCasa) {
+                            Text(icone, fontSize = 20.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(item.evento.nomeAbrev, style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium)
+                                Text(nomeTime, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(item.evento.nomeAbrev, style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium)
+                                Text(nomeTime, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(icone, fontSize = 20.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (animacaoFinalizada) {
             Button(
-                onClick = onSimulacaoFinalizada,
+                onClick = onConcluir,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -415,9 +829,6 @@ fun PartidaSimulacaoScreen(
     }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-//  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun IntervaloPainel(
     formacaoAtual: String,
@@ -754,6 +1165,94 @@ fun EventoCard(evento: EventoExibicao, nomeTimeCasa: String) {
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Painel de substituição por lesão (interrompe a partida)
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun LesaoPainel(
+    jogadorLesionado: JogadorNaEscalacao?,
+    reservas: List<JogadorNaEscalacao>,
+    onSubstituicao: (JogadorNaEscalacao) -> Unit,
+    onSemReservas: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Card(
+            Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+        ) {
+            Column(
+                Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "🚑 JOGADOR LESIONADO",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                if (jogadorLesionado != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "${jogadorLesionado.jogador.nome} (${jogadorLesionado.posicaoUsada.abreviacao}) saiu de campo lesionado.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        if (reservas.isEmpty()) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Sem reservas disponíveis.", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "O time continuará com um jogador a menos.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(
+                onClick = onSemReservas,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) { Text("Continuar") }
+        } else {
+            Text(
+                "Escolha o substituto:",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+            LazyColumn(Modifier.weight(1f)) {
+                items(reservas) { jne ->
+                    ListItem(
+                        headlineContent = { Text(jne.jogador.nome) },
+                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
+                        trailingContent = {
+                            Button(
+                                onClick = { onSubstituicao(jne) },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("Colocar", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
             }
         }
     }

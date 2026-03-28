@@ -31,7 +31,8 @@ data class PartidaEntity(
     val penaltisForaId: Int? = null,
 
     val jogada: Boolean = false,
-    val fase: String? = null            // "Oitavas", "Quartas", "Semi", "Final" (mata-mata)
+    val fase: String? = null,           // "Primeira Fase", "Segunda Fase", "Oitavas", "Quartas", "Semi", "Final"
+    val confrontoId: Int? = null        // agrupa jogo de ida + volta (Copa)
 )
 
 // Escalação salva pelo jogador para uma determinada partida

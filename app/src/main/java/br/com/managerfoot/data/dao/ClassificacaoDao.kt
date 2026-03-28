@@ -1,5 +1,6 @@
 package br.com.managerfoot.data.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -62,4 +63,46 @@ interface ClassificacaoDao {
         ORDER BY pontos DESC, vitorias DESC, saldoGols DESC, golsPro DESC
     """)
     suspend fun buscarTabelaOrdenada(campeonatoId: Int): List<ClassificacaoEntity>
+
+    @Query("""
+        SELECT cl.campeonatoId       AS campeonatoId,
+               c.nome                AS nomeCampeonato,
+               c.temporadaId         AS temporadaId,
+               c.tipo                AS tipo,
+               cl.jogos              AS jogos,
+               cl.vitorias           AS vitorias,
+               cl.empates            AS empates,
+               cl.derrotas           AS derrotas,
+               cl.golsPro            AS golsPro,
+               cl.golsContra         AS golsContra,
+               cl.pontos             AS pontos,
+               (SELECT COUNT(*) + 1
+                FROM classificacoes cl2
+                WHERE cl2.campeonatoId = cl.campeonatoId
+                  AND (   cl2.pontos    > cl.pontos
+                       OR (cl2.pontos   = cl.pontos AND cl2.vitorias  > cl.vitorias)
+                       OR (cl2.pontos   = cl.pontos AND cl2.vitorias  = cl.vitorias
+                           AND cl2.saldoGols > cl.saldoGols))
+               ) AS posicao
+        FROM classificacoes cl
+        INNER JOIN campeonatos c ON cl.campeonatoId = c.id
+        WHERE cl.timeId = :timeId
+        ORDER BY c.temporadaId DESC, c.tipo
+    """)
+    suspend fun buscarHistoricoDoTime(timeId: Int): List<ClassificacaoComCampeonatoDto>
 }
+
+data class ClassificacaoComCampeonatoDto(
+    val campeonatoId: Int,
+    @ColumnInfo(name = "nomeCampeonato") val nomeCampeonato: String,
+    val temporadaId: Int,
+    val tipo: String,
+    val jogos: Int,
+    val vitorias: Int,
+    val empates: Int,
+    val derrotas: Int,
+    val golsPro: Int,
+    val golsContra: Int,
+    val pontos: Int,
+    val posicao: Int
+)
