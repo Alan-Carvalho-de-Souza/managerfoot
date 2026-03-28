@@ -52,4 +52,11 @@ interface ClassificacaoDao {
         LIMIT 2
     """)
     suspend fun buscarTop2(campeonatoId: Int): List<ClassificacaoEntity>
+
+    @Query("""
+        SELECT * FROM classificacoes
+        WHERE campeonatoId = :campeonatoId
+        ORDER BY pontos DESC, vitorias DESC, saldoGols DESC, golsPro DESC
+    """)
+    suspend fun buscarTabelaOrdenada(campeonatoId: Int): List<ClassificacaoEntity>
 }

@@ -24,7 +24,7 @@ import br.com.managerfoot.data.database.entities.*
         TransferenciaEntity::class,
         HallDaFamaEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

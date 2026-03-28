@@ -22,6 +22,7 @@ fun HallDaFamaScreen(
     vm: HallDaFamaViewModel = hiltViewModel()
 ) {
     val hallDaFama by vm.hallDaFama.collectAsState()
+    val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
     Scaffold(
         topBar = {
@@ -35,29 +36,48 @@ fun HallDaFamaScreen(
             )
         }
     ) { innerPadding ->
-        if (hallDaFama.isEmpty()) {
-            Box(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            // Seletor de divisão
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    "Nenhuma temporada concluída ainda.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                listOf("Todas", "Série A", "Série B").forEachIndexed { idx, label ->
+                    FilterChip(
+                        selected = divisaoSelecionada == idx,
+                        onClick  = { vm.selecionarDivisao(idx) },
+                        label    = { Text(label, maxLines = 1) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(hallDaFama, key = { it.id }) { entrada ->
-                    HallDaFamaCard(entrada)
+
+            if (hallDaFama.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Nenhuma temporada concluída ainda.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(hallDaFama, key = { it.id }) { entrada ->
+                        HallDaFamaCard(entrada)
+                    }
                 }
             }
         }

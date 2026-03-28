@@ -151,75 +151,140 @@ class GameRepository @Inject constructor(
     }
 
     // Retorna informações da nova temporada criada
-    data class NovaTemporadaInfo(val campeonatoId: Int, val temporadaId: Int, val ano: Int)
+    data class NovaTemporadaInfo(
+        val campeonatoAId: Int,
+        val campeonatoBId: Int,
+        val temporadaId: Int,
+        val ano: Int
+    )
 
     suspend fun encerrarTemporadaComHallDaFama(
-        campeonatoId: Int,
+        campeonatoAId: Int,
+        campeonatoBId: Int,
         temporadaId: Int,
         ano: Int
     ): NovaTemporadaInfo {
-        // Ler participantes antes de encerrar (FK cascade não apaga, mas boa prática)
-        val participantes = campeonatoDao.buscarIdsParticipantes(campeonatoId)
+        // ── Série A ──────────────────────────────────────────────
+        val participantesA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
+        val tabelaA = classificacaoDao.buscarTop2(campeonatoAId)
+        val campeaoA = tabelaA.getOrNull(0)
+        val viceA    = tabelaA.getOrNull(1)
+        val artilheiroA = partidaDao.buscarArtilheiroTop1(campeonatoAId)
+        val assistenteA = partidaDao.buscarAssisteTop1(campeonatoAId)
+        val campeonatoAEntity = campeonatoDao.buscarPorId(campeonatoAId)
+        val nomeCampeaoA = campeaoA?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "Desconhecido"
+        val nomeViceA    = viceA?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: ""
 
-        // Ler classificação final (top 2)
-        val top2 = classificacaoDao.buscarTop2(campeonatoId)
-        val campeao = top2.getOrNull(0)
-        val vice    = top2.getOrNull(1)
-
-        // Ler artilheiro e garçom
-        val artilheiro = partidaDao.buscarArtilheiroTop1(campeonatoId)
-        val assistente = partidaDao.buscarAssisteTop1(campeonatoId)
-
-        // Resolver nomes dos times
-        val campeonato   = campeonatoDao.buscarPorId(campeonatoId)
-        val nomeCampeao  = campeao?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "Desconhecido"
-        val nomeVice     = vice?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: ""
-
-        // Salvar no Hall da Fama
-        if (campeao != null) {
-            hallDaFamaDao.inserir(
-                HallDaFamaEntity(
-                    ano               = ano,
-                    nomeCampeonato    = campeonato?.nome ?: "Brasileirão Série A $ano",
-                    campeaoTimeId     = campeao.timeId,
-                    campeaoNome       = nomeCampeao,
-                    viceTimeId        = vice?.timeId ?: -1,
-                    viceNome          = nomeVice,
-                    artilheiroId      = artilheiro?.jogadorId ?: -1,
-                    artilheiroNome    = artilheiro?.nomeJogador ?: "",
-                    artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
-                    artilheiroGols    = artilheiro?.total ?: 0,
-                    artilheiroNomeTime = artilheiro?.nomeTime ?: "",
-                    assistenteId      = assistente?.jogadorId ?: -1,
-                    assistenteNome    = assistente?.nomeJogador ?: "",
-                    assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
-                    assistenciasTotais = assistente?.total ?: 0,
-                    assistenteNomeTime = assistente?.nomeTime ?: ""
-                )
-            )
+        if (campeaoA != null) {
+            hallDaFamaDao.inserir(HallDaFamaEntity(
+                ano = ano, nomeCampeonato = campeonatoAEntity?.nome ?: "Brasileirão Série A $ano",
+                campeaoTimeId = campeaoA.timeId, campeaoNome = nomeCampeaoA,
+                viceTimeId = viceA?.timeId ?: -1, viceNome = nomeViceA,
+                artilheiroId = artilheiroA?.jogadorId ?: -1, artilheiroNome = artilheiroA?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiroA?.nomeAbrev ?: "", artilheiroGols = artilheiroA?.total ?: 0,
+                artilheiroNomeTime = artilheiroA?.nomeTime ?: "",
+                assistenteId = assistenteA?.jogadorId ?: -1, assistenteNome = assistenteA?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistenteA?.nomeAbrev ?: "", assistenciasTotais = assistenteA?.total ?: 0,
+                assistenteNomeTime = assistenteA?.nomeTime ?: "",
+                divisao = 1
+            ))
         }
 
-        // Encerrar campeonato atual
-        campeonatoDao.encerrar(campeonatoId)
+        // ── Série B ──────────────────────────────────────────────
+        val participantesB = campeonatoDao.buscarIdsParticipantes(campeonatoBId)
+        val tabelaB = classificacaoDao.buscarTop2(campeonatoBId)
+        val campeaoB = tabelaB.getOrNull(0)
+        val viceB    = tabelaB.getOrNull(1)
+        val artilheiroB = partidaDao.buscarArtilheiroTop1(campeonatoBId)
+        val assistenteB = partidaDao.buscarAssisteTop1(campeonatoBId)
+        val campeonatoBEntity = campeonatoDao.buscarPorId(campeonatoBId)
+        val nomeCampeaoB = campeaoB?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "Desconhecido"
+        val nomeViceB    = viceB?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: ""
+
+        if (campeaoB != null) {
+            hallDaFamaDao.inserir(HallDaFamaEntity(
+                ano = ano, nomeCampeonato = campeonatoBEntity?.nome ?: "Brasileirão Série B $ano",
+                campeaoTimeId = campeaoB.timeId, campeaoNome = nomeCampeaoB,
+                viceTimeId = viceB?.timeId ?: -1, viceNome = nomeViceB,
+                artilheiroId = artilheiroB?.jogadorId ?: -1, artilheiroNome = artilheiroB?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiroB?.nomeAbrev ?: "", artilheiroGols = artilheiroB?.total ?: 0,
+                artilheiroNomeTime = artilheiroB?.nomeTime ?: "",
+                assistenteId = assistenteB?.jogadorId ?: -1, assistenteNome = assistenteB?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistenteB?.nomeAbrev ?: "", assistenciasTotais = assistenteB?.total ?: 0,
+                assistenteNomeTime = assistenteB?.nomeTime ?: "",
+                divisao = 2
+            ))
+        }
+
+        // ── Promoção / Rebaixamento ───────────────────────────────
+        val tabelaACompleta = classificacaoDao.buscarTabelaOrdenada(campeonatoAId)
+        val tabelaBCompleta = classificacaoDao.buscarTabelaOrdenada(campeonatoBId)
+        val campeonatoAInfo = campeonatoAEntity ?: return run {
+            campeonatoDao.encerrar(campeonatoAId)
+            campeonatoDao.encerrar(campeonatoBId)
+            NovaTemporadaInfo(-1, -1, temporadaId + 1, ano + 1)
+        }
+        val desfechoA = MotorCampeonato.calcularDesfecho(campeonatoAInfo, tabelaACompleta)
+        val campeonatoBInfo = campeonatoBEntity ?: return run {
+            campeonatoDao.encerrar(campeonatoAId)
+            campeonatoDao.encerrar(campeonatoBId)
+            NovaTemporadaInfo(-1, -1, temporadaId + 1, ano + 1)
+        }
+        val desfechoB = MotorCampeonato.calcularDesfecho(campeonatoBInfo, tabelaBCompleta)
+
+        val rebaixadosA = desfechoA.rebaixados  // vão para Série B
+        val promovidos  = desfechoB.promovidos  // vão para Série A
+
+        // Atualiza divisao de cada time
+        rebaixadosA.forEach { timeId ->
+            timeRepository.buscarEntityPorId(timeId)?.let { entity ->
+                timeRepository.atualizar(entity.copy(divisao = 2))
+            }
+        }
+        promovidos.forEach { timeId ->
+            timeRepository.buscarEntityPorId(timeId)?.let { entity ->
+                timeRepository.atualizar(entity.copy(divisao = 1))
+            }
+        }
+
+        // Calcula novas listas de participantes
+        val novosParticipantesA = (participantesA - rebaixadosA.toSet()) + promovidos
+        val novosParticipantesB = (participantesB - promovidos.toSet()) + rebaixadosA
+
+        // Encerra campeonatos atuais
+        campeonatoDao.encerrar(campeonatoAId)
+        campeonatoDao.encerrar(campeonatoBId)
 
         // Desenvolvimento anual dos jogadores
         jogadorRepository.processarDesenvolvimentoAnual()
 
-        // Criar o novo campeonato da próxima temporada
-        val novoAno          = ano + 1
-        val novoTemporadaId  = temporadaId + 1
-        val novoCampeonatoId = criarCampeonato(
+        // Cria os novos campeonatos da próxima temporada
+        val novoAno         = ano + 1
+        val novoTemporadaId = temporadaId + 1
+
+        val novoCampeonatoAId = criarCampeonato(
             CampeonatoEntity(
                 temporadaId  = novoTemporadaId,
                 nome         = "Brasileirão Série A $novoAno",
                 tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
                 formato      = FormatoCampeonato.PONTOS_CORRIDOS,
-                totalRodadas = (participantes.size - 1) * 2
+                totalRodadas = (novosParticipantesA.size - 1) * 2
             ),
-            participantes
+            novosParticipantesA
         )
 
-        return NovaTemporadaInfo(novoCampeonatoId, novoTemporadaId, novoAno)
+        val novoCampeonatoBId = criarCampeonato(
+            CampeonatoEntity(
+                temporadaId  = novoTemporadaId,
+                nome         = "Brasileirão Série B $novoAno",
+                tipo         = TipoCampeonato.NACIONAL_DIVISAO2,
+                formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosParticipantesB.size - 1) * 2
+            ),
+            novosParticipantesB
+        )
+
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoTemporadaId, novoAno)
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()

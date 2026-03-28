@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,15 +24,22 @@ import br.com.managerfoot.presentation.ui.components.TeamBadge
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TabelaScreen(
-    campeonatoId: Int,
+    campeonatoAId: Int,
+    campeonatoBId: Int,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
 ) {
     val tabela by vm.tabela.collectAsState()
     val times by vm.times.collectAsState()
+    val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoId) { vm.carregar(campeonatoId) }
+    LaunchedEffect(campeonatoAId, campeonatoBId) {
+        // Se o player está na Série B (campeonatoId == B), mostra B por padrão
+        val divisaoInicial = if (campeonatoAId == campeonatoBId) 1
+            else if (times.find { it.id == timeJogadorId }?.divisao == 2) 2 else 1
+        vm.carregar(campeonatoAId, campeonatoBId)
+    }
 
     Scaffold(
         topBar = {
@@ -50,6 +58,23 @@ fun TabelaScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Seletor de divisão
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Série A", "Série B").forEachIndexed { idx, label ->
+                    FilterChip(
+                        selected = divisaoSelecionada == idx + 1,
+                        onClick  = { vm.selecionarDivisao(idx + 1) },
+                        label    = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
             // Header row
             TabelaHeader()
             HorizontalDivider()
@@ -60,16 +85,21 @@ fun TabelaScreen(
                     val nomeTime = time?.nome ?: "Time ${item.timeId}"
                     val escudoRes = time?.escudoRes ?: ""
                     val ehJogador = item.timeId == timeJogadorId
+                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
                     TabelaRow(
                         posicao = index + 1,
                         nomeTime = nomeTime,
                         escudoRes = escudoRes,
                         item = item,
-                        destaque = ehJogador
+                        destaque = ehJogador,
+                        zonaColor = zona
                     )
                     HorizontalDivider(thickness = 0.5.dp)
                 }
             }
+
+            // Legenda de zonas
+            LegendaZonas(divisaoSelecionada)
         }
     }
 }
@@ -90,13 +120,53 @@ private fun TabelaHeader() {
     }
 }
 
+// Retorna a cor da zona baseado na posição e divisão
+@Composable
+private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao) {
+    1 -> when { // Série A
+        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
+        posicao <= 6  -> Color(0xFF4CAF50)  // Sul-Americana
+        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento
+        else          -> null
+    }
+    else -> when { // Série B
+        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série A
+        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série C
+        else          -> null
+    }
+}
+
+@Composable
+private fun LegendaZonas(divisao: Int) {
+    val itens = if (divisao == 1) listOf(
+        Color(0xFF1565C0) to "1-4: Libertadores",
+        Color(0xFF4CAF50) to "5-6: Sul-Americana",
+        Color(0xFFE53935) to "17-20: Rebaixamento"
+    ) else listOf(
+        Color(0xFF1565C0) to "1-4: Acesso à Série A",
+        Color(0xFFE53935) to "17-20: Rebaixamento"
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        itens.forEach { (cor, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(10.dp).background(cor))
+                Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
 @Composable
 private fun TabelaRow(
     posicao: Int,
     nomeTime: String,
     escudoRes: String = "",
     item: ClassificacaoEntity,
-    destaque: Boolean
+    destaque: Boolean,
+    zonaColor: Color? = null
 ) {
     val bg = if (destaque) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val textColorPrimary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
@@ -109,9 +179,17 @@ private fun TabelaRow(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Indicador de zona (barra colorida à esquerda)
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(24.dp)
+                .background(zonaColor ?: Color.Transparent)
+        )
+        Spacer(Modifier.width(4.dp))
         Text(
             "$posicao",
-            modifier = Modifier.width(28.dp),
+            modifier = Modifier.width(24.dp),
             fontSize = 12.sp,
             fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
             textAlign = TextAlign.Center,

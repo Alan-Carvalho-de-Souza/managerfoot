@@ -22,7 +22,8 @@ import br.com.managerfoot.presentation.viewmodel.ArtilheirosViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtilheirosScreen(
-    campeonatoId: Int,
+    campeonatoAId: Int,
+    campeonatoBId: Int,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -30,8 +31,9 @@ fun ArtilheirosScreen(
     val assistentes       by vm.assistentes.collectAsState()
     val artilheirosTotal  by vm.artilheirosAllTime.collectAsState()
     val assistentesTotal  by vm.assistentesAllTime.collectAsState()
+    val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoId) { vm.carregar(campeonatoId) }
+    LaunchedEffect(campeonatoAId, campeonatoBId) { vm.carregar(campeonatoAId, campeonatoBId) }
 
     // Escopo: 0 = temporada atual, 1 = histórico total
     var escopoSelecionado by remember { mutableIntStateOf(0) }
@@ -60,7 +62,7 @@ fun ArtilheirosScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("Temporada atual", "Histórico total").forEachIndexed { idx, label ->
@@ -70,6 +72,25 @@ fun ArtilheirosScreen(
                         label    = { Text(label) },
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            // Seletor de divisão (só visível em "Temporada atual")
+            if (escopoSelecionado == 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Série A", "Série B").forEachIndexed { idx, label ->
+                        FilterChip(
+                            selected = divisaoSelecionada == idx + 1,
+                            onClick  = { vm.selecionarDivisao(idx + 1) },
+                            label    = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 

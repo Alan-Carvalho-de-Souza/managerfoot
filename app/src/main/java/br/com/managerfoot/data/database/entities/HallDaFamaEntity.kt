@@ -31,5 +31,8 @@ data class HallDaFamaEntity(
     val assistenteNome: String = "",
     val assistenteNomeAbrev: String = "",
     val assistenciasTotais: Int = 0,
-    val assistenteNomeTime: String = ""
+    val assistenteNomeTime: String = "",
+
+    // Divisão do campeonato (1 = Série A, 2 = Série B)
+    val divisao: Int = 1
 )
