@@ -3,7 +3,9 @@ package br.com.managerfoot.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.com.managerfoot.data.dao.ArtilheiroDto
+import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
+import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.data.datasource.GameDataStore
 import br.com.managerfoot.data.datasource.SeedDataSource
@@ -725,5 +727,21 @@ class ConfrontoViewModel @Inject constructor(
             if (r in tipos) { if (++atual > max) max = atual } else atual = 0
         }
         return max
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CalendarioViewModel
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class CalendarioViewModel @Inject constructor(
+    private val partidaDao: PartidaDao
+) : ViewModel() {
+
+    private val _partidas = MutableStateFlow<List<CalendarioPartidaDto>>(emptyList())
+    val partidas: StateFlow<List<CalendarioPartidaDto>> = _partidas.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        partidaDao.observeCalendario(timeId).collect { _partidas.value = it }
     }
 }

@@ -7,7 +7,7 @@
       "estado": "RJ",
       "divisao": "A",
       "nivel": 10,
-      "saldo": 5000000000,
+      "saldo": 6000000000,
       "estadio_nome": "Maracana",
       "estadio_capacidade": 78838,
       "preco_ingresso": 8000,
@@ -55,7 +55,7 @@
       "estado": "SP",
       "divisao": "A",
       "nivel": 9,
-      "saldo": 3800000000,
+      "saldo": 3500000000,
       "estadio_nome": "Morumbis",
       "estadio_capacidade": 66795,
       "preco_ingresso": 7000,
@@ -71,7 +71,7 @@
       "estado": "SP",
       "divisao": "A",
       "nivel": 9,
-      "saldo": 3000000000,
+      "saldo": 3500000000,
       "estadio_nome": "Neo Quimica Arena",
       "estadio_capacidade": 49205,
       "preco_ingresso": 7000,
@@ -150,14 +150,14 @@
       "cidade": "Belo Horizonte",
       "estado": "MG",
       "divisao": "A",
-      "nivel": 7,
-      "saldo": 2000000000,
+      "nivel": 8,
+      "saldo":42000000000,
       "estadio_nome": "Mineirao",
       "estadio_capacidade": 61170,
       "preco_ingresso": 5500,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 85,
+      "reputacao": 92,
       "escudo_res": "escudo_cruzeiro"
     },
     {
@@ -197,7 +197,7 @@
       "nome": "Fortaleza",
       "cidade": "Fortaleza",
       "estado": "CE",
-      "divisao": "A",
+      "divisao": "B",
       "nivel": 7,
       "saldo": 1500000000,
       "estadio_nome": "Castelaoo",
@@ -261,15 +261,15 @@
       "nome": "Juventude",
       "cidade": "Caxias do Sul",
       "estado": "RS",
-      "divisao": "A",
+      "divisao": "B",
       "nivel": 5,
-      "saldo": 700000000,
+      "saldo": 150000000,
       "estadio_nome": "Alfredo Jaconi",
       "estadio_capacidade": 14950,
       "preco_ingresso": 3000,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 68,
+      "reputacao": 76,
       "escudo_res": "escudo_juventude"
     },
     {
@@ -293,7 +293,7 @@
       "nome": "Atletico-GO",
       "cidade": "Goiania",
       "estado": "GO",
-      "divisao": "A",
+      "divisao": "B",
       "nivel": 5,
       "saldo": 650000000,
       "estadio_nome": "Serrinha",
@@ -350,7 +350,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": ""
+      "escudo_res": "escudo_sportrecife"
     },
     {
       "id": 23,
@@ -382,7 +382,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 70,
-      "escudo_res": ""
+      "escudo_res": "escudo_americamg"
     },
     {
       "id": 25,
@@ -398,7 +398,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_ceara"
     },
     {
       "id": 26,
@@ -414,7 +414,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 65,
-      "escudo_res": ""
+      "escudo_res": "escudo_goias"
     },
     {
       "id": 27,
@@ -430,23 +430,23 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 62,
-      "escudo_res": ""
+      "escudo_res": "escudo_crb"
     },
     {
       "id": 28,
       "nome": "Chapecoense",
       "cidade": "Chapeco",
       "estado": "SC",
-      "divisao": "B",
-      "nivel": 5,
-      "saldo": 480000000,
+      "divisao": "A",
+      "nivel": 6,
+      "saldo": 180000000,
       "estadio_nome": "Arena Conda",
       "estadio_capacidade": 22600,
       "preco_ingresso": 2500,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 63,
-      "escudo_res": ""
+      "reputacao": 78,
+      "escudo_res": "escudo_chapecoense"
     },
     {
       "id": 29,
@@ -454,22 +454,22 @@
       "cidade": "Campinas",
       "estado": "SP",
       "divisao": "B",
-      "nivel": 5,
-      "saldo": 520000000,
+      "nivel": 6,
+      "saldo": 120000000,
       "estadio_nome": "Estadio Moises Lucarelli",
       "estadio_capacidade": 19911,
       "preco_ingresso": 2600,
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
-      "reputacao": 64,
-      "escudo_res": ""
+      "reputacao": 70,
+      "escudo_res": "escudo_pontepreta"
     },
     {
       "id": 30,
       "nome": "Guarani",
       "cidade": "Campinas",
       "estado": "SP",
-      "divisao": "B",
+      "divisao": "C",
       "nivel": 5,
       "saldo": 450000000,
       "estadio_nome": "Estadio Brinco de Ouro",
@@ -629,16 +629,16 @@
       "nome": "Mirassol",
       "cidade": "Mirassol",
       "estado": "SP",
-      "divisao": "B",
-      "nivel": 4,
-      "saldo": 260000000,
+      "divisao": "A",
+      "nivel": 6,
+      "saldo": 2000000000,
       "estadio_nome": "Estadio Jose Maria de Campos Maia",
-      "estadio_capacidade": 10000,
-      "preco_ingresso": 1700,
+      "estadio_capacidade": 20000,
+      "preco_ingresso": 2000,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 48,
-      "escudo_res": ""
+      "reputacao": 78,
+      "escudo_res": "escudo_mirassol"
     },
     {
       "id": 41,
@@ -757,16 +757,16 @@
       "nome": "Remo",
       "cidade": "Belem",
       "estado": "PA",
-      "divisao": "C",
-      "nivel": 4,
+      "divisao": "A",
+      "nivel": 6,
       "saldo": 260000000,
       "estadio_nome": "Estadio Baenao",
       "estadio_capacidade": 16700,
       "preco_ingresso": 1500,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 50,
-      "escudo_res": ""
+      "reputacao": 75,
+      "escudo_res": "escudo_remo"
     },
     {
       "id": 49,

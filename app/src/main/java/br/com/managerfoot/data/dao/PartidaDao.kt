@@ -186,6 +186,21 @@ interface PartidaDao {
     suspend fun buscarPartidasConfronto(timeAId: Int, timeBId: Int): List<ConfrontoPartidaDto>
 
     @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.timeCasaId = :timeId OR p.timeForaId = :timeId
+        ORDER BY p.jogada ASC, p.rodada ASC
+    """)
+    fun observeCalendario(timeId: Int): Flow<List<CalendarioPartidaDto>>
+
+    @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
                t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
@@ -220,4 +235,20 @@ data class ConfrontoPartidaDto(
     val timeForaId: Int,
     val golsCasa: Int,
     val golsFora: Int
+)
+
+data class CalendarioPartidaDto(
+    val partidaId: Int,
+    val campeonatoId: Int,
+    val nomeCampeonato: String,
+    val rodada: Int,
+    val timeCasaId: Int,
+    val nomeCasa: String,
+    val escudoCasa: String,
+    val timeForaId: Int,
+    val nomeFora: String,
+    val escudoFora: String,
+    val golsCasa: Int?,
+    val golsFora: Int?,
+    val jogada: Boolean
 )

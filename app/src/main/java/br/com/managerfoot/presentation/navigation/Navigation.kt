@@ -45,6 +45,9 @@ sealed class Rota(val caminho: String) {
     object Confronto       : Rota("confronto/{timeId}") {
         fun com(timeId: Int) = "confronto/$timeId"
     }
+    object Calendario      : Rota("calendario/{timeId}") {
+        fun comTimeId(id: Int) = "calendario/$id"
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -105,7 +108,8 @@ fun ManagerFootNavGraph() {
                 )) },
                 onIrParaFinancas    = { navController.navigate(Rota.Financas.comTimeId(timeId)) },
                 onIrParaHallDaFama  = { navController.navigate(Rota.HallDaFama.caminho) },
-                onIrParaConfronto   = { navController.navigate(Rota.Confronto.com(timeId)) }
+                onIrParaConfronto   = { navController.navigate(Rota.Confronto.com(timeId)) },
+                onIrParaCalendario  = { navController.navigate(Rota.Calendario.comTimeId(timeId)) }
             )
         }
 
@@ -195,6 +199,15 @@ fun ManagerFootNavGraph() {
         ) { backStack ->
             val timeId = backStack.arguments!!.getInt("timeId")
             ConfrontoScreen(preTimeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Calendário do clube
+        composable(
+            route = Rota.Calendario.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            CalendarioScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
         }
     }
 }

@@ -24,6 +24,7 @@ fun DashboardScreen(
     onIrParaFinancas: () -> Unit,
     onIrParaHallDaFama: () -> Unit,
     onIrParaConfronto: () -> Unit,
+    onIrParaCalendario: () -> Unit,
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsState()
@@ -201,6 +202,7 @@ fun DashboardScreen(
             ) {
                 OutlinedButton(onClick = onIrParaTabela, modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") }
                 OutlinedButton(onClick = onIrParaArtilheiros, modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") }
+                OutlinedButton(onClick = onIrParaCalendario, modifier = Modifier.fillMaxWidth()) { Text("Calendário") }
                 OutlinedButton(onClick = onIrParaHallDaFama, modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") }
                 OutlinedButton(onClick = onIrParaConfronto, modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") }
                 OutlinedButton(onClick = onIrParaMercado, modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") }

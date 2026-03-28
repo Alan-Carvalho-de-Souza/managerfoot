@@ -109,8 +109,9 @@ fun SelecionarTimeScreen(
     var busca by remember { mutableStateOf("") }
 
     val filtrados = remember(times, busca) {
-        if (busca.isBlank()) times
-        else times.filter { it.nome.contains(busca, ignoreCase = true) }
+        val lista = if (busca.isBlank()) times
+                    else times.filter { it.nome.contains(busca, ignoreCase = true) }
+        lista.sortedBy { it.nome }
     }
 
     Column(Modifier.fillMaxSize()) {
