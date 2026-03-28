@@ -26,6 +26,8 @@ import br.com.managerfoot.presentation.ui.components.TeamBadge
 fun TabelaScreen(
     campeonatoAId: Int,
     campeonatoBId: Int,
+    campeonatoCId: Int = -1,
+    campeonatoDId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -34,11 +36,9 @@ fun TabelaScreen(
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId) {
-        // Se o player está na Série B (campeonatoId == B), mostra B por padrão
-        val divisaoInicial = if (campeonatoAId == campeonatoBId) 1
-            else if (times.find { it.id == timeJogadorId }?.divisao == 2) 2 else 1
-        vm.carregar(campeonatoAId, campeonatoBId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
+        val divisaoJogador = times.find { it.id == timeJogadorId }?.divisao ?: 1
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, divisaoJogador)
     }
 
     Scaffold(
@@ -63,13 +63,19 @@ fun TabelaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf("Série A", "Série B").forEachIndexed { idx, label ->
+                val divisoes = buildList {
+                    add("Série A")
+                    add("Série B")
+                    if (campeonatoCId > 0) add("Série C")
+                    if (campeonatoDId > 0) add("Série D")
+                }
+                divisoes.forEachIndexed { idx, label ->
                     FilterChip(
                         selected = divisaoSelecionada == idx + 1,
                         onClick  = { vm.selecionarDivisao(idx + 1) },
-                        label    = { Text(label) },
+                        label    = { Text(label, maxLines = 1) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -123,29 +129,48 @@ private fun TabelaHeader() {
 // Retorna a cor da zona baseado na posição e divisão
 @Composable
 private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao) {
-    1 -> when { // Série A
+    1 -> when {
         posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
         posicao <= 6  -> Color(0xFF4CAF50)  // Sul-Americana
         posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento
         else          -> null
     }
-    else -> when { // Série B
+    2 -> when {
         posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série A
         posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série C
+        else          -> null
+    }
+    3 -> when {
+        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série B
+        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série D
+        else          -> null
+    }
+    else -> when {
+        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série C
         else          -> null
     }
 }
 
 @Composable
 private fun LegendaZonas(divisao: Int) {
-    val itens = if (divisao == 1) listOf(
-        Color(0xFF1565C0) to "1-4: Libertadores",
-        Color(0xFF4CAF50) to "5-6: Sul-Americana",
-        Color(0xFFE53935) to "17-20: Rebaixamento"
-    ) else listOf(
-        Color(0xFF1565C0) to "1-4: Acesso à Série A",
-        Color(0xFFE53935) to "17-20: Rebaixamento"
-    )
+    val itens = when (divisao) {
+        1 -> listOf(
+            Color(0xFF1565C0) to "1-4: Libertadores",
+            Color(0xFF4CAF50) to "5-6: Sul-Americana",
+            Color(0xFFE53935) to "17-20: Rebaixamento"
+        )
+        2 -> listOf(
+            Color(0xFF1565C0) to "1-4: Acesso à Série A",
+            Color(0xFFE53935) to "17-20: Rebaixamento"
+        )
+        3 -> listOf(
+            Color(0xFF1565C0) to "1-4: Acesso à Série B",
+            Color(0xFFE53935) to "17-20: Rebaixamento"
+        )
+        else -> listOf(
+            Color(0xFF1565C0) to "1-4: Acesso à Série C"
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)

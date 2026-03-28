@@ -27,11 +27,13 @@ sealed class Rota(val caminho: String) {
     object Escalacao       : Rota("escalacao/{timeId}") {
         fun comTimeId(id: Int) = "escalacao/$id"
     }
-    object Tabela          : Rota("tabela/{campeonatoId}/{campeonatoBId}/{timeJogadorId}") {
-        fun com(campAId: Int, campBId: Int, timeId: Int) = "tabela/$campAId/$campBId/$timeId"
+    object Tabela          : Rota("tabela/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{timeJogadorId}") {
+        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, timeId: Int) =
+            "tabela/$campAId/$campBId/$campCId/$campDId/$timeId"
     }
-    object Artilheiros     : Rota("artilheiros/{campeonatoId}/{campeonatoBId}") {
-        fun com(campAId: Int, campBId: Int) = "artilheiros/$campAId/$campBId"
+    object Artilheiros     : Rota("artilheiros/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}") {
+        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int) =
+            "artilheiros/$campAId/$campBId/$campCId/$campDId"
     }
     object Mercado         : Rota("mercado/{timeId}") {
         fun comTimeId(id: Int) = "mercado/$id"
@@ -88,8 +90,19 @@ fun ManagerFootNavGraph() {
                 vm = dashVm,
                 onIrParaEscalacao   = { navController.navigate(Rota.Escalacao.comTimeId(timeId)) },
                 onIrParaMercado     = { navController.navigate(Rota.Mercado.comTimeId(timeId)) },
-                onIrParaTabela      = { navController.navigate(Rota.Tabela.com(campAId = saveState?.campeonatoId ?: 1, campBId = saveState?.campeonatoBId ?: 2, timeId = timeId)) },
-                onIrParaArtilheiros = { navController.navigate(Rota.Artilheiros.com(campAId = saveState?.campeonatoId ?: 1, campBId = saveState?.campeonatoBId ?: 2)) },
+                onIrParaTabela      = { navController.navigate(Rota.Tabela.com(
+                    campAId = saveState?.campeonatoAId ?: -1,
+                    campBId = saveState?.campeonatoBId ?: -1,
+                    campCId = saveState?.campeonatoCId ?: -1,
+                    campDId = saveState?.campeonatoDId ?: -1,
+                    timeId  = timeId
+                )) },
+                onIrParaArtilheiros = { navController.navigate(Rota.Artilheiros.com(
+                    campAId = saveState?.campeonatoAId ?: -1,
+                    campBId = saveState?.campeonatoBId ?: -1,
+                    campCId = saveState?.campeonatoCId ?: -1,
+                    campDId = saveState?.campeonatoDId ?: -1
+                )) },
                 onIrParaFinancas    = { navController.navigate(Rota.Financas.comTimeId(timeId)) },
                 onIrParaHallDaFama  = { navController.navigate(Rota.HallDaFama.caminho) },
                 onIrParaConfronto   = { navController.navigate(Rota.Confronto.com(timeId)) }
@@ -111,15 +124,21 @@ fun ManagerFootNavGraph() {
             arguments = listOf(
                 navArgument("campeonatoId")   { type = NavType.IntType },
                 navArgument("campeonatoBId")  { type = NavType.IntType },
+                navArgument("campeonatoCId")  { type = NavType.IntType },
+                navArgument("campeonatoDId")  { type = NavType.IntType },
                 navArgument("timeJogadorId")  { type = NavType.IntType }
             )
         ) { backStack ->
             val campeonatoId  = backStack.arguments!!.getInt("campeonatoId")
-            val campeonatoBId  = backStack.arguments!!.getInt("campeonatoBId")
+            val campeonatoBId = backStack.arguments!!.getInt("campeonatoBId")
+            val campeonatoCId = backStack.arguments!!.getInt("campeonatoCId")
+            val campeonatoDId = backStack.arguments!!.getInt("campeonatoDId")
             val timeJogadorId = backStack.arguments!!.getInt("timeJogadorId")
             TabelaScreen(
                 campeonatoAId = campeonatoId,
-                campeonatoBId  = campeonatoBId,
+                campeonatoBId = campeonatoBId,
+                campeonatoCId = campeonatoCId,
+                campeonatoDId = campeonatoDId,
                 timeJogadorId = timeJogadorId,
                 onVoltar      = { navController.popBackStack() }
             )
@@ -129,16 +148,22 @@ fun ManagerFootNavGraph() {
         composable(
             route = Rota.Artilheiros.caminho,
             arguments = listOf(
-                navArgument("campeonatoId")  { type = NavType.IntType },
-                navArgument("campeonatoBId") { type = NavType.IntType }
+                navArgument("campeonatoId")   { type = NavType.IntType },
+                navArgument("campeonatoBId")  { type = NavType.IntType },
+                navArgument("campeonatoCId")  { type = NavType.IntType },
+                navArgument("campeonatoDId")  { type = NavType.IntType }
             )
         ) { backStack ->
             val campeonatoId  = backStack.arguments!!.getInt("campeonatoId")
             val campeonatoBId = backStack.arguments!!.getInt("campeonatoBId")
+            val campeonatoCId = backStack.arguments!!.getInt("campeonatoCId")
+            val campeonatoDId = backStack.arguments!!.getInt("campeonatoDId")
             ArtilheirosScreen(
                 campeonatoAId = campeonatoId,
                 campeonatoBId = campeonatoBId,
-                onVoltar     = { navController.popBackStack() }
+                campeonatoCId = campeonatoCId,
+                campeonatoDId = campeonatoDId,
+                onVoltar      = { navController.popBackStack() }
             )
         }
 

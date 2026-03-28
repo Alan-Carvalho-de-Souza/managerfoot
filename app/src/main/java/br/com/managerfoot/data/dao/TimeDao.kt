@@ -47,6 +47,9 @@ interface TimeDao {
 
     @Delete
     suspend fun deletar(time: TimeEntity)
+
+    @Query("DELETE FROM times")
+    suspend fun deleteAll()
 }
 
 // ─────────────────────────────────────────────

@@ -23,6 +23,19 @@ class GameRepository @Inject constructor(
 ) {
     private val simulador = SimuladorPartida()
 
+    // Limpa todos os dados do jogo em ordem segura (filhos antes de pais)
+    suspend fun limparTodosDados() {
+        partidaDao.deleteAllEventos()
+        partidaDao.deleteAllEscalacoes()
+        financaDao.deleteAllTransferencias()
+        financaDao.deleteAll()
+        classificacaoDao.deleteAll()
+        campeonatoDao.deleteAllParticipantes()
+        partidaDao.deleteAll()
+        campeonatoDao.deleteAll()
+        hallDaFamaDao.deleteAll()
+    }
+
     suspend fun criarCampeonato(
         campeonato: CampeonatoEntity,
         participantesIds: List<Int>
@@ -136,11 +149,11 @@ class GameRepository @Inject constructor(
     suspend fun buscarProximaPartida(timeId: Int): PartidaEntity? =
         partidaDao.buscarProximaPartida(timeId)
 
-    fun observarUltimosResultados(timeId: Int): Flow<List<PartidaEntity>> =
-        partidaDao.observeUltimosResultados(timeId)
+    fun observarUltimosResultados(timeId: Int, campeonatoId: Int): Flow<List<PartidaEntity>> =
+        partidaDao.observeUltimosResultados(timeId, campeonatoId)
 
-    suspend fun buscarUltimosResultados(timeId: Int): List<PartidaEntity> =
-        partidaDao.buscarUltimosResultados(timeId)
+    suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int): List<PartidaEntity> =
+        partidaDao.buscarUltimosResultados(timeId, campeonatoId)
 
     suspend fun processarFimDeTemporada(temporadaId: Int) {
         val campeonatos = campeonatoDao.buscarAtivos()
@@ -154,6 +167,8 @@ class GameRepository @Inject constructor(
     data class NovaTemporadaInfo(
         val campeonatoAId: Int,
         val campeonatoBId: Int,
+        val campeonatoCId: Int,
+        val campeonatoDId: Int,
         val temporadaId: Int,
         val ano: Int
     )
@@ -161,130 +176,119 @@ class GameRepository @Inject constructor(
     suspend fun encerrarTemporadaComHallDaFama(
         campeonatoAId: Int,
         campeonatoBId: Int,
+        campeonatoCId: Int,
+        campeonatoDId: Int,
         temporadaId: Int,
         ano: Int
     ): NovaTemporadaInfo {
         // ── Série A ──────────────────────────────────────────────
         val participantesA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
-        val tabelaA = classificacaoDao.buscarTop2(campeonatoAId)
-        val campeaoA = tabelaA.getOrNull(0)
-        val viceA    = tabelaA.getOrNull(1)
-        val artilheiroA = partidaDao.buscarArtilheiroTop1(campeonatoAId)
-        val assistenteA = partidaDao.buscarAssisteTop1(campeonatoAId)
-        val campeonatoAEntity = campeonatoDao.buscarPorId(campeonatoAId)
-        val nomeCampeaoA = campeaoA?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "Desconhecido"
-        val nomeViceA    = viceA?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: ""
-
-        if (campeaoA != null) {
+        // ── Helper: registra Hall da Fama para uma divisão ────────
+        suspend fun registrarHallDaFama(campId: Int, div: Int) {
+            if (campId <= 0) return
+            val tabTop2    = classificacaoDao.buscarTop2(campId)
+            val campeao    = tabTop2.getOrNull(0) ?: return
+            val vice       = tabTop2.getOrNull(1)
+            val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
+            val assistente = partidaDao.buscarAssisteTop1(campId)
+            val campEntity = campeonatoDao.buscarPorId(campId)
+            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; else -> "D" }
             hallDaFamaDao.inserir(HallDaFamaEntity(
-                ano = ano, nomeCampeonato = campeonatoAEntity?.nome ?: "Brasileirão Série A $ano",
-                campeaoTimeId = campeaoA.timeId, campeaoNome = nomeCampeaoA,
-                viceTimeId = viceA?.timeId ?: -1, viceNome = nomeViceA,
-                artilheiroId = artilheiroA?.jogadorId ?: -1, artilheiroNome = artilheiroA?.nomeJogador ?: "",
-                artilheiroNomeAbrev = artilheiroA?.nomeAbrev ?: "", artilheiroGols = artilheiroA?.total ?: 0,
-                artilheiroNomeTime = artilheiroA?.nomeTime ?: "",
-                assistenteId = assistenteA?.jogadorId ?: -1, assistenteNome = assistenteA?.nomeJogador ?: "",
-                assistenteNomeAbrev = assistenteA?.nomeAbrev ?: "", assistenciasTotais = assistenteA?.total ?: 0,
-                assistenteNomeTime = assistenteA?.nomeTime ?: "",
-                divisao = 1
+                ano = ano,
+                nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
+                campeaoTimeId      = campeao.timeId,
+                campeaoNome        = timeRepository.buscarPorId(campeao.timeId)?.nome ?: "",
+                campeaoEscudo      = timeRepository.buscarPorId(campeao.timeId)?.escudoRes ?: "",
+                viceTimeId         = vice?.timeId ?: -1,
+                viceNome           = vice?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "",
+                viceEscudo         = vice?.let { timeRepository.buscarPorId(it.timeId)?.escudoRes } ?: "",
+                artilheiroId       = artilheiro?.jogadorId ?: -1,
+                artilheiroNome     = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols     = artilheiro?.total ?: 0,
+                artilheiroNomeTime = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo   = artilheiro?.escudoRes ?: "",
+                assistenteId       = assistente?.jogadorId ?: -1,
+                assistenteNome     = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
+                assistenciasTotais = assistente?.total ?: 0,
+                assistenteNomeTime = assistente?.nomeTime ?: "",
+                assistenteEscudo   = assistente?.escudoRes ?: "",
+                divisao = div
             ))
         }
 
-        // ── Série B ──────────────────────────────────────────────
-        val participantesB = campeonatoDao.buscarIdsParticipantes(campeonatoBId)
-        val tabelaB = classificacaoDao.buscarTop2(campeonatoBId)
-        val campeaoB = tabelaB.getOrNull(0)
-        val viceB    = tabelaB.getOrNull(1)
-        val artilheiroB = partidaDao.buscarArtilheiroTop1(campeonatoBId)
-        val assistenteB = partidaDao.buscarAssisteTop1(campeonatoBId)
-        val campeonatoBEntity = campeonatoDao.buscarPorId(campeonatoBId)
-        val nomeCampeaoB = campeaoB?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "Desconhecido"
-        val nomeViceB    = viceB?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: ""
+        registrarHallDaFama(campeonatoAId, 1)
+        registrarHallDaFama(campeonatoBId, 2)
+        registrarHallDaFama(campeonatoCId, 3)
+        registrarHallDaFama(campeonatoDId, 4)
 
-        if (campeaoB != null) {
-            hallDaFamaDao.inserir(HallDaFamaEntity(
-                ano = ano, nomeCampeonato = campeonatoBEntity?.nome ?: "Brasileirão Série B $ano",
-                campeaoTimeId = campeaoB.timeId, campeaoNome = nomeCampeaoB,
-                viceTimeId = viceB?.timeId ?: -1, viceNome = nomeViceB,
-                artilheiroId = artilheiroB?.jogadorId ?: -1, artilheiroNome = artilheiroB?.nomeJogador ?: "",
-                artilheiroNomeAbrev = artilheiroB?.nomeAbrev ?: "", artilheiroGols = artilheiroB?.total ?: 0,
-                artilheiroNomeTime = artilheiroB?.nomeTime ?: "",
-                assistenteId = assistenteB?.jogadorId ?: -1, assistenteNome = assistenteB?.nomeJogador ?: "",
-                assistenteNomeAbrev = assistenteB?.nomeAbrev ?: "", assistenciasTotais = assistenteB?.total ?: 0,
-                assistenteNomeTime = assistenteB?.nomeTime ?: "",
-                divisao = 2
-            ))
+        // ── Desfechos (promoções / rebaixamentos) ─────────────────
+        suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
+            if (campId <= 0) return null
+            val entity = campeonatoDao.buscarPorId(campId) ?: return null
+            val tabela = classificacaoDao.buscarTabelaOrdenada(campId)
+            return MotorCampeonato.calcularDesfecho(entity, tabela)
         }
 
-        // ── Promoção / Rebaixamento ───────────────────────────────
-        val tabelaACompleta = classificacaoDao.buscarTabelaOrdenada(campeonatoAId)
-        val tabelaBCompleta = classificacaoDao.buscarTabelaOrdenada(campeonatoBId)
-        val campeonatoAInfo = campeonatoAEntity ?: return run {
-            campeonatoDao.encerrar(campeonatoAId)
-            campeonatoDao.encerrar(campeonatoBId)
-            NovaTemporadaInfo(-1, -1, temporadaId + 1, ano + 1)
+        val dfA = desfecho(campeonatoAId)
+        val dfB = desfecho(campeonatoBId)
+        val dfC = desfecho(campeonatoCId)
+        val dfD = desfecho(campeonatoDId)
+
+        val rebaixadosA = dfA?.rebaixados ?: emptyList()  // A → B
+        val promovidosB = dfB?.promovidos ?: emptyList()  // B → A
+        val rebaixadosB = dfB?.rebaixados ?: emptyList()  // B → C
+        val promovidosC = dfC?.promovidos ?: emptyList()  // C → B
+        val rebaixadosC = dfC?.rebaixados ?: emptyList()  // C → D
+        val promovidosD = dfD?.promovidos ?: emptyList()  // D → C (sem rebaixamento)
+
+        // Atualiza campo divisao de cada time
+        suspend fun setDivisao(ids: List<Int>, div: Int) = ids.forEach { id ->
+            timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = div)) }
         }
-        val desfechoA = MotorCampeonato.calcularDesfecho(campeonatoAInfo, tabelaACompleta)
-        val campeonatoBInfo = campeonatoBEntity ?: return run {
-            campeonatoDao.encerrar(campeonatoAId)
-            campeonatoDao.encerrar(campeonatoBId)
-            NovaTemporadaInfo(-1, -1, temporadaId + 1, ano + 1)
-        }
-        val desfechoB = MotorCampeonato.calcularDesfecho(campeonatoBInfo, tabelaBCompleta)
+        setDivisao(rebaixadosA, 2); setDivisao(promovidosB, 1)
+        setDivisao(rebaixadosB, 3); setDivisao(promovidosC, 2)
+        setDivisao(rebaixadosC, 4); setDivisao(promovidosD, 3)
 
-        val rebaixadosA = desfechoA.rebaixados  // vão para Série B
-        val promovidos  = desfechoB.promovidos  // vão para Série A
+        // Recalcula participantes
+        val partA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
+        val partB = campeonatoDao.buscarIdsParticipantes(campeonatoBId)
+        val partC = if (campeonatoCId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoCId) else emptyList()
+        val partD = if (campeonatoDId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoDId) else emptyList()
 
-        // Atualiza divisao de cada time
-        rebaixadosA.forEach { timeId ->
-            timeRepository.buscarEntityPorId(timeId)?.let { entity ->
-                timeRepository.atualizar(entity.copy(divisao = 2))
-            }
-        }
-        promovidos.forEach { timeId ->
-            timeRepository.buscarEntityPorId(timeId)?.let { entity ->
-                timeRepository.atualizar(entity.copy(divisao = 1))
-            }
-        }
+        val novosA = (partA - rebaixadosA.toSet()) + promovidosB
+        val novosB = (partB - promovidosB.toSet() - rebaixadosB.toSet()) + rebaixadosA + promovidosC
+        val novosC = (partC - promovidosC.toSet() - rebaixadosC.toSet()) + rebaixadosB + promovidosD
+        val novosD = (partD - promovidosD.toSet()) + rebaixadosC
 
-        // Calcula novas listas de participantes
-        val novosParticipantesA = (participantesA - rebaixadosA.toSet()) + promovidos
-        val novosParticipantesB = (participantesB - promovidos.toSet()) + rebaixadosA
+        // Encerra todos os campeonatos
+        listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId)
+            .filter { it > 0 }.forEach { campeonatoDao.encerrar(it) }
 
-        // Encerra campeonatos atuais
-        campeonatoDao.encerrar(campeonatoAId)
-        campeonatoDao.encerrar(campeonatoBId)
-
-        // Desenvolvimento anual dos jogadores
         jogadorRepository.processarDesenvolvimentoAnual()
 
-        // Cria os novos campeonatos da próxima temporada
         val novoAno         = ano + 1
         val novoTemporadaId = temporadaId + 1
 
         val novoCampeonatoAId = criarCampeonato(
-            CampeonatoEntity(
-                temporadaId  = novoTemporadaId,
-                nome         = "Brasileirão Série A $novoAno",
-                tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
-                formato      = FormatoCampeonato.PONTOS_CORRIDOS,
-                totalRodadas = (novosParticipantesA.size - 1) * 2
-            ),
-            novosParticipantesA
-        )
-
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Brasileiro Série A $novoAno",
+                tipo = TipoCampeonato.NACIONAL_DIVISAO1, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosA.size - 1) * 2), novosA)
         val novoCampeonatoBId = criarCampeonato(
-            CampeonatoEntity(
-                temporadaId  = novoTemporadaId,
-                nome         = "Brasileirão Série B $novoAno",
-                tipo         = TipoCampeonato.NACIONAL_DIVISAO2,
-                formato      = FormatoCampeonato.PONTOS_CORRIDOS,
-                totalRodadas = (novosParticipantesB.size - 1) * 2
-            ),
-            novosParticipantesB
-        )
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Brasileiro Série B $novoAno",
+                tipo = TipoCampeonato.NACIONAL_DIVISAO2, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosB.size - 1) * 2), novosB)
+        val novoCampeonatoCId = if (campeonatoCId > 0) criarCampeonato(
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Brasileiro Série C $novoAno",
+                tipo = TipoCampeonato.NACIONAL_DIVISAO3, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosC.size - 1) * 2), novosC) else -1
+        val novoCampeonatoDId = if (campeonatoDId > 0) criarCampeonato(
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Brasileiro Série D $novoAno",
+                tipo = TipoCampeonato.NACIONAL_DIVISAO4, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosD.size - 1) * 2), novosD) else -1
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoTemporadaId, novoAno)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoTemporadaId, novoAno)
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()

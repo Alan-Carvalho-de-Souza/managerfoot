@@ -32,19 +32,19 @@ interface PartidaDao {
 
     @Query("""
         SELECT * FROM partidas
-        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
+        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId = :campeonatoId
         ORDER BY rodada DESC
         LIMIT :limite
     """)
-    fun observeUltimosResultados(timeId: Int, limite: Int = 5): Flow<List<PartidaEntity>>
+    fun observeUltimosResultados(timeId: Int, campeonatoId: Int, limite: Int = 5): Flow<List<PartidaEntity>>
 
     @Query("""
         SELECT * FROM partidas
-        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
+        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId = :campeonatoId
         ORDER BY rodada DESC
         LIMIT :limite
     """)
-    suspend fun buscarUltimosResultados(timeId: Int, limite: Int = 5): List<PartidaEntity>
+    suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int, limite: Int = 5): List<PartidaEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserir(partida: PartidaEntity): Long
@@ -71,6 +71,15 @@ interface PartidaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirEventos(eventos: List<EventoPartidaEntity>)
+
+    @Query("DELETE FROM partidas")
+    suspend fun deleteAll()
+
+    @Query("DELETE FROM escalacoes")
+    suspend fun deleteAllEscalacoes()
+
+    @Query("DELETE FROM eventos_partida")
+    suspend fun deleteAllEventos()
 
     @Query("SELECT * FROM eventos_partida WHERE partidaId = :partidaId ORDER BY minuto")
     suspend fun buscarEventos(partidaId: Int): List<EventoPartidaEntity>

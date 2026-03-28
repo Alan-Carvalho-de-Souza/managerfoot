@@ -28,6 +28,12 @@ interface CampeonatoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirParticipantes(participantes: List<CampeonatoTimeEntity>)
 
+    @Query("DELETE FROM campeonatos")
+    suspend fun deleteAll()
+
+    @Query("DELETE FROM campeonato_times")
+    suspend fun deleteAllParticipantes()
+
     @Update
     suspend fun atualizar(campeonato: CampeonatoEntity)
 

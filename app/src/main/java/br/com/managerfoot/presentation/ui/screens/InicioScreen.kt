@@ -160,7 +160,8 @@ private fun TimeItemRow(time: Time, onClick: () -> Unit) {
             )
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoChip("Série ${time.divisao}", MaterialTheme.colorScheme.primaryContainer)
+            val divisaoLetra = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }
+            InfoChip("Série $divisaoLetra", MaterialTheme.colorScheme.primaryContainer)
             Text(formatarSaldo(time.saldo), style = MaterialTheme.typography.labelSmall)
         }
     }

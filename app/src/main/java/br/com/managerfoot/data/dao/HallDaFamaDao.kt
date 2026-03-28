@@ -12,4 +12,7 @@ interface HallDaFamaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserir(entry: HallDaFamaEntity)
+
+    @Query("DELETE FROM hall_da_fama")
+    suspend fun deleteAll()
 }

@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.presentation.viewmodel.HallDaFamaViewModel
+import br.com.managerfoot.presentation.ui.components.TeamBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +49,7 @@ fun HallDaFamaScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Todas", "Série A", "Série B").forEachIndexed { idx, label ->
+                listOf("Todas", "Série A", "Série B", "Série C", "Série D").forEachIndexed { idx, label ->
                     FilterChip(
                         selected = divisaoSelecionada == idx,
                         onClick  = { vm.selecionarDivisao(idx) },
@@ -109,8 +110,12 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                 Column {
                     Text("Campeão", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(entrada.campeaoNome, style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        TeamBadge(nome = entrada.campeaoNome, escudoRes = entrada.campeaoEscudo, size = 28.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(entrada.campeaoNome, style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -123,7 +128,11 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     Column {
                         Text("Vice-campeão", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(entrada.viceNome, style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            TeamBadge(nome = entrada.viceNome, escudoRes = entrada.viceEscudo, size = 24.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(entrada.viceNome, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
@@ -137,11 +146,15 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     Column {
                         Text("Artilheiro", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            "${entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome }} " +
-                                    "(${entrada.artilheiroNomeTime}) — ${entrada.artilheiroGols} gols",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            TeamBadge(nome = entrada.artilheiroNomeTime, escudoRes = entrada.artilheiroEscudo, size = 20.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "${entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome }} " +
+                                        "(${entrada.artilheiroNomeTime}) — ${entrada.artilheiroGols} gols",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }
@@ -155,11 +168,15 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     Column {
                         Text("Garçom", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            "${entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome }} " +
-                                    "(${entrada.assistenteNomeTime}) — ${entrada.assistenciasTotais} assistências",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            TeamBadge(nome = entrada.assistenteNomeTime, escudoRes = entrada.assistenteEscudo, size = 20.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "${entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome }} " +
+                                        "(${entrada.assistenteNomeTime}) — ${entrada.assistenciasTotais} assistências",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }

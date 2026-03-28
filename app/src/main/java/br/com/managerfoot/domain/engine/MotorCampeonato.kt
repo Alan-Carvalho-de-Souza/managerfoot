@@ -148,6 +148,18 @@ object MotorCampeonato {
                 rebaixados = ordenada.takeLast(4).map { it.timeId },
                 vagasContinental = emptyList()
             )
+            br.com.managerfoot.data.database.entities.TipoCampeonato.NACIONAL_DIVISAO3 -> DesfechoCampeonato(
+                campeao = ordenada.firstOrNull()?.timeId,
+                promovidos = ordenada.take(4).map { it.timeId },
+                rebaixados = ordenada.takeLast(4).map { it.timeId },
+                vagasContinental = emptyList()
+            )
+            br.com.managerfoot.data.database.entities.TipoCampeonato.NACIONAL_DIVISAO4 -> DesfechoCampeonato(
+                campeao = ordenada.firstOrNull()?.timeId,
+                promovidos = ordenada.take(4).map { it.timeId },
+                rebaixados = emptyList(), // Série D não tem rebaixamento
+                vagasContinental = emptyList()
+            )
             else -> DesfechoCampeonato(
                 campeao = ordenada.firstOrNull()?.timeId,
                 promovidos = emptyList(),

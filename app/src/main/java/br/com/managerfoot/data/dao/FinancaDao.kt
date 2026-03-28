@@ -23,6 +23,12 @@ interface FinancaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirTransferencia(transferencia: TransferenciaEntity): Long
 
+    @Query("DELETE FROM financas")
+    suspend fun deleteAll()
+
+    @Query("DELETE FROM transferencias")
+    suspend fun deleteAllTransferencias()
+
     @Query("""
         SELECT SUM(receitaBilheteria + receitaPatrocinio + receitaTransferencias + receitaPremiacoes
                    - despesaSalarios - despesaTransferencias - despesaInfraestrutura)

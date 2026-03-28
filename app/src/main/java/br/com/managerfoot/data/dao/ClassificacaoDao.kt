@@ -26,6 +26,9 @@ interface ClassificacaoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirTodos(classificacoes: List<ClassificacaoEntity>)
 
+    @Query("DELETE FROM classificacoes")
+    suspend fun deleteAll()
+
     // Atualiza estatísticas após uma partida (casa)
     @Query("""
         UPDATE classificacoes SET

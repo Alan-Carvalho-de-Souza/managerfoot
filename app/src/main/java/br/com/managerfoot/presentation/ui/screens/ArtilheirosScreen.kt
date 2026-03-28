@@ -24,6 +24,8 @@ import br.com.managerfoot.presentation.viewmodel.ArtilheirosViewModel
 fun ArtilheirosScreen(
     campeonatoAId: Int,
     campeonatoBId: Int,
+    campeonatoCId: Int = -1,
+    campeonatoDId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -33,7 +35,9 @@ fun ArtilheirosScreen(
     val assistentesTotal  by vm.assistentesAllTime.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId) { vm.carregar(campeonatoAId, campeonatoBId) }
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId)
+    }
 
     // Escopo: 0 = temporada atual, 1 = histórico total
     var escopoSelecionado by remember { mutableIntStateOf(0) }
@@ -81,13 +85,19 @@ fun ArtilheirosScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("Série A", "Série B").forEachIndexed { idx, label ->
+                    val divisoes = buildList {
+                        add("Série A")
+                        add("Série B")
+                        if (campeonatoCId > 0) add("Série C")
+                        if (campeonatoDId > 0) add("Série D")
+                    }
+                    divisoes.forEachIndexed { idx, label ->
                         FilterChip(
                             selected = divisaoSelecionada == idx + 1,
                             onClick  = { vm.selecionarDivisao(idx + 1) },
-                            label    = { Text(label) },
+                            label    = { Text(label, maxLines = 1) },
                             modifier = Modifier.weight(1f)
                         )
                     }

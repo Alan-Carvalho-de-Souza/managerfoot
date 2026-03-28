@@ -16,8 +16,10 @@ data class HallDaFamaEntity(
     // Campeão e vice-campeão
     val campeaoTimeId: Int,
     val campeaoNome: String,
+    val campeaoEscudo: String = "",     // drawable resource do escudo
     val viceTimeId: Int,
     val viceNome: String,
+    val viceEscudo: String = "",        // drawable resource do escudo
 
     // Artilheiro da temporada
     val artilheiroId: Int = -1,
@@ -25,6 +27,7 @@ data class HallDaFamaEntity(
     val artilheiroNomeAbrev: String = "",
     val artilheiroGols: Int = 0,
     val artilheiroNomeTime: String = "",
+    val artilheiroEscudo: String = "",  // drawable resource do escudo do time
 
     // Garçom (mais assistências) da temporada
     val assistenteId: Int = -1,
@@ -32,6 +35,7 @@ data class HallDaFamaEntity(
     val assistenteNomeAbrev: String = "",
     val assistenciasTotais: Int = 0,
     val assistenteNomeTime: String = "",
+    val assistenteEscudo: String = "",  // drawable resource do escudo do time
 
     // Divisão do campeonato (1 = Série A, 2 = Série B)
     val divisao: Int = 1

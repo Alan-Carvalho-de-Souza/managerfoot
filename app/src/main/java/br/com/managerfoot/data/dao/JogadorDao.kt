@@ -85,4 +85,7 @@ interface JogadorDao {
 
     @Delete
     suspend fun deletar(jogador: JogadorEntity)
+
+    @Query("DELETE FROM jogadores")
+    suspend fun deleteAll()
 }
