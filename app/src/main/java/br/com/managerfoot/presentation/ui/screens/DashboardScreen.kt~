@@ -1,0 +1,210 @@
+package br.com.managerfoot.presentation.ui.screens
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import br.com.managerfoot.presentation.ui.components.*
+import br.com.managerfoot.presentation.viewmodel.DashboardUiState
+import br.com.managerfoot.presentation.viewmodel.DashboardViewModel
+
+@Composable
+fun DashboardScreen(
+    timeId: Int,
+    onIrParaEscalacao: () -> Unit,
+    onIrParaMercado: () -> Unit,
+    onIrParaTabela: () -> Unit,
+    onIrParaArtilheiros: () -> Unit,
+    onIrParaFinancas: () -> Unit,
+    onIrParaHallDaFama: () -> Unit,
+    vm: DashboardViewModel = hiltViewModel()
+) {
+    val time by vm.timeJogador.collectAsState()
+    val todosOsTimes by vm.todosOsTimes.collectAsState()
+    val ultimosResultados by vm.ultimosResultados.collectAsState()
+    val proximaPartida by vm.proximaPartida.collectAsState()
+    val uiState by vm.uiState.collectAsState()
+    val resultadoSimulado by vm.resultadoSimulado.collectAsState()
+    val saveState by vm.saveState.collectAsState()
+    val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsState()
+
+    LaunchedEffect(timeId) { vm.carregar(timeId) }
+
+    // Quando há resultado simulado, abre a tela de simulação em tempo real
+    resultadoSimulado?.let { resultado ->
+        val timeCasaSim = todosOsTimes.find { it.id == resultado.timeCasaId }
+        val timeForaSim = todosOsTimes.find { it.id == resultado.timeForaId }
+        val nomeCasa = timeCasaSim?.nome ?: "Time ${resultado.timeCasaId}"
+        val nomeFora = timeForaSim?.nome ?: "Time ${resultado.timeForaId}"
+        val isTimeCasaOJogador = resultado.timeCasaId == (saveState?.timeIdJogador ?: -1)
+        PartidaSimulacaoScreen(
+            resultado = resultado,
+            nomeTimeCasa = nomeCasa,
+            nomeTimeFora = nomeFora,
+            escudoTimeCasa = timeCasaSim?.escudoRes ?: "",
+            escudoTimeFora = timeForaSim?.escudoRes ?: "",
+            escalacaoJogador = escalacaoSimulacao,
+            isTimeCasaOJogador = isTimeCasaOJogador,
+            onSimulacaoFinalizada = { vm.fecharSimulacao() }
+        )
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        item {
+            time?.let { TimeHeaderCard(it, Modifier.padding(16.dp)) }
+        }
+
+        item {
+            SecaoHeader("Próxima partida")
+            if (proximaPartida != null) {
+                val timeCasa = todosOsTimes.find { it.id == proximaPartida!!.timeCasaId }
+                val timeFora = todosOsTimes.find { it.id == proximaPartida!!.timeForaId }
+                val nomeCasa = timeCasa?.nome ?: "Time ${proximaPartida!!.timeCasaId}"
+                val nomeFora = timeFora?.nome ?: "Time ${proximaPartida!!.timeForaId}"
+                val escudoCasa = timeCasa?.escudoRes ?: ""
+                val escudoFora = timeFora?.escudoRes ?: ""
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Rodada ${proximaPartida!!.rodada}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                TeamBadge(nome = nomeCasa, escudoRes = escudoCasa, size = 44.dp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(nomeCasa, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                            }
+                            Text("vs", modifier = Modifier.padding(horizontal = 8.dp))
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                TeamBadge(nome = nomeFora, escudoRes = escudoFora, size = 44.dp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(nomeFora, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    vm.simularProximaPartida(
+                                        campeonatoId = proximaPartida!!.campeonatoId,
+                                        rodada = proximaPartida!!.rodada
+                                    )
+                                },
+                                enabled = uiState != DashboardUiState.Simulando,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (uiState == DashboardUiState.Simulando) {
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("Simular partida")
+                                }
+                            }
+                            OutlinedButton(onClick = onIrParaEscalacao, modifier = Modifier.weight(1f)) {
+                                Text("Escalação")
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Temporada concluída — exibe card para avançar ao próximo ano
+                val proximoAno = (saveState?.anoAtual ?: 2026) + 1
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Column(
+                        Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Temporada concluída! 🏆",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Encerre a temporada para iniciar $proximoAno.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { vm.encerrarTemporada() },
+                            enabled = uiState != DashboardUiState.Simulando,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (uiState == DashboardUiState.Simulando) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Avançar para $proximoAno")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (ultimosResultados.isNotEmpty()) {
+            item { SecaoHeader("Últimos resultados") }
+            items(ultimosResultados.size.coerceAtMost(5)) { idx ->
+                val partida = ultimosResultados[idx]
+                val nomeCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.nome ?: "Time ${partida.timeCasaId}"
+                val nomeFora = todosOsTimes.find { it.id == partida.timeForaId }?.nome ?: "Time ${partida.timeForaId}"
+                val escudoCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.escudoRes ?: ""
+                val escudoFora = todosOsTimes.find { it.id == partida.timeForaId }?.escudoRes ?: ""
+                ResultadoCard(
+                    nomeCasa = nomeCasa,
+                    nomeVis = nomeFora,
+                    golsCasa = partida.golsCasa,
+                    golsVis = partida.golsFora,
+                    escudoCasa = escudoCasa,
+                    escudoVis = escudoFora,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        item {
+            SecaoHeader("Menu")
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = onIrParaTabela, modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") }
+                OutlinedButton(onClick = onIrParaArtilheiros, modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") }
+                OutlinedButton(onClick = onIrParaHallDaFama, modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") }
+                OutlinedButton(onClick = onIrParaMercado, modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") }
+                OutlinedButton(onClick = onIrParaFinancas, modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") }
+                OutlinedButton(onClick = { vm.fecharMes() }, modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") }
+            }
+        }
+    }
+}

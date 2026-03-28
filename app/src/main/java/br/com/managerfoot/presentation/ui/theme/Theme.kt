@@ -1,6 +1,5 @@
-package br.com.managerfoot.ui.theme
+package br.com.managerfoot.presentation.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

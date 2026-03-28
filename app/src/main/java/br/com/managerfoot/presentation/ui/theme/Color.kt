@@ -1,4 +1,4 @@
-package br.com.managerfoot.ui.theme
+package br.com.managerfoot.presentation.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
