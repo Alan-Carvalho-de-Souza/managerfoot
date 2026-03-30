@@ -9,7 +9,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.DashboardUiState
 import br.com.managerfoot.presentation.viewmodel.DashboardViewModel
@@ -32,17 +38,17 @@ fun DashboardScreen(
     onIrParaEstadio: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
-    val time by vm.timeJogador.collectAsState()
-    val todosOsTimes by vm.todosOsTimes.collectAsState()
-    val ultimosResultados by vm.ultimosResultados.collectAsState()
-    val proximaPartida by vm.proximaPartida.collectAsState()
-    val uiState by vm.uiState.collectAsState()
-    val resultadoSimulado by vm.resultadoSimulado.collectAsState()
-    val saveState by vm.saveState.collectAsState()
-    val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsState()
-    val penaltisResultado by vm.penaltisResultado.collectAsState()
-    val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsState()
-    val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsState()
+    val time by vm.timeJogador.collectAsStateWithLifecycle()
+    val todosOsTimes by vm.todosOsTimes.collectAsStateWithLifecycle()
+    val ultimosResultados by vm.ultimosResultados.collectAsStateWithLifecycle()
+    val proximaPartida by vm.proximaPartida.collectAsStateWithLifecycle()
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val resultadoSimulado by vm.resultadoSimulado.collectAsStateWithLifecycle()
+    val saveState by vm.saveState.collectAsStateWithLifecycle()
+    val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsStateWithLifecycle()
+    val penaltisResultado by vm.penaltisResultado.collectAsStateWithLifecycle()
+    val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsStateWithLifecycle()
+    val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsStateWithLifecycle()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -70,13 +76,28 @@ fun DashboardScreen(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 32.dp)
-    ) {
-        item {
-            time?.let { TimeHeaderCard(it, Modifier.padding(16.dp)) }
+    Scaffold(
+        bottomBar = {
+            DashboardBottomBar(
+                onIrParaEscalacao  = onIrParaEscalacao,
+                onIrParaTabela     = onIrParaTabela,
+                onIrParaMercado    = onIrParaMercado
+            )
         }
+    ) { ip ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = ip.calculateBottomPadding() + 32.dp)
+        ) {
+            item {
+                time?.let {
+                    TimeHeaderCard(
+                        it,
+                        Modifier.padding(16.dp),
+                        rodadaAtual = proximaPartida?.rodada ?: 0
+                    )
+                }
+            }
 
         item {
             SecaoHeader("Próxima partida")
@@ -88,83 +109,42 @@ fun DashboardScreen(
                 val escudoCasa = timeCasa?.escudoRes ?: ""
                 val escudoFora = timeFora?.escudoRes ?: ""
 
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        val snap = saveState
-                        val ehCopa = snap != null && snap.copaId > 0 &&
-                            proximaPartida!!.campeonatoId == snap.copaId
-                        val competitionLabel = if (ehCopa) {
-                            "Copa do Brasil \u2014 ${proximaPartida!!.fase ?: "Copa"}"
-                        } else {
-                            when (proximaPartida!!.campeonatoId) {
-                                snap?.campeonatoAId -> "S\u00e9rie A"
-                                snap?.campeonatoBId -> "S\u00e9rie B"
-                                snap?.campeonatoCId -> "S\u00e9rie C"
-                                snap?.campeonatoDId -> "S\u00e9rie D"
-                                else -> "Brasileir\u00e3o"
-                            }
-                        }
-                        Text(
-                            "$competitionLabel \u2014 Rodada ${proximaPartida!!.rodada}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                TeamBadge(nome = nomeCasa, escudoRes = escudoCasa, size = 44.dp)
-                                Spacer(Modifier.height(4.dp))
-                                Text(nomeCasa, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
-                            }
-                            Text("vs", modifier = Modifier.padding(horizontal = 8.dp))
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                TeamBadge(nome = nomeFora, escudoRes = escudoFora, size = 44.dp)
-                                Spacer(Modifier.height(4.dp))
-                                Text(nomeFora, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    val adversarioId = if (proximaPartida!!.timeCasaId == (saveState?.timeIdJogador ?: -1))
-                                        proximaPartida!!.timeForaId
-                                    else
-                                        proximaPartida!!.timeCasaId
-                                    onIrParaPreJogo(
-                                        proximaPartida!!.campeonatoId,
-                                        proximaPartida!!.rodada,
-                                        adversarioId
-                                    )
-                                },
-                                enabled = uiState != DashboardUiState.Simulando,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                if (uiState == DashboardUiState.Simulando) {
-                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text("Próxima Partida")
-                                }
-                            }
-                            OutlinedButton(onClick = onIrParaEscalacao, modifier = Modifier.weight(1f)) {
-                                Text("Escalação")
-                            }
-                        }
+                val snap = saveState
+                val ehCopa = snap != null && snap.copaId > 0 &&
+                    proximaPartida!!.campeonatoId == snap.copaId
+                val competitionLabel = if (ehCopa) {
+                    "Copa do Brasil \u2014 ${proximaPartida!!.fase ?: "Copa"}"
+                } else {
+                    when (proximaPartida!!.campeonatoId) {
+                        snap?.campeonatoAId -> "S\u00e9rie A"
+                        snap?.campeonatoBId -> "S\u00e9rie B"
+                        snap?.campeonatoCId -> "S\u00e9rie C"
+                        snap?.campeonatoDId -> "S\u00e9rie D"
+                        else -> "Brasileir\u00e3o"
                     }
                 }
+                MatchCard(
+                    nomeCasa    = nomeCasa,
+                    nomeFora    = nomeFora,
+                    escudoCasa  = escudoCasa,
+                    escudoFora  = escudoFora,
+                    competicao  = competitionLabel,
+                    rodada      = proximaPartida!!.rodada,
+                    enabled     = uiState != DashboardUiState.Simulando,
+                    onSimular   = {
+                        val adversarioId = if (proximaPartida!!.timeCasaId == (saveState?.timeIdJogador ?: -1))
+                            proximaPartida!!.timeForaId
+                        else
+                            proximaPartida!!.timeCasaId
+                        onIrParaPreJogo(
+                            proximaPartida!!.campeonatoId,
+                            proximaPartida!!.rodada,
+                            adversarioId
+                        )
+                    },
+                    onEscalacao = onIrParaEscalacao,
+                    modifier    = Modifier.padding(horizontal = 16.dp)
+                )
             } else {
                 // Temporada concluída — exibe card para avançar ao próximo ano
                 val proximoAno = (saveState?.anoAtual ?: 2026) + 1
@@ -234,13 +214,15 @@ fun DashboardScreen(
                         modifier = Modifier.padding(start = 20.dp, top = 4.dp)
                     )
                     ResultadoCard(
-                        nomeCasa = nomeCasa,
-                        nomeVis = nomeFora,
-                        golsCasa = partida.golsCasa,
-                        golsVis = partida.golsFora,
+                        nomeCasa   = nomeCasa,
+                        nomeVis    = nomeFora,
+                        golsCasa   = partida.golsCasa,
+                        golsVis    = partida.golsFora,
                         escudoCasa = escudoCasa,
-                        escudoVis = escudoFora,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        escudoVis  = escudoFora,
+                        meuTimeId  = snap?.timeIdJogador ?: -1,
+                        timeCasaId = partida.timeCasaId,
+                        modifier   = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -266,5 +248,40 @@ fun DashboardScreen(
                 OutlinedButton(onClick = { vm.fecharMes() }, modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") }
             }
         }
+    } // end LazyColumn
+    } // end Scaffold
+}
+
+@Composable
+private fun DashboardBottomBar(
+    onIrParaEscalacao: () -> Unit,
+    onIrParaTabela: () -> Unit,
+    onIrParaMercado: () -> Unit
+) {
+    NavigationBar(tonalElevation = 0.dp) {
+        NavigationBarItem(
+            selected = true,
+            onClick  = {},
+            icon     = { Icon(Icons.Filled.Home, contentDescription = "Início") },
+            label    = { Text("Início") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick  = onIrParaEscalacao,
+            icon     = { Icon(Icons.Filled.People, contentDescription = "Elenco") },
+            label    = { Text("Elenco") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick  = onIrParaTabela,
+            icon     = { Icon(Icons.Filled.Leaderboard, contentDescription = "Tabela") },
+            label    = { Text("Tabela") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick  = onIrParaMercado,
+            icon     = { Icon(Icons.Filled.ShoppingCart, contentDescription = "Mercado") },
+            label    = { Text("Mercado") }
+        )
     }
 }
