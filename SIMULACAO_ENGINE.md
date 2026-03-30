@@ -96,13 +96,15 @@ O time da casa recebe **12% de bônus** na sua força total. Um visitante precis
 
 ### 3c. Fator de Estilo Tático (pedra-papel-tesoura)
 
-| Atacante        | Defensor   | Multiplicador para o atacante |
-|-----------------|------------|-------------------------------|
-| CONTRA_ATAQUE   | OFENSIVO   | ×1.06 (+6%)                   |
-| OFENSIVO        | DEFENSIVO  | ×0.95 (−5%)                   |
-| Outros combos   | Qualquer   | ×1.00 (neutro)                |
+| Atacante        | Defensor        | Multiplicador para o atacante |
+|-----------------|-----------------|-------------------------------|
+| CONTRA_ATAQUE   | OFENSIVO        | ×1.14 (+14%) — transições devastadoras |
+| OFENSIVO        | CONTRA_ATAQUE   | ×0.92 (−8%)  — deixa espaços atrás    |
+| OFENSIVO        | DEFENSIVO       | ×0.88 (−12%) — bloco compacto sufoca  |
+| DEFENSIVO       | OFENSIVO        | ×1.10 (+10%) — sai em transição eficiente |
+| Outros combos   | Qualquer        | ×1.00 (neutro)                |
 
-**Atenção:** apenas dois combos criam vantagem. A maioria das confrontações táticas é neutra (×1.0).
+Os dois duelos principais (CA × OF e OF × DEF) agora produzem um **efeito combinado de ~22%** por aplicarem bônus para um time e penalidade para o outro simultaneamente, tornando a vantagem tática capaz de causar goleadas quando a diferença de força for moderada.
 
 ---
 
@@ -125,20 +127,23 @@ probFora = fFora / (fCasa + fFora)
 A **média esperada de gols** de cada time é:
 
 ```
-mediaGolsCasa = 2.7 × probCasa × 1.8 × penalizações
-mediaGolsFora = 2.7 × probFora × 1.8 × penalizações
+mediaGolsCasa = 2.7 × probCasa × penalizações × chancesMultCasa
+mediaGolsFora = 2.7 × probFora × penalizações × chancesMultFora
 ```
 
 > A constante `2.7` é a média histórica de gols por jogo no futebol brasileiro.  
-> O multiplicador `1.8` distribui os gols entre casa e fora (2.7 × 1.8 = 4.86 gols esperados no total antes das penalizações — começa alto, mas a divisão entre os dois times produz médias realistas por partida).
+> Com times iguais e sem vantagens: probCasa = probFora = 0.5 → cada time espera **1.35 gols** → total = **2.7 ✓**  
+> O multiplicador `1.8` que existia anteriormente inflava o total para 4.86 gols — **removido** para resultados realistas.
 
 ### Exemplo numérico
-- Casa com força 70, Fora com força 60:
-  - fCasa = 70 × 1.20 = **84**
-  - fFora = 60 × 1.00 = **60**
-  - probCasa = 84 / 144 = **58,3%**
-  - mediaGolsCasa = 2.7 × 0.583 × 1.8 = **2.83 gols esperados**
-  - mediaGolsFora = 2.7 × 0.417 × 1.8 = **2.03 gols esperados**
+- Casa com força 70 (mandante × 1.12), Fora com força 60:
+  - fCasa = 70 × 1.12 = **78.4**
+  - fFora = 60 × 1.00 = **60.0**
+  - probCasa = 78.4 / 138.4 = **56,6%**
+  - dominance = 18.4 / 138.4 = 0.133 → chancesMultCasa = **×1.073**
+  - mediaGolsCasa = 2.7 × 0.566 × 1.073 = **1.64 gols esperados**
+  - mediaGolsFora = 2.7 × 0.434 = **1.17 gols esperados**
+  - Total esperado: **~2.81 gols** (realista para mandante mais forte)
 
 ---
 
@@ -172,8 +177,8 @@ Os gols são sorteados usando a **distribuição de Poisson** com a média calcu
 
 **Fórmula completa das lambdas de Poisson:**
 ```
-mediaGolsCasa = 2.7 × probCasa × 1.8 × penalCasa × chancesMultCasa
-mediaGolsFora = 2.7 × probFora × 1.8 × penalFora × chancesMultFora
+mediaGolsCasa = 2.7 × probCasa × penalCasa × chancesMultCasa
+mediaGolsFora = 2.7 × probFora × penalFora × chancesMultFora
 ```
 
 ## 7. Penalizações por Incidentes Durante o Jogo
@@ -247,8 +252,9 @@ Após definir quantos gols cada time fez, a engine atribui autores e assistentes
 | Contratar atacantes com alta `tecnica` | `tecnica` vale 15% no setor de ataque |
 | Escalar jogadores nas posições naturais| Evita penalidades de improviso   |
 | Manter jogadores na reserva            | Evita −13% por lesão sem reposição|
-| Mudar para CONTRA_ATAQUE vs time ofensivo | +6% na força de ataque       |
-| Não usar OFENSIVO contra time defensivo| Evita −5% no ataque              |
+| Mudar para CONTRA_ATAQUE vs time ofensivo | +14% na força de ataque (e −8% para o adversário) |
+| Não usar OFENSIVO contra time defensivo | Evita −12% no ataque (adversário ainda ganha +10%) |
+| Usar DEFENSIVO contra time OFENSIVO | +10% na força defensiva / transições |
 | Manter morale do elenco elevado        | Até +5 por jogador titularizado  |
 | Gerenciar cansaço (poupar em datas duplas) | Evita −3% a −7%             |
 
@@ -259,13 +265,15 @@ Após definir quantos gols cada time fez, a engine atribui autores e assistentes
 | Limitação atual                        | Melhoria possível               |
 |----------------------------------------|---------------------------------|
 | Fator cansaço usa dias fixos sem verificar jogos reais do calendário | Contar jogos reais das últimas `X` rodadas |
-| Apenas 2 combos táticos criam vantagem (maioria é ×1.0) | Expandir a matriz tática |
+| 4 combos táticos criam vantagem; EQUILIBRADO e outros pares são neutros | Adicionar combos envolvendo EQUILIBRADO |
 | Morale não é atualizado após vitórias/derrotas | Atualizar morale pós-partida automaticamente |
-| Variância de Poisson pode gerar resultados extremos em raros casos | Cap já existe (máx 9), mas uma média menor seria mais realista |
+| Variância de Poisson pode gerar resultados extremos em raros casos | Cap de 9 por time mantido; com o ×1.8 removido as médias são menores e goleadas absurdas são muito mais raras |
 
 ---
 
-*Atualizado em: 28/03/2026 — reflete as mudanças em `SimuladorPartida.kt` / `CalculadoraForca`:*
-- *Fator mandante reduzido de 1.20 → 1.12*
-- *Atributos `defesa` e `tecnica` incorporados na fórmula de valor por setor*
-- *Fator de dominância adicionado às lambdas de Poisson (até +35% de gols para o time superior)*
+*Atualizado em: 29/03/2026 — reflete as mudanças em `SimuladorPartida.kt` / `CalculadoraForca`:*
+- *Fator mandante reduzido de 1.20 → 1.12 (revisão anterior)*
+- *Atributos `defesa` e `tecnica` incorporados na fórmula de valor por setor (revisão anterior)*
+- *Multiplicador ×1.8 das lambdas de Poisson removido → total esperado de gols agora é ~2.7 por jogo (realista)*
+- *Fator de dominância aumentado de ×0.35 para ×0.55 → times superiores vencem com mais consistência*
+- *Matriz tática expandida: CA×OF (+14%/−8%) e OF×DEF (−12%/+10%) criam swing combinado de ~22%, possibilitando goleadas táticas*

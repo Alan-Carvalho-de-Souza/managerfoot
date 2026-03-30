@@ -26,6 +26,12 @@ object MotorCampeonato {
     // Retorna rodadaIda de uma fase (0-indexed faseIndex)
     fun rodadaIdaDeFase(faseIndex: Int) = faseIndex * 2 + 1
 
+    // ordemGlobal de cada jogo da Copa no calendário multi-competição.
+    // Copa Fase 0 ida fica após Brasileirão R3 (30), e assim por diante.
+    // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em N*10+5.
+    // Índices: 0=F0-ida, 1=F0-volta, 2=F1-ida, 3=F1-volta, ... 11=Final-volta
+    val COPA_ORDEM_GLOBAL = intArrayOf(35, 65, 95, 125, 155, 185, 215, 245, 275, 305, 335, 365)
+
     fun proximaFaseCopa(faseAtual: String): String? {
         val idx = COPA_FASES.indexOf(faseAtual)
         return if (idx >= 0 && idx < COPA_FASES.size - 1) COPA_FASES[idx + 1] else null
@@ -37,7 +43,9 @@ object MotorCampeonato {
         pares: List<Pair<Int, Int>>,   // (timeMandanteIda, timeVisitanteIda)
         fase: String,
         rodadaIda: Int,
-        confrontoIdInicio: Int
+        confrontoIdInicio: Int,
+        ordemGlobalIda: Int = 0,       // posição no calendário global (buscarProximaPartida)
+        ordemGlobalVolta: Int = 0
     ): List<PartidaEntity> {
         val partidas = mutableListOf<PartidaEntity>()
         pares.forEachIndexed { i, (casa, fora) ->
@@ -50,7 +58,8 @@ object MotorCampeonato {
                     timeCasaId = casa,
                     timeForaId = fora,
                     fase = fase,
-                    confrontoId = confId
+                    confrontoId = confId,
+                    ordemGlobal = ordemGlobalIda
                 )
             )
             // Jogo de volta: fora joga em casa (mandante invertido)
@@ -61,7 +70,8 @@ object MotorCampeonato {
                     timeCasaId = fora,
                     timeForaId = casa,
                     fase = fase,
-                    confrontoId = confId
+                    confrontoId = confId,
+                    ordemGlobal = ordemGlobalVolta
                 )
             )
         }
@@ -134,24 +144,28 @@ object MotorCampeonato {
 
         // Turno
         rodadaTurno.forEachIndexed { idx, rodadaJogos ->
+            val rodada = idx + 1
             rodadaJogos.forEach { (casa, fora) ->
                 partidas.add(PartidaEntity(
                     campeonatoId = campeonatoId,
-                    rodada = idx + 1,
+                    rodada = rodada,
                     timeCasaId = casa,
-                    timeForaId = fora
+                    timeForaId = fora,
+                    ordemGlobal = rodada * 10
                 ))
             }
         }
 
         // Returno (inverte mandante/visitante)
         rodadaTurno.forEachIndexed { idx, rodadaJogos ->
+            val rodada = idx + 1 + (totalRodadas / 2)
             rodadaJogos.forEach { (casa, fora) ->
                 partidas.add(PartidaEntity(
                     campeonatoId = campeonatoId,
-                    rodada = idx + 1 + (totalRodadas / 2),
+                    rodada = rodada,
                     timeCasaId = fora,   // invertido
-                    timeForaId = casa
+                    timeForaId = casa,
+                    ordemGlobal = rodada * 10
                 ))
             }
         }

@@ -231,6 +231,14 @@ class DashboardViewModel @Inject constructor(
     private val _penaltisResultado = MutableStateFlow<ResultadoPenaltis?>(null)
     val penaltisResultado: StateFlow<ResultadoPenaltis?> = _penaltisResultado.asStateFlow()
 
+    // Dados do adversário para a disputa interativa de pênaltis
+    private val _dadosPenaltisAdversario = MutableStateFlow<DadosPenaltiAdversario?>(null)
+    val dadosPenaltisAdversario: StateFlow<DadosPenaltiAdversario?> = _dadosPenaltisAdversario.asStateFlow()
+
+    // Indica que a disputa interativa já foi concluída (evita re-animação)
+    private val _penaltisInterativoConcluido = MutableStateFlow(false)
+    val penaltisInterativoConcluido: StateFlow<Boolean> = _penaltisInterativoConcluido.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
         // Carrega todos os times para resolver nomes
         launch {
@@ -292,6 +300,15 @@ class DashboardViewModel @Inject constructor(
                 gameRepository.verificarEAvancarFaseCopa(save.copaId, save.anoAtual)
             }
 
+            // Pré-carrega dados do adversário para a disputa interativa
+            if (save.copaId > 0 && campeonatoId == save.copaId && resultado.precisaPenaltis) {
+                _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                    copaId         = save.copaId,
+                    voltaPartidaId = resultado.partidaId,
+                    timeJogadorId  = save.timeIdJogador
+                )
+            }
+
             // Quando o jogador joga a liga e já foi eliminado da Copa,
             // simula a fase Copa pendente para manter o chaveamento atualizado.
             if (!ehPartidaCopa && save.copaId > 0) {
@@ -319,6 +336,23 @@ class DashboardViewModel @Inject constructor(
         _resultadoSimulado.value = null
         _escalacaoSimulacao.value = null
         _penaltisResultado.value = null
+        _dadosPenaltisAdversario.value = null
+        _penaltisInterativoConcluido.value = false
+    }
+
+    // Chamado quando o jogador conclui a disputa interativa de pênaltis
+    fun finalizarPenaltisJogador(resultado: ResultadoPenaltis) = viewModelScope.launch {
+        val save          = gameDataStore.saveState.first()
+        val resultadoPartida = _resultadoSimulado.value ?: return@launch
+        try {
+            gameRepository.persistirResultadoPenaltisJogador(
+                resultado       = resultado,
+                copaId          = save.copaId,
+                anoAtual        = save.anoAtual,
+                voltaPartidaId  = resultadoPartida.partidaId
+            )
+            _penaltisInterativoConcluido.value = true
+        } catch (_: Exception) { }
     }
 
     // Chamado quando o jogador confirma os cobradores de pênalti
@@ -413,6 +447,9 @@ class EscalacaoViewModel @Inject constructor(
     private val _jogadorSelecionado = MutableStateFlow<Jogador?>(null)
     val jogadorSelecionado: StateFlow<Jogador?> = _jogadorSelecionado.asStateFlow()
 
+    private val _adversario = MutableStateFlow<Time?>(null)
+    val adversario: StateFlow<Time?> = _adversario.asStateFlow()
+
     private var timeIdCarregado: Int = -1
 
     fun carregar(timeId: Int) = viewModelScope.launch {
@@ -428,13 +465,27 @@ class EscalacaoViewModel @Inject constructor(
                     val reservas  = reservasSalvas.map  { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
                     _escalacao.value = Escalacao(time = time, titulares = titulares, reservas = reservas)
                 } else {
-                    _escalacao.value = IATimeRival.gerarEscalacao(time, lista)
+                    val gerada = IATimeRival.gerarEscalacao(time, lista)
+                    // Persiste os titulares gerados pela IA para que futuras aberturas
+                    // da tela carreguem do banco (e as reservas adicionadas pelo usuário persistam).
+                    gerada.titulares.forEach { jne ->
+                        val pos = if (jne.posicaoUsada != jne.jogador.posicao) jne.posicaoUsada else null
+                        jogadorRepository.atualizarEscalacao(jne.jogador.id, 1, pos)
+                    }
+                    // Carrega reservas que o usuário possa ter salvo anteriormente
+                    val reservasSalvas = jogadorRepository.buscarReservasSalvas(timeId)
+                    val reservas = reservasSalvas.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
+                    _escalacao.value = gerada.copy(reservas = reservas)
                 }
             }
         }
     }
 
     fun selecionarJogador(jogador: Jogador?) { _jogadorSelecionado.value = jogador }
+
+    fun carregarAdversario(timeId: Int) = viewModelScope.launch {
+        _adversario.value = timeRepository.buscarPorId(timeId)
+    }
 
     fun moverParaTitular(jogador: Jogador, posicao: Posicao) {
         val atual = _escalacao.value ?: return
@@ -451,22 +502,22 @@ class EscalacaoViewModel @Inject constructor(
     fun moverParaReserva(jogador: Jogador) {
         val atual = _escalacao.value ?: return
         val novosTitulares = atual.titulares.filter { it.jogador.id != jogador.id }
-        // Não adiciona se já é reserva ou se o banco está cheio (7 jogadores)
+        // Não adiciona se já é reserva ou se o banco está cheio (11 jogadores)
         val jaEhReserva = atual.reservas.any { it.jogador.id == jogador.id }
-        val novasReservas = if (jaEhReserva || atual.reservas.size >= 7) {
+        val novasReservas = if (jaEhReserva || atual.reservas.size >= 11) {
             atual.reservas
         } else {
             atual.reservas + JogadorNaEscalacao(jogador, jogador.posicao)
         }
         _escalacao.value = atual.copy(titulares = novosTitulares, reservas = novasReservas)
-        if (!jaEhReserva && atual.reservas.size < 7) persistirEscalacao(jogador.id, 2)
+        if (!jaEhReserva && atual.reservas.size < 11) persistirEscalacao(jogador.id, 2)
     }
 
     fun adicionarComoReserva(jogador: Jogador) {
         val atual = _escalacao.value ?: return
         if (atual.reservas.any { it.jogador.id == jogador.id }) return
         if (atual.titulares.any { it.jogador.id == jogador.id }) return
-        if (atual.reservas.size >= 7) return
+        if (atual.reservas.size >= 11) return
         val novasReservas = atual.reservas + JogadorNaEscalacao(jogador, jogador.posicao)
         _escalacao.value = atual.copy(reservas = novasReservas)
         persistirEscalacao(jogador.id, 2)
@@ -483,12 +534,31 @@ class EscalacaoViewModel @Inject constructor(
         viewModelScope.launch { jogadorRepository.atualizarEscalacao(jogadorId, status, posicao) }
     }
 
-    // Persiste a formação no banco e atualiza o Time em memória
+    // Persiste a formação no banco, atualiza o Time em memória
+    // e re-escala automaticamente os melhores jogadores disponíveis.
     fun mudarFormacao(formacao: String) = viewModelScope.launch {
         val atual = _escalacao.value ?: return@launch
         val novoTime = atual.time.copy(taticaFormacao = formacao)
-        _escalacao.value = atual.copy(time = novoTime)
         salvarTaticaNoBanco(novoTime)
+
+        // Auto-escalação: gera o melhor 11 + 7 reservas para a nova formação
+        val todos        = _elenco.value
+        val disponiveis  = todos.filter { !it.lesionado && !it.suspenso }
+        val novaEscalacao = IATimeRival.gerarEscalacao(novoTime, disponiveis)
+
+        // Limpa todos os status de escalação no DB
+        todos.forEach { j -> jogadorRepository.atualizarEscalacao(j.id, 0, null) }
+        // Persiste novos titulares
+        novaEscalacao.titulares.forEach { jne ->
+            val pos = if (jne.posicaoUsada != jne.jogador.posicao) jne.posicaoUsada else null
+            jogadorRepository.atualizarEscalacao(jne.jogador.id, 1, pos)
+        }
+        // Persiste reservas (melhores disponíveis restantes)
+        novaEscalacao.reservas.forEach { jne ->
+            jogadorRepository.atualizarEscalacao(jne.jogador.id, 2, null)
+        }
+
+        _escalacao.value = novaEscalacao
     }
 
     // Persiste o estilo de jogo no banco e atualiza o Time em memória
@@ -1105,4 +1175,41 @@ class EstatisticasTimeViewModel @Inject constructor(
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
     }
+}
+
+// ══════════════════════════════════════════════════════
+//  EstadioViewModel
+// ══════════════════════════════════════════════════════
+@HiltViewModel
+class EstadioViewModel @Inject constructor(
+    private val estadioRepository: br.com.managerfoot.data.repository.EstadioRepository,
+    private val timeRepository: TimeRepository
+) : ViewModel() {
+
+    private val _estadio = MutableStateFlow<br.com.managerfoot.data.database.entities.EstadioEntity?>(null)
+    val estadio: StateFlow<br.com.managerfoot.data.database.entities.EstadioEntity?> = _estadio.asStateFlow()
+
+    private val _time = MutableStateFlow<Time?>(null)
+    val time: StateFlow<Time?> = _time.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        _estadio.value = estadioRepository.buscarOuCriar(timeId)
+        _time.value = timeRepository.buscarPorId(timeId)
+    }
+
+    fun upgradeSetor(timeId: Int, setor: Int) = viewModelScope.launch {
+        val ok = estadioRepository.upgradeSetor(timeId, setor)
+        if (ok) {
+            _estadio.value = estadioRepository.buscarOuCriar(timeId)
+            _time.value = timeRepository.buscarPorId(timeId)
+            _mensagem.value = "Upgrade realizado com sucesso!"
+        } else {
+            _mensagem.value = "Saldo insuficiente ou nível máximo atingido."
+        }
+    }
+
+    fun limparMensagem() { _mensagem.value = null }
 }

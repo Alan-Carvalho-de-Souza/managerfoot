@@ -1,11 +1,15 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -15,15 +19,26 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Posicao
+import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.domain.model.Jogador
+import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.EscalacaoViewModel
 import br.com.managerfoot.presentation.viewmodel.MercadoViewModel
+import androidx.compose.material3.MaterialTheme
 
 // ═══════════════════════════════════════════════════════════
 //  EscalacaoScreen
@@ -31,18 +46,92 @@ import br.com.managerfoot.presentation.viewmodel.MercadoViewModel
 @Composable
 fun EscalacaoScreen(
     timeId: Int,
+    modoPreJogo: Boolean = false,
+    adversarioId: Int = -1,
+    onIniciarPartida: (() -> Unit)? = null,
     vm: EscalacaoViewModel = hiltViewModel()
 ) {
     val elenco      by vm.elenco.collectAsState()
     val escalacao   by vm.escalacao.collectAsState()
     val selecionado by vm.jogadorSelecionado.collectAsState()
+    val adversario  by vm.adversario.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
+    LaunchedEffect(adversarioId) {
+        if (adversarioId > 0) vm.carregarAdversario(adversarioId)
+    }
 
-    var abaAtiva by remember { mutableIntStateOf(0) }
+    // Em modo pré-jogo, começa na aba Tática (3) para o jogador definir o esquema
+    var abaAtiva by remember { mutableIntStateOf(if (modoPreJogo) 3 else 0) }
     val abas = listOf("Titulares", "Reservas", "Elenco", "Tática")
 
     Column(Modifier.fillMaxSize()) {
+        // Banner pré-jogo: mostra escalação tática dos dois times
+        if (modoPreJogo) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Pré-Jogo",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Meu time
+                        escalacao?.let { esc ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                TeamBadge(nome = esc.time.nome, escudoRes = esc.time.escudoRes, size = 40.dp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(esc.time.nome, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(esc.time.taticaFormacao, style = MaterialTheme.typography.labelSmall)
+                                val estiloLabel = when (esc.time.estiloJogo) {
+                                    EstiloJogo.OFENSIVO      -> "Ofensivo"
+                                    EstiloJogo.EQUILIBRADO   -> "Equil."
+                                    EstiloJogo.DEFENSIVO     -> "Defensivo"
+                                    EstiloJogo.CONTRA_ATAQUE -> "C.-Ataque"
+                                }
+                                Text(estiloLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Text("vs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        // Adversário
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (adversario != null) {
+                                TeamBadge(nome = adversario!!.nome, escudoRes = adversario!!.escudoRes, size = 40.dp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(adversario!!.nome, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(adversario!!.taticaFormacao, style = MaterialTheme.typography.labelSmall)
+                                val estiloAdv = when (adversario!!.estiloJogo) {
+                                    EstiloJogo.OFENSIVO      -> "Ofensivo"
+                                    EstiloJogo.EQUILIBRADO   -> "Equil."
+                                    EstiloJogo.DEFENSIVO     -> "Defensivo"
+                                    EstiloJogo.CONTRA_ATAQUE -> "C.-Ataque"
+                                }
+                                Text(estiloAdv, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            } else {
+                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Info da formação atual
         escalacao?.let { esc ->
             Row(
@@ -121,7 +210,7 @@ fun EscalacaoScreen(
             }
             2 -> { // Elenco completo
                 val titularesCheios = (escalacao?.titulares?.size ?: 0) >= 11
-                val reservasCheias  = (escalacao?.reservas?.size  ?: 0) >= 7
+                val reservasCheias  = (escalacao?.reservas?.size  ?: 0) >= 11
                 LazyColumn {
                     items(elenco) { jogador ->
                         val naEscalacao = escalacao?.titulares?.any { it.jogador.id == jogador.id } == true
@@ -174,7 +263,53 @@ fun EscalacaoScreen(
                 }
             }
             3 -> { // Tática
-                TaticaTab(escalacao = escalacao, vm = vm)
+                TaticaTab(escalacao = escalacao, vm = vm, modoPreJogo = modoPreJogo)
+            }
+        }
+        // Espaço para o botão flutuante não cobrir o conteúdo
+        if (modoPreJogo) Spacer(Modifier.height(80.dp))
+    }
+
+    // Botão flutuante "Iniciar Partida" no modo pré-jogo
+    if (modoPreJogo && onIniciarPartida != null) {
+        val totalTitulares = escalacao?.titulares?.size ?: 0
+        val escalacaoCompleta = totalTitulares == 11
+        Box(Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    if (!escalacaoCompleta) {
+                        val faltam = 11 - totalTitulares
+                        Text(
+                            "\u26a0 Adicione mais ${faltam} jogador${if (faltam > 1) "es" else ""} aos titulares (${totalTitulares}/11)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        )
+                    }
+                    Button(
+                        onClick = onIniciarPartida,
+                        enabled = escalacaoCompleta,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            "▶ Iniciar Partida",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }
@@ -189,9 +324,15 @@ fun EscalacaoScreen(
 @Composable
 private fun TaticaTab(
     escalacao: br.com.managerfoot.domain.model.Escalacao?,
-    vm: EscalacaoViewModel
+    vm: EscalacaoViewModel,
+    modoPreJogo: Boolean = false
 ) {
-    val formacoes = listOf("4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "5-3-2", "4-1-4-1")
+    val formacoes = listOf(
+        "4-4-2", "4-5-1", "4-3-3",
+        "4-3-2-1", "5-4-1", "4-1-2-1-2",
+        "3-5-2", "5-3-2", "4-2-3-1",
+        "3-2-4-1", "2-3-5", "2-3-2-3", "4-2-4"
+    )
     val estilos = EstiloJogo.entries
 
     val formacaoAtual = escalacao?.time?.taticaFormacao ?: "4-4-2"
@@ -202,13 +343,13 @@ private fun TaticaTab(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Formação
+        // ── Formação ──────────────────────────────────────────────
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Formação tática", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Escolha o esquema tático. Afeta como os jogadores são distribuídos em campo.",
+                "Escolha o esquema tático. Ao selecionar, a melhor escalação é gerada automaticamente.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -223,9 +364,18 @@ private fun TaticaTab(
             }
         }
 
+        // ── Gramado tático ────────────────────────────────────────
+        if (escalacao != null) {
+            GramadoTatico(
+                titulares = escalacao.titulares,
+                formacao  = formacaoAtual,
+                modifier  = Modifier.padding(vertical = 4.dp)
+            )
+        }
+
         HorizontalDivider()
 
-        // Estilo de jogo
+        // ── Estilo de jogo ────────────────────────────────────────
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Estilo de jogo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
@@ -236,10 +386,10 @@ private fun TaticaTab(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 estilos.forEach { estilo ->
                     val label = when (estilo) {
-                        EstiloJogo.OFENSIVO      -> "⚔️ Ofensivo"
-                        EstiloJogo.EQUILIBRADO   -> "⚖️ Equilibrado"
-                        EstiloJogo.DEFENSIVO     -> "🛡️ Defensivo"
-                        EstiloJogo.CONTRA_ATAQUE -> "⚡ Contra-ataque"
+                        EstiloJogo.OFENSIVO      -> "Ofensivo"
+                        EstiloJogo.EQUILIBRADO   -> "Equilibrado"
+                        EstiloJogo.DEFENSIVO     -> "Defensivo"
+                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
                     }
                     FilterChip(
                         selected = estilo == estiloAtual,
@@ -249,7 +399,146 @@ private fun TaticaTab(
                 }
             }
         }
+        // Espaço extra no final para o botão flutuante não cobrir o último item
+        if (modoPreJogo) Spacer(Modifier.height(96.dp))
     }
+}
+
+// ─────────────────────────────────────────────────────────
+//  GramadoTatico — visão 2D do campo com posições dos jogadores
+// ─────────────────────────────────────────────────────────
+@Composable
+internal fun GramadoTatico(
+    titulares: List<JogadorNaEscalacao>,
+    formacao: String,
+    modifier: Modifier = Modifier
+) {
+    // Linhas do campo incluindo GK: ex. "4-3-3" → [1, 4, 3, 3]
+    val linhas = remember(formacao) {
+        try { listOf(1) + formacao.split("-").map { it.toInt() } }
+        catch (_: Exception) { listOf(1, 4, 4, 2) }
+    }
+
+    // Ordena titulares para o campo: GL → DEF → MEIO → ATK
+    val sortOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+    val ordered = remember(titulares) {
+        titulares.sortedWith(compareBy(
+            { sortOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+
+    val chipW = 52.dp
+    val chipH = 48.dp
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(300.dp)
+            .clip(RoundedCornerShape(10.dp))
+    ) {
+        val w = maxWidth
+        val h = maxHeight
+        val numLinhas = linhas.size
+
+        // Fundo do gramado
+        Box(Modifier.fillMaxSize().background(Color(0xFF2D8653)))
+
+        // Linhas do campo
+        Canvas(Modifier.fillMaxSize()) {
+            val sw = size.width
+            val sh = size.height
+            val lineColor = Color.White.copy(alpha = 0.40f)
+            val lw = 1.5.dp.toPx()
+
+            drawRect(lineColor, style = Stroke(lw))                        // borda
+            drawLine(lineColor, Offset(0f, sh * 0.5f), Offset(sw, sh * 0.5f), lw)  // linha do meio
+            drawCircle(lineColor, sw * 0.12f, Offset(sw / 2, sh * 0.5f), style = Stroke(lw))  // círculo
+            drawCircle(lineColor, 4f, Offset(sw / 2, sh * 0.5f))          // ponto central
+
+            val paW = sw * 0.48f; val paH = sh * 0.13f
+            // Área adversário (topo)
+            drawRect(lineColor, Offset((sw - paW) / 2, 0f), Size(paW, paH), style = Stroke(lw))
+            // Área própria (base)
+            drawRect(lineColor, Offset((sw - paW) / 2, sh - paH), Size(paW, paH), style = Stroke(lw))
+
+            val gW = sw * 0.22f; val gH = sh * 0.035f
+            drawRect(lineColor, Offset((sw - gW) / 2, 0f),      Size(gW, gH), style = Stroke(lw))  // gol adv
+            drawRect(lineColor, Offset((sw - gW) / 2, sh - gH), Size(gW, gH), style = Stroke(lw))  // gol próprio
+        }
+
+        // Cálculo de posições dos chips
+        val placements = remember(ordered, linhas) {
+            val list = mutableListOf<Triple<Float, Float, JogadorNaEscalacao>>()
+            var idx = 0
+            linhas.forEachIndexed { rowIdx, count ->
+                // rowIdx=0 = GK (base), último = ataque (topo)
+                val yFrac = 1f - (rowIdx.toFloat() + 0.65f) / numLinhas.toFloat()
+                for (col in 0 until count) {
+                    val xFrac = (col.toFloat() + 1f) / (count.toFloat() + 1f)
+                    ordered.getOrNull(idx)?.let { list.add(Triple(xFrac, yFrac, it)) }
+                    idx++
+                }
+            }
+            list
+        }
+
+        placements.forEach { (xF, yF, jne) ->
+            val xOff = (w * xF - chipW / 2).coerceIn(2.dp, w - chipW - 2.dp)
+            val yOff = (h * yF - chipH / 2).coerceIn(2.dp, h - chipH - 2.dp)
+            JogadorChipGramado(
+                jne = jne,
+                modifier = Modifier
+                    .offset(x = xOff, y = yOff)
+                    .width(chipW)
+            )
+        }
+    }
+}
+
+@Composable
+internal fun JogadorChipGramado(
+    jne: JogadorNaEscalacao,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(posicaoColor(jne.posicaoUsada), CircleShape)
+                .border(1.5.dp, Color.White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = jne.posicaoUsada.abreviacao,
+                fontSize = 7.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+        Text(
+            text = jne.jogador.nomeAbreviado.take(9),
+            fontSize = 8.sp,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+internal fun posicaoColor(posicao: Posicao): Color = when (posicao.setor) {
+    Setor.GOLEIRO -> Color(0xFFF9A825)
+    Setor.DEFESA  -> Color(0xFF1565C0)
+    Setor.MEIO    -> Color(0xFF6A1B9A)
+    Setor.ATAQUE  -> Color(0xFFC62828)
 }
 
 @Composable

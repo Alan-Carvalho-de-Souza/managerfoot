@@ -52,7 +52,7 @@ fun RankingGeralScreen(
             if (ranking.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "Nenhuma temporada concluída ainda.\nO ranking é atualizado ao encerrar cada temporada.",
+                        "Nenhum jogo realizado ainda.\nO ranking é atualizado após cada partida.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -73,6 +73,7 @@ fun RankingGeralScreen(
                 Text("Clube", modifier = Modifier.weight(1f),  fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text("Div", modifier = Modifier.width(30.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("Pts", modifier = Modifier.width(38.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text("J",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("V",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("E",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("D",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -140,9 +141,11 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity) {
             textAlign = TextAlign.Center,
             color = posColor
         )
-        Text("${entry.vitorias}",  modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
-        Text("${entry.empates}",   modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
-        Text("${entry.derrotas}",  modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
+        val jogos = entry.vitorias + entry.empates + entry.derrotas
+        Text("$jogos",            modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
+        Text("${entry.vitorias}", modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
+        Text("${entry.empates}",  modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
+        Text("${entry.derrotas}", modifier = Modifier.width(26.dp), fontSize = 12.sp, textAlign = TextAlign.Center)
         Text(
             if (entry.copasVencidas > 0) "${entry.copasVencidas}" else "—",
             modifier = Modifier.width(28.dp),

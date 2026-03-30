@@ -31,6 +31,10 @@ import br.com.managerfoot.domain.model.ResultadoPartida
 import br.com.managerfoot.domain.model.ResultadoPenaltis
 import br.com.managerfoot.presentation.ui.components.TeamBadge
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.ui.platform.LocalConfiguration
+import br.com.managerfoot.domain.model.DadosPenaltiAdversario
+import br.com.managerfoot.domain.model.EventoPenalti
+import kotlin.random.Random
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,9 +74,16 @@ fun PartidaSimulacaoScreen(
     escalacaoJogador: Escalacao? = null,
     isTimeCasaOJogador: Boolean = true,
     penaltisResultado: ResultadoPenaltis? = null,
-    onPenaltisConfirmados: ((cobradores: List<JogadorNaEscalacao>, goleiroDefesa: Int) -> Unit)? = null,
+    dadosPenaltisAdversario: DadosPenaltiAdversario? = null,
+    penaltisInterativoConcluido: Boolean = false,
+    onPenaltisConfirmados: ((ResultadoPenaltis) -> Unit)? = null,
     onSimulacaoFinalizada: () -> Unit
 ) {
+    // Tamanho adaptativo do placar — reduz em telas mais estreitas (ex.: S23 ~393dp vs S23 Ultra ~412dp)
+    // garante que o número de gols + escudos não comprimam o nome dos times
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val scoreFontSize = if (screenWidthDp < 400) 36.sp else 48.sp
+
     // Estado do placar
     var golsCasaAtual by remember { mutableIntStateOf(0) }
     var golsForaAtual by remember { mutableIntStateOf(0) }
@@ -106,31 +117,12 @@ fun PartidaSimulacaoScreen(
     var jogadorLesionadoAtual by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
     val lesaoDeferred = remember { mutableStateOf<CompletableDeferred<JogadorNaEscalacao?>?>(null) }
 
-    // Enriquece eventos e pré-calcula quais sub-eventos da IA devem ser omitidos
-    // (os que seguem lesões do time do jogador — o usuário escolherá quem entra).
+    // Enriquece eventos. Os eventos SUBSTITUICAO_SAI/ENTRA do time do jogador humano
+    // por lesão nunca chegam no resultado (o motor não os gera — é escolha interativa).
+    // Filtramos apenas eventos de tipos que devem ser visíveis na timeline.
     val eventosOrdenados = remember(resultado, isTimeCasaOJogador, escalacaoJogador) {
         val sortedEvts = resultado.eventos.sortedBy { it.minuto }
-        val teamId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
-        val skipIndices: Set<Int> = if (escalacaoJogador == null) emptySet() else buildSet {
-            sortedEvts.forEachIndexed { i, ev ->
-                if (ev.tipo == TipoEvento.LESAO && ev.timeId == teamId) {
-                    val lesionadoId = ev.jogadorId
-                    var k = i + 1; var saiDone = false; var entraDone = false
-                    while (k < sortedEvts.size && !(saiDone && entraDone)) {
-                        val ne = sortedEvts[k]
-                        if (ne.timeId == teamId) {
-                            if (!saiDone && ne.tipo == TipoEvento.SUBSTITUICAO_SAI && ne.jogadorId == lesionadoId) {
-                                add(k); saiDone = true
-                            } else if (saiDone && !entraDone && ne.tipo == TipoEvento.SUBSTITUICAO_ENTRA) {
-                                add(k); entraDone = true
-                            }
-                        }
-                        k++
-                    }
-                }
-            }
-        }
-        sortedEvts.mapIndexed { i, ev ->
+        sortedEvts.mapIndexed { _, ev ->
             val ehCasa = ev.timeId == resultado.timeCasaId
             EventoExibicao(
                 minuto = ev.minuto,
@@ -139,7 +131,7 @@ fun PartidaSimulacaoScreen(
                 timeId = ev.timeId,
                 nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora,
                 jogadorId = ev.jogadorId,
-                pularExibicao = i in skipIndices
+                pularExibicao = false
             )
         }
     }
@@ -173,7 +165,7 @@ fun PartidaSimulacaoScreen(
             // Exibir eventos desse minuto — loop `for` para manter o CoroutineScope do
             // LaunchedEffect como receptor implícito, permitindo usar `launch {}`.
             for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto <= 45 }) {
-                if (ev.pularExibicao) continue  // sub automática da IA omitida — usuário escolhe
+                if (ev.pularExibicao) continue
                 eventosExibidos.add(0, ev)
                 if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
                     if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
@@ -250,7 +242,6 @@ fun PartidaSimulacaoScreen(
             minutoAtual = minuto
 
             for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto > 45 }) {
-                if (ev.pularExibicao) continue
                 eventosExibidos.add(0, ev)
                 if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
                     if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
@@ -410,7 +401,7 @@ fun PartidaSimulacaoScreen(
                         ) { gols ->
                             Text(
                                 text = gols.toString(),
-                                fontSize = 48.sp,
+                                fontSize = scoreFontSize,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
@@ -427,7 +418,7 @@ fun PartidaSimulacaoScreen(
                         ) { gols ->
                             Text(
                                 text = gols.toString(),
-                                fontSize = 48.sp,
+                                fontSize = scoreFontSize,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
@@ -511,20 +502,39 @@ fun PartidaSimulacaoScreen(
 
         // â”€â”€ BotÃ£o de encerrar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (simulacaoEncerrada) {
-            if (resultado.precisaPenaltis && penaltisResultado == null) {
-                PenaltiSelecaoPainel(
-                    titulares      = titularesAtuais.toList(),
-                    nomeTimeJogador    = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora,
-                    nomeAdversario     = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa,
-                    agregadoJogador    = if (isTimeCasaOJogador) resultado.golsAgregadoCasa else resultado.golsAgregadoFora,
-                    agregadoAdversario = if (isTimeCasaOJogador) resultado.golsAgregadoFora else resultado.golsAgregadoCasa,
-                    onConfirmar = { cobradores ->
-                        val gk = titularesAtuais.firstOrNull {
-                            it.posicaoUsada.setor == br.com.managerfoot.data.database.entities.Setor.GOLEIRO
-                        }
-                        onPenaltisConfirmados?.invoke(cobradores, gk?.jogador?.defesa ?: 70)
+            if (resultado.precisaPenaltis && penaltisInterativoConcluido) {
+                // Disputa interativa já concluída — botão simples de retorno
+                Button(
+                    onClick = onSimulacaoFinalizada,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) { Text("Voltar ao painel") }
+            } else if (resultado.precisaPenaltis && penaltisResultado == null) {
+                val dadosAdv = dadosPenaltisAdversario
+                if (dadosAdv != null) {
+                    val gk = titularesAtuais.firstOrNull {
+                        it.posicaoUsada.setor == br.com.managerfoot.data.database.entities.Setor.GOLEIRO
                     }
-                )
+                    PenaltiInterativoPainel(
+                        cobradorElegiveis  = titularesAtuais.filter {
+                            it.posicaoUsada.setor != br.com.managerfoot.data.database.entities.Setor.GOLEIRO
+                        }.toList(),
+                        gkJogadorDefesa    = gk?.jogador?.defesa ?: 70,
+                        dadosAdversario    = dadosAdv,
+                        isTimeCasaOJogador = isTimeCasaOJogador,
+                        timeCasaId         = resultado.timeCasaId,
+                        timeForaId         = resultado.timeForaId,
+                        nomeTimeJogador    = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora,
+                        nomeAdversario     = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa,
+                        agregadoJogador    = if (isTimeCasaOJogador) resultado.golsAgregadoCasa else resultado.golsAgregadoFora,
+                        agregadoAdversario = if (isTimeCasaOJogador) resultado.golsAgregadoFora else resultado.golsAgregadoCasa,
+                        onConcluir         = { res -> onPenaltisConfirmados?.invoke(res) }
+                    )
+                } else {
+                    // Dados ainda carregando
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
             } else if (resultado.precisaPenaltis && penaltisResultado != null) {
                 PenaltiResultadoPainel(
                     penaltis      = penaltisResultado,
@@ -550,6 +560,281 @@ fun PartidaSimulacaoScreen(
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
+//  PenaltiInterativoPainel  ─  disputa pênalti a pênalti
+// ─────────────────────────────────────────────────────────────
+
+private enum class FasePenalti { SELECAO, RESULTADO, FINALIZADO }
+
+@Composable
+private fun PenaltiInterativoPainel(
+    cobradorElegiveis: List<JogadorNaEscalacao>,
+    gkJogadorDefesa: Int,
+    dadosAdversario: DadosPenaltiAdversario,
+    isTimeCasaOJogador: Boolean,
+    timeCasaId: Int,
+    timeForaId: Int,
+    nomeTimeJogador: String,
+    nomeAdversario: String,
+    agregadoJogador: Int,
+    agregadoAdversario: Int,
+    onConcluir: (ResultadoPenaltis) -> Unit
+) {
+    var fase by remember { mutableStateOf(FasePenalti.SELECAO) }
+    var golsJogador    by remember { mutableIntStateOf(0) }
+    var golsAdversario by remember { mutableIntStateOf(0) }
+    val cobrancasJogador    = remember { mutableStateListOf<EventoPenalti>() }
+    val cobrancasAdversario = remember { mutableStateListOf<EventoPenalti>() }
+    var ultimoJogador    by remember { mutableStateOf<EventoPenalti?>(null) }
+    var ultimoAdversario by remember { mutableStateOf<EventoPenalti?>(null) }
+    var jaCobraramIds    by remember { mutableStateOf(emptySet<Int>()) }
+    var idxAdversario    by remember { mutableIntStateOf(0) }
+
+    val allCobradorIds = remember(cobradorElegiveis) { cobradorElegiveis.map { it.jogador.id }.toSet() }
+
+    // Jogadores elegíveis neste ciclo
+    val eligiveis = if (jaCobraramIds.containsAll(allCobradorIds)) {
+        cobradorElegiveis   // ciclo completo: mostra todos para o próximo ciclo
+    } else {
+        cobradorElegiveis.filter { it.jogador.id !in jaCobraramIds }
+    }
+
+    fun probConversao(fin: Int, gkDef: Int) =
+        (0.55 + (fin / 99.0) * 0.40 - (gkDef / 99.0) * 0.15).coerceIn(0.40, 0.95)
+
+    fun verificarFim(): Boolean {
+        val n = cobrancasJogador.size
+        if (n == 0) return false
+        if (n == 5 && golsJogador != golsAdversario) return true
+        if (n > 5 && ultimoJogador!!.convertido != ultimoAdversario!!.convertido) return true
+        return false
+    }
+
+    fun construirResultado(): ResultadoPenaltis {
+        val golsCasa = if (isTimeCasaOJogador) golsJogador else golsAdversario
+        val golsFora = if (isTimeCasaOJogador) golsAdversario else golsJogador
+        val venc = if (golsJogador > golsAdversario) {
+            if (isTimeCasaOJogador) timeCasaId else timeForaId
+        } else {
+            if (isTimeCasaOJogador) timeForaId else timeCasaId
+        }
+        val (ccasa, cfora) = if (isTimeCasaOJogador)
+            cobrancasJogador.toList() to cobrancasAdversario.toList()
+        else
+            cobrancasAdversario.toList() to cobrancasJogador.toList()
+        return ResultadoPenaltis(
+            cobrancasCasa = ccasa, cobrancasFora = cfora,
+            golsCasa = golsCasa, golsFora = golsFora,
+            vencedorId = venc, timeCasaId = timeCasaId, timeForaId = timeForaId
+        )
+    }
+
+    fun onJogadorSelecionado(jne: JogadorNaEscalacao) {
+        val cicloCompleto = jaCobraramIds.containsAll(allCobradorIds)
+        jaCobraramIds = if (cicloCompleto) setOf(jne.jogador.id) else jaCobraramIds + jne.jogador.id
+
+        val convJ = Random.nextDouble() < probConversao(jne.jogador.finalizacao, dadosAdversario.gkDefesa)
+        val evJ = EventoPenalti(jne.jogador.id, jne.jogador.nomeAbreviado, convJ)
+        if (convJ) golsJogador++
+        cobrancasJogador.add(evJ)
+        ultimoJogador = evJ
+
+        val realIdx = idxAdversario % dadosAdversario.cobradores.size
+        val (advId, advNome) = dadosAdversario.cobradores[realIdx]
+        val advFin = dadosAdversario.finalizacoes[realIdx]
+        idxAdversario++
+        val convA = Random.nextDouble() < probConversao(advFin, gkJogadorDefesa)
+        val evA = EventoPenalti(advId, advNome, convA)
+        if (convA) golsAdversario++
+        cobrancasAdversario.add(evA)
+        ultimoAdversario = evA
+
+        fase = if (verificarFim()) FasePenalti.FINALIZADO else FasePenalti.RESULTADO
+    }
+
+    val numRodadas = cobrancasJogador.size
+    val isSuddenDeath = numRodadas >= 5
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Card(
+            Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+        ) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    if (isSuddenDeath) "MORTE SÚBITA" else "DISPUTA DE PÊNALTIS",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "$nomeTimeJogador $agregadoJogador × $agregadoAdversario $nomeAdversario (agg.)",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        nomeTimeJogador,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "$golsJogador – $golsAdversario",
+                        fontSize = 36.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        nomeAdversario,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (isSuddenDeath) "Cobrança ${numRodadas + 1} (morte súbita)"
+                    else "Cobrança ${numRodadas + 1} de 5",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+
+        when (fase) {
+            FasePenalti.SELECAO -> {
+                Text(
+                    "Escolha o próximo batedor:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    items(eligiveis) { jne ->
+                        ListItem(
+                            headlineContent = { Text(jne.jogador.nome) },
+                            supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Fin: ${jne.jogador.finalizacao}") },
+                            trailingContent = {
+                                Button(
+                                    onClick = { onJogadorSelecionado(jne) },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) { Text("Cobrar") }
+                            }
+                        )
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
+                }
+            }
+
+            FasePenalti.RESULTADO -> {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ultimoJogador?.let { ev ->
+                        PenaltiCobrancaCard(nomeTime = nomeTimeJogador, evento = ev)
+                    }
+                    ultimoAdversario?.let { ev ->
+                        PenaltiCobrancaCard(nomeTime = nomeAdversario, evento = ev)
+                    }
+                }
+                Button(
+                    onClick = { fase = FasePenalti.SELECAO },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) { Text("Próxima cobrança") }
+            }
+
+            FasePenalti.FINALIZADO -> {
+                val timVenc = if (golsJogador > golsAdversario) nomeTimeJogador else nomeAdversario
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ultimoJogador?.let { ev ->
+                        PenaltiCobrancaCard(nomeTime = nomeTimeJogador, evento = ev)
+                    }
+                    ultimoAdversario?.let { ev ->
+                        PenaltiCobrancaCard(nomeTime = nomeAdversario, evento = ev)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "🏆 $timVenc avança!",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (timVenc == nomeTimeJogador) Color(0xFF2E7D32)
+                                        else MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "$golsJogador – $golsAdversario nos pênaltis",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                Button(
+                    onClick = { onConcluir(construirResultado()) },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) { Text("Concluir") }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PenaltiCobrancaCard  ─  exibe resultado de uma cobrança
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun PenaltiCobrancaCard(nomeTime: String, evento: EventoPenalti) {
+    val cor = if (evento.convertido) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = cor.copy(alpha = 0.12f))
+    ) {
+        Row(
+            Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(if (evento.convertido) "⚽" else "❌", fontSize = 28.sp)
+            Column(Modifier.weight(1f)) {
+                Text(evento.nomeAbrev, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(nomeTime, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                if (evento.convertido) "Gol!" else "Defendido",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = cor
+            )
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 //  PenaltiSelecaoPainel  ─  jogador escolhe os 5 cobradores
 // ─────────────────────────────────────────────────────────────
@@ -666,6 +951,7 @@ private fun PenaltiResultadoPainel(
     onConcluir: () -> Unit
 ) {
     data class ItemCobranca(val ehCasa: Boolean, val evento: br.com.managerfoot.domain.model.EventoPenalti)
+    val penaltiScoreFontSize = if (LocalConfiguration.current.screenWidthDp < 400) 32.sp else 40.sp
     val cobrancasExibidas  = remember { mutableStateListOf<ItemCobranca>() }
     var animacaoFinalizada by remember { mutableStateOf(false) }
     var golsCasaAtual      by remember { mutableIntStateOf(0) }
@@ -729,7 +1015,7 @@ private fun PenaltiResultadoPainel(
                         label = "pc"
                     ) { g ->
                         Text(
-                            g.toString(), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            g.toString(), fontSize = penaltiScoreFontSize, fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -744,7 +1030,7 @@ private fun PenaltiResultadoPainel(
                         label = "pf"
                     ) { g ->
                         Text(
-                            g.toString(), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            g.toString(), fontSize = penaltiScoreFontSize, fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -900,6 +1186,7 @@ private fun IntervaloPainel(
                 1 -> TaticaIntervaloPainel(
                     formacaoAtual = formacaoAtual,
                     estiloAtual = estiloAtual,
+                    titulares = titulares,
                     onFormacaoChange = onFormacaoChange,
                     onEstiloChange = onEstiloChange
                 )
@@ -1008,20 +1295,32 @@ private fun SubstituicoesTab(
 private fun TaticaIntervaloPainel(
     formacaoAtual: String,
     estiloAtual: EstiloJogo,
+    titulares: List<JogadorNaEscalacao>,
     onFormacaoChange: (String) -> Unit,
     onEstiloChange: (EstiloJogo) -> Unit
 ) {
-    val formacoes = listOf("4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "5-3-2", "4-1-4-1")
+    val formacoes = listOf(
+        "4-4-2", "4-5-1", "4-3-3",
+        "4-3-2-1", "5-4-1", "4-1-2-1-2",
+        "3-5-2", "5-3-2", "4-2-3-1",
+        "3-2-4-1", "2-3-5", "2-3-2-3", "4-2-4"
+    )
 
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // ── Formação ──────────────────────────────────────────────
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Formação tática", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Escolha o esquema tático para o 2º tempo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 formacoes.forEach { f ->
                     FilterChip(selected = f == formacaoAtual, onClick = { onFormacaoChange(f) }, label = { Text(f) })
@@ -1029,22 +1328,38 @@ private fun TaticaIntervaloPainel(
             }
         }
 
+        // ── Gramado tático ────────────────────────────────────────
+        if (titulares.isNotEmpty()) {
+            GramadoTatico(
+                titulares = titulares,
+                formacao  = formacaoAtual,
+                modifier  = Modifier.padding(vertical = 4.dp)
+            )
+        }
+
         HorizontalDivider()
 
+        // ── Estilo de jogo ────────────────────────────────────────
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Estilo de jogo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Define a postura tática da equipe no 2º tempo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 EstiloJogo.entries.forEach { estilo ->
                     val label = when (estilo) {
-                        EstiloJogo.OFENSIVO      -> "⚔️ Ofensivo"
-                        EstiloJogo.EQUILIBRADO   -> "⚖️ Equilibrado"
-                        EstiloJogo.DEFENSIVO     -> "🛡️ Defensivo"
-                        EstiloJogo.CONTRA_ATAQUE -> "⚡ Contra-ataque"
+                        EstiloJogo.OFENSIVO      -> "Ofensivo"
+                        EstiloJogo.EQUILIBRADO   -> "Equilibrado"
+                        EstiloJogo.DEFENSIVO     -> "Defensivo"
+                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
                     }
                     FilterChip(selected = estilo == estiloAtual, onClick = { onEstiloChange(estilo) }, label = { Text(label) })
                 }
             }
         }
+        Spacer(Modifier.height(16.dp))
     }
 }
 

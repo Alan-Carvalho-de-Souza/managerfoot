@@ -25,7 +25,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0
-        ORDER BY rodada
+        ORDER BY ordemGlobal
         LIMIT 1
     """)
     suspend fun buscarProximaPartida(timeId: Int): PartidaEntity?
@@ -274,7 +274,8 @@ interface PartidaDao {
                p.rodada AS rodada, p.timeCasaId AS timeCasaId,
                tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
-               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.penaltisCasa AS penaltisCasa, p.penaltisForaId AS penaltisForaId
         FROM partidas p
         INNER JOIN times tc ON p.timeCasaId = tc.id
         INNER JOIN times tf ON p.timeForaId = tf.id
@@ -409,7 +410,9 @@ data class CopaPartidaDto(
     val escudoFora: String,
     val golsCasa: Int?,
     val golsFora: Int?,
-    val jogada: Boolean
+    val jogada: Boolean,
+    val penaltisCasa: Int? = null,
+    val penaltisForaId: Int? = null
 )
 
 data class EstatisticaJogadorDto(

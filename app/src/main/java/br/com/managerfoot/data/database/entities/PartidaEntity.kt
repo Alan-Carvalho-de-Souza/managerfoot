@@ -32,7 +32,8 @@ data class PartidaEntity(
 
     val jogada: Boolean = false,
     val fase: String? = null,           // "Primeira Fase", "Segunda Fase", "Oitavas", "Quartas", "Semi", "Final"
-    val confrontoId: Int? = null        // agrupa jogo de ida + volta (Copa)
+    val confrontoId: Int? = null,       // agrupa jogo de ida + volta (Copa)
+    val ordemGlobal: Int = 0            // posição no calendário multi-competição (usado por buscarProximaPartida)
 )
 
 // Escalação salva pelo jogador para uma determinada partida
@@ -84,5 +85,6 @@ enum class TipoEvento {
     CARTAO_VERMELHO,
     LESAO,
     SUBSTITUICAO_ENTRA,
-    SUBSTITUICAO_SAI
+    SUBSTITUICAO_SAI,
+    PARTICIPOU   // marca que o jogador entrou em campo (titular); não aparece na UI
 }

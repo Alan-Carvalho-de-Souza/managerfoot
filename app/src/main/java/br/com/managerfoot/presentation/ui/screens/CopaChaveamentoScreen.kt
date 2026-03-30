@@ -132,8 +132,17 @@ private fun ConfrontoCopaCard(
     val totalB = (golsBIda ?: 0) + (golsBVolta ?: 0)
 
     val confrontoCompleto = ida.jogada && (volta?.jogada == true)
-    val teamAVenceu = confrontoCompleto && totalA > totalB
-    val teamBVenceu = confrontoCompleto && totalB > totalA
+
+    // Penalty shootout (stored on the volta row, from perspective of volta's casa/fora teams)
+    // volta.timeCasaId == teamB, volta.timeForaId == teamA
+    val penBVolta = volta?.penaltisCasa   // volta casa = team B
+    val penAVolta = volta?.penaltisForaId  // volta fora = team A
+    val foiParaPenaltis = confrontoCompleto && totalA == totalB && penAVolta != null && penBVolta != null
+    val teamAVenceuPenaltis = foiParaPenaltis && (penAVolta ?: 0) > (penBVolta ?: 0)
+    val teamBVenceuPenaltis = foiParaPenaltis && (penBVolta ?: 0) > (penAVolta ?: 0)
+
+    val teamAVenceu = confrontoCompleto && (totalA > totalB || teamAVenceuPenaltis)
+    val teamBVenceu = confrontoCompleto && (totalB > totalA || teamBVenceuPenaltis)
 
     val jogadorEnvolvido = teamAId == timeJogadorId || teamBId == timeJogadorId
 
@@ -188,7 +197,7 @@ private fun ConfrontoCopaCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text("agregado", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("agregado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Text("vs", style = MaterialTheme.typography.bodyMedium)
                     }
@@ -238,6 +247,30 @@ private fun ConfrontoCopaCard(
                             Text("$golsBVolta × $golsAVolta", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         else
                             Text("—", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                // Resultado nos pênaltis
+                if (foiParaPenaltis) {
+                    Spacer(Modifier.height(6.dp))
+                    HorizontalDivider(thickness = 0.5.dp)
+                    Spacer(Modifier.height(4.dp))
+                    val nomeVencedor = if (teamAVenceuPenaltis) teamANome else teamBNome
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Pênaltis: $penAVolta × $penBVolta",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "$nomeVencedor avançou nos pênaltis",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }

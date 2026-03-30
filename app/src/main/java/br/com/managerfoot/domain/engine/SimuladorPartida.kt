@@ -25,17 +25,19 @@ object CalculadoraForca {
         if (titulares.isEmpty()) return 0.0
 
         // Valor de cada jogador leva em conta forca efetiva + atributos específicos do setor
+        // fisico contribui como resistência/imposição física em todos os setores
         fun valorJogador(jne: JogadorNaEscalacao): Double {
-            val fe = jne.jogador.forcaEfetiva(jne.posicaoUsada).toDouble()
+            val fe  = jne.jogador.forcaEfetiva(jne.posicaoUsada).toDouble()
+            val fis = jne.jogador.fisico.toDouble()
             return when (jne.posicaoUsada.setor) {
-                // Goleiro: defesa crítica (40%) + distribuição com os pés/passe (10%)
-                Setor.GOLEIRO -> fe * 0.50 + jne.jogador.defesa  * 0.40 + jne.jogador.passe * 0.10
-                // Zagueiros/Laterais: defesa (25%) + técnica para saída de bola (15%) + passe de construção (10%)
-                Setor.DEFESA  -> fe * 0.50 + jne.jogador.defesa  * 0.25 + jne.jogador.tecnica * 0.15 + jne.jogador.passe * 0.10
-                // Meias: técnica (20%) + passe é central para o setor (20%) + marcacão/defesa (15%)
-                Setor.MEIO    -> fe * 0.45 + jne.jogador.tecnica * 0.20 + jne.jogador.passe  * 0.20 + jne.jogador.defesa * 0.15
-                // Atacantes: técnica de finalização (15%) + passe em jogo combinado (10%) + defesa (10%)
-                Setor.ATAQUE  -> fe * 0.65 + jne.jogador.tecnica * 0.15 + jne.jogador.passe  * 0.10 + jne.jogador.defesa * 0.10
+                // Goleiro: defesa crítica (35%) + passe/saída (10%) + fisico p/ duelos (10%)
+                Setor.GOLEIRO -> fe * 0.45 + jne.jogador.defesa  * 0.35 + jne.jogador.passe * 0.10 + fis * 0.10
+                // Zagueiros/Laterais: defesa (22%) + fisico para marcação (15%) + técnica (13%) + passe (10%)
+                Setor.DEFESA  -> fe * 0.40 + jne.jogador.defesa  * 0.22 + fis * 0.15 + jne.jogador.tecnica * 0.13 + jne.jogador.passe * 0.10
+                // Meias: técnica (18%) + passe (18%) + fisico/stamina (10%) + marcação (14%)
+                Setor.MEIO    -> fe * 0.40 + jne.jogador.tecnica * 0.18 + jne.jogador.passe * 0.18 + jne.jogador.defesa * 0.14 + fis * 0.10
+                // Atacantes: finalizacao via técnica (15%) + passe (8%) + fisico p/ duelos (8%)
+                Setor.ATAQUE  -> fe * 0.62 + jne.jogador.tecnica * 0.15 + jne.jogador.passe * 0.08 + fis * 0.08 + jne.jogador.defesa * 0.07
             }
         }
 
@@ -57,7 +59,23 @@ object CalculadoraForca {
     }
 
     // Fatores modificadores externos
-    fun fatorMandante(): Double = 1.12        // vantagem de jogar em casa (~12% mais força)
+    // Fator casa proporcional à capacidade do estádio
+    // 5k=1% ... 100k=12% conforme tabela de tiers
+    fun fatorMandante(capacidade: Int): Double = when {
+        capacidade >= 100_000 -> 1.12
+        capacidade >=  80_000 -> 1.11
+        capacidade >=  60_000 -> 1.10
+        capacidade >=  50_000 -> 1.09
+        capacidade >=  40_000 -> 1.08
+        capacidade >=  35_000 -> 1.07
+        capacidade >=  30_000 -> 1.06
+        capacidade >=  25_000 -> 1.05
+        capacidade >=  20_000 -> 1.04
+        capacidade >=  15_000 -> 1.03
+        capacidade >=  10_000 -> 1.02
+        capacidade >=   5_000 -> 1.01
+        else                  -> 1.0
+    }
     fun fatorCansaco(jogosUltimos7Dias: Int): Double =
         when {
             jogosUltimos7Dias >= 3 -> 0.93
@@ -65,10 +83,15 @@ object CalculadoraForca {
             else -> 1.0
         }
     fun fatorEstilo(atacante: EstiloJogo, defensor: EstiloJogo): Double =
-        // Counter-attack é mais eficaz contra times ofensivos
         when {
-            atacante == EstiloJogo.CONTRA_ATAQUE && defensor == EstiloJogo.OFENSIVO -> 1.06
-            atacante == EstiloJogo.OFENSIVO && defensor == EstiloJogo.DEFENSIVO     -> 0.95
+            // CONTRA_ATAQUE explora os espaços deixados pelo time OFENSIVO (transições devastadoras)
+            atacante == EstiloJogo.CONTRA_ATAQUE && defensor == EstiloJogo.OFENSIVO -> 1.14
+            // OFENSIVO deixa espaços às costas para o adversário atacar em transição
+            atacante == EstiloJogo.OFENSIVO && defensor == EstiloJogo.CONTRA_ATAQUE -> 0.92
+            // Bloco DEFENSIVO compacto sufoca o time OFENSIVO — poucas chances criadas
+            atacante == EstiloJogo.OFENSIVO && defensor == EstiloJogo.DEFENSIVO     -> 0.88
+            // DEFENSIVO absorve a pressão e sai com eficiência contra time aberto
+            atacante == EstiloJogo.DEFENSIVO && defensor == EstiloJogo.OFENSIVO     -> 1.10
             else -> 1.0
         }
 }
@@ -84,7 +107,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     companion object {
         private const val MEDIA_GOLS_JOGO = 2.7   // média histórica do futebol brasileiro
         private const val PROB_CARTAO_AMARELO = 0.12
-        private const val PROB_LESAO = 0.03
+        // Probabilidade base de lesão (fisico=50 ≈ risco neutro)
+        // fisico=99 → ~1.5%  |  fisico=50 → ~3.0%  |  fisico=1 → ~4.5%
+        private const val PROB_LESAO_BASE = 0.03
     }
 
     fun simular(
@@ -92,11 +117,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         casa: Escalacao,
         fora: Escalacao,
         jogosRecentesCasa: Int = 0,
-        jogosRecentesFora: Int = 0
+        jogosRecentesFora: Int = 0,
+        // Quando informado, inibe as substituições táticas aleatórias para o time
+        // do jogador — apenas subs forçadas (lesão/expulsão) ocorrem nesses casos.
+        timeJogadorId: Int = -1
     ): ResultadoPartida {
 
         val fCasaRaw = CalculadoraForca.calcularForcaTime(casa) *
-                CalculadoraForca.fatorMandante() *
+                CalculadoraForca.fatorMandante(casa.time.estadioCapacidade) *
                 CalculadoraForca.fatorCansaco(jogosRecentesCasa) *
                 CalculadoraForca.fatorEstilo(casa.time.estiloJogo, fora.time.estiloJogo)
 
@@ -121,6 +149,17 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val exitMinutes  = mutableMapOf<Int, Int>()   // jogadorId → minuto de saída
         for (jne in casa.titulares) entryMinutes[jne.jogador.id] = 0
         for (jne in fora.titulares) entryMinutes[jne.jogador.id] = 0
+
+        // Marca a participação de todos os 11 titulares de cada equipe.
+        // Substitutos que entram recebem SUBSTITUICAO_ENTRA, cobrindo sua participação.
+        for (jne in casa.titulares) eventos.add(EventoSimulado(
+            minuto = 0, tipo = TipoEvento.PARTICIPOU,
+            jogadorId = jne.jogador.id, timeId = casa.time.id, descricao = ""
+        ))
+        for (jne in fora.titulares) eventos.add(EventoSimulado(
+            minuto = 0, tipo = TipoEvento.PARTICIPOU,
+            jogadorId = jne.jogador.id, timeId = fora.time.id, descricao = ""
+        ))
 
         // Penalizações na expectativa de gols:
         //   expulsão ou lesão sem reserva → reduz ~13% por jogador a menos
@@ -154,8 +193,12 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     if (lesionado != null) {
                         titsAtivos.remove(lesionado)
                         exitMinutes[lesionado.jogador.id] = inc.minuto
-                        if (reservas.isNotEmpty()) {
-                            // Substituição automática por lesão
+                        // Para o time do jogador humano, NÃO substituímos automaticamente.
+                        // A escolha de quem entra é feita interativamente na UI (LesaoPainel).
+                        // O time joga com um jogador a menos; o custo de força é aplicado.
+                        val ehTimeJogador = (inc.timeId == timeJogadorId)
+                        if (!ehTimeJogador && reservas.isNotEmpty()) {
+                            // Substituição automática por lesão (somente para times IA)
                             val substituto = reservas.removeAt(0)
                             titsAtivos.add(substituto)
                             val minSub = (inc.minuto + 1).coerceAtMost(90)
@@ -171,7 +214,7 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                                 descricao = substituto.jogador.nomeAbreviado
                             ))
                         } else {
-                            // Sem reservas: fica com um jogador a menos
+                            // Time do jogador humano OU sem reservas: fica com um a menos
                             if (ehCasaInc) penalCasa *= 0.87 else penalFora *= 0.87
                         }
                     }
@@ -184,15 +227,27 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val probCasa = fCasa / total
         val probFora = fFora / total
 
-        // Dominância: time com força maior cria mais oportunidades de gol.
-        // dominance ∈ [-1, +1]; o time mais forte ganha até +35% de chances extra.
-        val dominance = ((fCasa - fFora) / total).coerceIn(-1.0, 1.0)
-        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 0.35
-        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 0.35
+        // ── Substituições táticas (até 3 por time) ──────────────────
+        // Ocorrem após os incidentes para que reserves de lesão não
+        // sejam contados de novo, e ANTES da geração de gols para que
+        // o jogador substituído nunca apareça como marcador/assistente.
+        // O time do jogador humano não recebe subs aleatórias: elas só
+        // ocorrem por escolha dele (ordem do banco que ele próprio definiu).
+        if (casa.time.id != timeJogadorId)
+            aplicarSubstituicoesTaticas(titsCasa, resCasa, casa.time.id, entryMinutes, exitMinutes, eventos)
+        if (fora.time.id != timeJogadorId)
+            aplicarSubstituicoesTaticas(titsFora, resFora, fora.time.id, entryMinutes, exitMinutes, eventos)
 
-        // Média de gols esperados ajustada pelas penalizações e pelo domínio de força (Poisson)
-        val mediaGolsCasa = MEDIA_GOLS_JOGO * probCasa * 1.8 * penalCasa * chancesMultCasa
-        val mediaGolsFora = MEDIA_GOLS_JOGO * probFora * 1.8 * penalFora * chancesMultFora
+        // Dominância: time com força maior cria mais oportunidades de gol.
+        // dominance ∈ [-1, +1]; o time mais forte ganha até +55% de chances extra.
+        val dominance = ((fCasa - fFora) / total).coerceIn(-1.0, 1.0)
+        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 0.55
+        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 0.55
+
+        // Média de gols esperados — total esperado é MEDIA_GOLS_JOGO (sem multiplicador extra)
+        // Com times iguais: probCasa=probFora=0.5 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
+        val mediaGolsCasa = MEDIA_GOLS_JOGO * probCasa * penalCasa * chancesMultCasa
+        val mediaGolsFora = MEDIA_GOLS_JOGO * probFora * penalFora * chancesMultFora
 
         val golsCasa = poissonRandom(mediaGolsCasa)
         val golsFora = poissonRandom(mediaGolsFora)
@@ -251,11 +306,16 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
 
         if (candidatos.isEmpty()) return emptyList()
 
-        // Peso de gol por setor: atacantes têm 3x finalizacao, meias 2x, defensores leve chance
+        // Peso de gol por setor:
+        //   ATAQUE: finalizacao é o fator dominante + velocidade + base fixa de 50
+        //           garante que qualquer atacante (min ~54) supere qualquer defensor (max 33)
+        //   MEIO:   finalizacao x2 + passe → goleadores e meias criativos pontuam bem
+        //   DEFESA: apenas finalizacao/3 → bom finalizador marca levemente mais que
+        //           colegas de setor, mas nunca ultrapassa atacantes ou meias goleadores
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
-            Setor.ATAQUE -> jne.jogador.finalizacao * 3 + jne.jogador.velocidade
+            Setor.ATAQUE -> jne.jogador.finalizacao * 3 + jne.jogador.velocidade + 50
             Setor.MEIO   -> jne.jogador.finalizacao * 2 + jne.jogador.passe
-            Setor.DEFESA -> jne.jogador.finalizacao + jne.jogador.fisico / 2
+            Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
             else         -> 1
         }
 
@@ -307,6 +367,59 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         }
     }
 
+    // ── Substituições táticas por time ──────────────────────────
+    // Até 3 trocas por time, espalhadas no intervalo 46–88 min.
+    // O jogador que sai é removido de titsAtivos e tem seu exitMinutes
+    // definido, garantindo que não apareça em nenhum evento de gol/assist
+    // gerado depois desta fase.
+    private fun aplicarSubstituicoesTaticas(
+        titsAtivos: MutableList<JogadorNaEscalacao>,
+        reservas:   MutableList<JogadorNaEscalacao>,
+        timeId:     Int,
+        entryMinutes: MutableMap<Int, Int>,
+        exitMinutes:  MutableMap<Int, Int>,
+        eventos:    MutableList<EventoSimulado>
+    ) {
+        val maxSubs = 3
+        if (reservas.isEmpty()) return
+
+        // Escolhe até 3 minutos aleatórios na segunda metade, sem repetição
+        val minutosSub = (46..88).toList().shuffled(rng).take(maxSubs).sorted()
+        var subsFeitas = 0
+
+        for (minuto in minutosSub) {
+            if (subsFeitas >= maxSubs || reservas.isEmpty()) break
+
+            // Prefere não substituir o goleiro
+            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+            if (candidatosSaida.isEmpty()) break
+
+            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
+            val entrando = reservas.removeAt(0)
+
+            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
+            titsAtivos.add(entrando)
+            exitMinutes[saindo.jogador.id]    = minuto
+            entryMinutes[entrando.jogador.id] = minuto
+
+            eventos.add(EventoSimulado(
+                minuto    = minuto,
+                tipo      = TipoEvento.SUBSTITUICAO_SAI,
+                jogadorId = saindo.jogador.id,
+                timeId    = timeId,
+                descricao = saindo.jogador.nomeAbreviado
+            ))
+            eventos.add(EventoSimulado(
+                minuto    = minuto,
+                tipo      = TipoEvento.SUBSTITUICAO_ENTRA,
+                jogadorId = entrando.jogador.id,
+                timeId    = timeId,
+                descricao = entrando.jogador.nomeAbreviado
+            ))
+            subsFeitas++
+        }
+    }
+
     // ── Incidentes (cartões + lesões) por jogador ──
     private fun gerarIncidentes(titulares: List<JogadorNaEscalacao>, timeId: Int): List<EventoSimulado> {
         return titulares.flatMap { jne ->
@@ -322,7 +435,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     descricao = jne.jogador.nomeAbreviado
                 ))
             }
-            if (rng.nextDouble() < PROB_LESAO) {
+            // Jogadores com alto fisico sofrem menos lesões; fisico=99 → ~1.5%, fisico=1 → ~4.5%
+            val probLesao = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            if (rng.nextDouble() < probLesao) {
                 lista.add(EventoSimulado(
                     minuto = rng.nextInt(10, 85),
                     tipo = TipoEvento.LESAO,

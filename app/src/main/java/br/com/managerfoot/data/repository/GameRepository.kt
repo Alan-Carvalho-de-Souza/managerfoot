@@ -3,6 +3,7 @@ package br.com.managerfoot.data.repository
 import br.com.managerfoot.data.dao.CampeonatoDao
 import br.com.managerfoot.data.dao.ClassificacaoDao
 import br.com.managerfoot.data.dao.CopaPartidaDto
+import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.dao.RankingGeralDao
@@ -22,7 +23,8 @@ class GameRepository @Inject constructor(
     private val jogadorRepository: JogadorRepository,
     private val financaDao: br.com.managerfoot.data.dao.FinancaDao,
     private val hallDaFamaDao: HallDaFamaDao,
-    private val rankingGeralDao: RankingGeralDao
+    private val rankingGeralDao: RankingGeralDao,
+    private val estadioDao: EstadioDao
 ) {
     private val simulador = SimuladorPartida()
 
@@ -38,6 +40,7 @@ class GameRepository @Inject constructor(
         campeonatoDao.deleteAll()
         hallDaFamaDao.deleteAll()
         rankingGeralDao.deleteAll()
+        estadioDao.deleteAll()
     }
 
     suspend fun criarCampeonato(
@@ -139,9 +142,10 @@ class GameRepository @Inject constructor(
 
         // Simula e persiste a partida do jogador — resultado único
         val resultadoJogador = simulador.simular(
-            partidaId = partidaDoJogador.id,
-            casa = escalacaoFinalCasa,
-            fora = escalacaoFinalFora
+            partidaId     = partidaDoJogador.id,
+            casa          = escalacaoFinalCasa,
+            fora          = escalacaoFinalFora,
+            timeJogadorId = timeJogadorId
         )
         persistirResultado(resultadoJogador)
 
@@ -395,7 +399,9 @@ class GameRepository @Inject constructor(
             pares = pares,
             fase = MotorCampeonato.COPA_FASES[0],
             rodadaIda = MotorCampeonato.rodadaIdaDeFase(0),
-            confrontoIdInicio = 1
+            confrontoIdInicio = 1,
+            ordemGlobalIda   = MotorCampeonato.COPA_ORDEM_GLOBAL[0],
+            ordemGlobalVolta = MotorCampeonato.COPA_ORDEM_GLOBAL[1]
         )
         partidaDao.inserirTodas(partidas)
         return copaId
@@ -511,7 +517,9 @@ class GameRepository @Inject constructor(
                 pares              = novosPares,
                 fase               = proximaFase,
                 rodadaIda          = rodadaIda,
-                confrontoIdInicio  = maxConfId + 1
+                confrontoIdInicio  = maxConfId + 1,
+                ordemGlobalIda     = MotorCampeonato.COPA_ORDEM_GLOBAL[faseIndex * 2],
+                ordemGlobalVolta   = MotorCampeonato.COPA_ORDEM_GLOBAL[faseIndex * 2 + 1]
             )
             partidaDao.inserirTodas(novasPartidas)
             return false
@@ -552,26 +560,20 @@ class GameRepository @Inject constructor(
     }
 
     // ── Atualiza ranking geral após término de uma competição ────────
+    // Chamado ao final de cada temporada: apenas registra +1 temporada jogada e atualiza divisão.
+    // Pontos/V/E/D já foram acumulados em tempo real via atualizarRankingAposPartida.
     suspend fun atualizarRankingGeral(campeonatoId: Int) {
         if (campeonatoId <= 0) return
         val classificacoes = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
         for (cls in classificacoes) {
             val time     = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
-            val existing = rankingGeralDao.buscarPorTime(cls.timeId)
+            val existing = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
             rankingGeralDao.inserirOuAtualizar(
-                RankingGeralEntity(
-                    timeId            = cls.timeId,
+                existing.copy(
                     nomeTime          = time.nome,
                     escudoRes         = time.escudoRes,
                     divisaoAtual      = time.divisao,
-                    pontosAcumulados  = (existing?.pontosAcumulados ?: 0L) + cls.pontos,
-                    temporadasJogadas = (existing?.temporadasJogadas ?: 0) + 1,
-                    copasVencidas     = existing?.copasVencidas ?: 0,
-                    vitorias          = (existing?.vitorias ?: 0) + cls.vitorias,
-                    empates           = (existing?.empates ?: 0) + cls.empates,
-                    derrotas          = (existing?.derrotas ?: 0) + cls.derrotas,
-                    golsPro           = (existing?.golsPro ?: 0) + cls.golsPro,
-                    golsContra        = (existing?.golsContra ?: 0) + cls.golsContra
+                    temporadasJogadas = existing.temporadasJogadas + 1
                 )
             )
         }
@@ -746,6 +748,40 @@ class GameRepository @Inject constructor(
         return resultado
     }
 
+    /** Carrega os dados do adversário (GK + cobradores ordenados) para a disputa interativa. */
+    suspend fun buscarDadosPenaltisAdversario(
+        copaId: Int,
+        voltaPartidaId: Int,
+        timeJogadorId: Int
+    ): DadosPenaltiAdversario {
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaId)
+        val voltaPartida  = todasPartidas.firstOrNull { it.id == voltaPartidaId }
+            ?: error("Volta não encontrada ($voltaPartidaId)")
+        val adversarioId = if (timeJogadorId == voltaPartida.timeCasaId)
+            voltaPartida.timeForaId else voltaPartida.timeCasaId
+        val escAdversario = gerarEscalacaoIA(adversarioId)
+        val naoGoleiros = escAdversario.titulares
+            .filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+            .sortedByDescending { it.jogador.finalizacao }
+        return DadosPenaltiAdversario(
+            gkDefesa    = escAdversario.titulares
+                .firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }?.jogador?.defesa ?: 70,
+            cobradores  = naoGoleiros.map { it.jogador.id to it.jogador.nomeAbreviado },
+            finalizacoes = naoGoleiros.map { it.jogador.finalizacao }
+        )
+    }
+
+    /** Persiste o resultado já construído pela UI interativa e avança a fase da copa. */
+    suspend fun persistirResultadoPenaltisJogador(
+        resultado: ResultadoPenaltis,
+        copaId: Int,
+        anoAtual: Int,
+        voltaPartidaId: Int
+    ) {
+        partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseCopa(copaId, anoAtual)
+    }
+
     private suspend fun gerarEscalacaoIA(timeId: Int): Escalacao {
         val time = timeRepository.buscarPorId(timeId)
             ?: throw IllegalStateException("Time $timeId não encontrado")
@@ -797,11 +833,64 @@ class GameRepository @Inject constructor(
                 campeonatoId, deltaFora.timeId,
                 deltaFora.v, deltaFora.e, deltaFora.d, deltaFora.gp, deltaFora.gc
             )
+
+            // Atualiza ranking geral em tempo real (inclui Copa e ligas)
+            atualizarRankingAposPartida(resultado)
         }
 
         resultado.eventos
             .filter { it.tipo == TipoEvento.LESAO }
             .forEach { _ -> }
+    }
+
+    private suspend fun atualizarRankingAposPartida(resultado: ResultadoPartida) {
+        val casa = timeRepository.buscarEntityPorId(resultado.timeCasaId) ?: return
+        val fora = timeRepository.buscarEntityPorId(resultado.timeForaId) ?: return
+
+        val golsCasa = resultado.golsCasa
+        val golsFora = resultado.golsFora
+        val casaVenceu = golsCasa > golsFora
+        val foraVenceu = golsFora > golsCasa
+        val empate     = golsCasa == golsFora
+
+        val ptsCasa = if (casaVenceu) 3 else if (empate) 1 else 0
+        val ptsFora = if (foraVenceu) 3 else if (empate) 1 else 0
+
+        val existCasa = rankingGeralDao.buscarPorTime(casa.id)
+        rankingGeralDao.inserirOuAtualizar(
+            RankingGeralEntity(
+                timeId            = casa.id,
+                nomeTime          = casa.nome,
+                escudoRes         = casa.escudoRes,
+                divisaoAtual      = casa.divisao,
+                pontosAcumulados  = (existCasa?.pontosAcumulados ?: 0L) + ptsCasa,
+                temporadasJogadas = existCasa?.temporadasJogadas ?: 0,
+                copasVencidas     = existCasa?.copasVencidas ?: 0,
+                vitorias          = (existCasa?.vitorias ?: 0) + if (casaVenceu) 1 else 0,
+                empates           = (existCasa?.empates  ?: 0) + if (empate)     1 else 0,
+                derrotas          = (existCasa?.derrotas ?: 0) + if (foraVenceu) 1 else 0,
+                golsPro           = (existCasa?.golsPro   ?: 0) + golsCasa,
+                golsContra        = (existCasa?.golsContra ?: 0) + golsFora
+            )
+        )
+
+        val existFora = rankingGeralDao.buscarPorTime(fora.id)
+        rankingGeralDao.inserirOuAtualizar(
+            RankingGeralEntity(
+                timeId            = fora.id,
+                nomeTime          = fora.nome,
+                escudoRes         = fora.escudoRes,
+                divisaoAtual      = fora.divisao,
+                pontosAcumulados  = (existFora?.pontosAcumulados ?: 0L) + ptsFora,
+                temporadasJogadas = existFora?.temporadasJogadas ?: 0,
+                copasVencidas     = existFora?.copasVencidas ?: 0,
+                vitorias          = (existFora?.vitorias ?: 0) + if (foraVenceu) 1 else 0,
+                empates           = (existFora?.empates  ?: 0) + if (empate)     1 else 0,
+                derrotas          = (existFora?.derrotas ?: 0) + if (casaVenceu) 1 else 0,
+                golsPro           = (existFora?.golsPro   ?: 0) + golsFora,
+                golsContra        = (existFora?.golsContra ?: 0) + golsCasa
+            )
+        )
     }
 
     private suspend fun buscarCampeonatoIdDaPartida(partidaId: Int): Int? =

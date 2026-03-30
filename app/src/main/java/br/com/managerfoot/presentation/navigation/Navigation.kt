@@ -24,8 +24,10 @@ sealed class Rota(val caminho: String) {
     object Dashboard       : Rota("dashboard/{timeId}") {
         fun comTimeId(id: Int) = "dashboard/$id"
     }
-    object Escalacao       : Rota("escalacao/{timeId}") {
-        fun comTimeId(id: Int) = "escalacao/$id"
+    object Escalacao       : Rota("escalacao/{timeId}?campeonatoId={campeonatoId}&rodada={rodada}&adversarioId={adversarioId}") {
+        fun comTimeId(id: Int) = "escalacao/$id?campeonatoId=-1&rodada=-1&adversarioId=-1"
+        fun preJogo(timeId: Int, campeonatoId: Int, rodada: Int, adversarioId: Int) =
+            "escalacao/$timeId?campeonatoId=$campeonatoId&rodada=$rodada&adversarioId=$adversarioId"
     }
     object Tabela          : Rota("tabela/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{timeJogadorId}") {
         fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, timeId: Int) =
@@ -54,6 +56,9 @@ sealed class Rota(val caminho: String) {
     object RankingGeral    : Rota("ranking_geral")
     object EstatisticasTime : Rota("estatisticas_time/{timeId}") {
         fun com(timeId: Int) = "estatisticas_time/$timeId"
+    }
+    object Estadio          : Rota("estadio/{timeId}") {
+        fun com(timeId: Int) = "estadio/$timeId"
     }
 }
 
@@ -99,6 +104,9 @@ fun ManagerFootNavGraph() {
                 timeId = timeId,
                 vm = dashVm,
                 onIrParaEscalacao   = { navController.navigate(Rota.Escalacao.comTimeId(timeId)) },
+                onIrParaPreJogo     = { campId, rod, advId ->
+                    navController.navigate(Rota.Escalacao.preJogo(timeId, campId, rod, advId))
+                },
                 onIrParaMercado     = { navController.navigate(Rota.Mercado.comTimeId(timeId)) },
                 onIrParaTabela      = { navController.navigate(Rota.Tabela.com(
                     campAId = saveState?.campeonatoAId ?: -1,
@@ -123,17 +131,44 @@ fun ManagerFootNavGraph() {
                     if (copaId > 0) navController.navigate(Rota.CopaChaveamento.com(copaId, timeId))
                 },
                 onIrParaRankingGeral = { navController.navigate(Rota.RankingGeral.caminho) },
-                onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) }
+                onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) },
+                onIrParaEstadio      = { navController.navigate(Rota.Estadio.com(timeId)) }
             )
         }
 
-        // Tela de escalação
+        // Tela de escalação (modo normal e modo pré-jogo)
         composable(
             route = Rota.Escalacao.caminho,
-            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+            arguments = listOf(
+                navArgument("timeId")      { type = NavType.IntType },
+                navArgument("campeonatoId") { type = NavType.IntType; defaultValue = -1 },
+                navArgument("rodada")       { type = NavType.IntType; defaultValue = -1 },
+                navArgument("adversarioId") { type = NavType.IntType; defaultValue = -1 }
+            )
         ) { backStack ->
-            val timeId = backStack.arguments!!.getInt("timeId")
-            EscalacaoScreen(timeId = timeId)
+            val timeId       = backStack.arguments!!.getInt("timeId")
+            val campeonatoId = backStack.arguments!!.getInt("campeonatoId")
+            val rodada       = backStack.arguments!!.getInt("rodada")
+            val adversarioId = backStack.arguments!!.getInt("adversarioId")
+            val modoPreJogo  = campeonatoId > 0
+            if (modoPreJogo) {
+                val dashboardEntry = remember(navController) {
+                    try { navController.getBackStackEntry(Rota.Dashboard.comTimeId(timeId)) }
+                    catch (e: Exception) { null }
+                }
+                val dashVm: DashboardViewModel? = dashboardEntry?.let { hiltViewModel(it) }
+                EscalacaoScreen(
+                    timeId          = timeId,
+                    modoPreJogo     = true,
+                    adversarioId    = adversarioId,
+                    onIniciarPartida = {
+                        dashVm?.simularProximaPartida(campeonatoId, rodada)
+                        navController.popBackStack()
+                    }
+                )
+            } else {
+                EscalacaoScreen(timeId = timeId)
+            }
         }
 
         // Tabela de classificação
@@ -252,6 +287,15 @@ fun ManagerFootNavGraph() {
         ) { backStack ->
             val timeId = backStack.arguments!!.getInt("timeId")
             EstatisticasTimeScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Estádio
+        composable(
+            route = Rota.Estadio.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            EstadioScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
         }
     }
 }

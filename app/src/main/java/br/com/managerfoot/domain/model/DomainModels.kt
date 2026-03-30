@@ -70,7 +70,7 @@ data class Jogador(
 data class Escalacao(
     val time: Time,
     val titulares: List<JogadorNaEscalacao>,   // exatamente 11
-    val reservas: List<JogadorNaEscalacao>      // até 7
+    val reservas: List<JogadorNaEscalacao>      // até 11
 ) {
     val formacaoEfetiva: String get() = calcularFormacao(titulares)
 
@@ -102,6 +102,13 @@ data class ResultadoPenaltis(
     val vencedorId: Int,
     val timeCasaId: Int,
     val timeForaId: Int
+)
+
+/** Dados do adversário para a disputa interativa de pênaltis no lado da UI. */
+data class DadosPenaltiAdversario(
+    val gkDefesa: Int,
+    val cobradores: List<Pair<Int, String>>,   // (jogadorId, nomeAbrev) ordenados por finalizacao desc
+    val finalizacoes: List<Int>
 )
 
 data class ResultadoPartida(

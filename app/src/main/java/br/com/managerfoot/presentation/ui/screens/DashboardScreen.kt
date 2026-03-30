@@ -18,6 +18,7 @@ import br.com.managerfoot.presentation.viewmodel.DashboardViewModel
 fun DashboardScreen(
     timeId: Int,
     onIrParaEscalacao: () -> Unit,
+    onIrParaPreJogo: (campeonatoId: Int, rodada: Int, adversarioId: Int) -> Unit,
     onIrParaMercado: () -> Unit,
     onIrParaTabela: () -> Unit,
     onIrParaArtilheiros: () -> Unit,
@@ -28,6 +29,7 @@ fun DashboardScreen(
     onIrParaCopaChaveamento: () -> Unit = {},
     onIrParaRankingGeral: () -> Unit = {},
     onIrParaEstatisticasTime: () -> Unit = {},
+    onIrParaEstadio: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsState()
@@ -39,6 +41,8 @@ fun DashboardScreen(
     val saveState by vm.saveState.collectAsState()
     val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsState()
     val penaltisResultado by vm.penaltisResultado.collectAsState()
+    val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsState()
+    val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -58,9 +62,9 @@ fun DashboardScreen(
             escalacaoJogador = escalacaoSimulacao,
             isTimeCasaOJogador = isTimeCasaOJogador,
             penaltisResultado = penaltisResultado,
-            onPenaltisConfirmados = { cobradores, gkDefesa ->
-                vm.simularPenaltisJogador(cobradores, gkDefesa)
-            },
+            dadosPenaltisAdversario = dadosPenaltisAdversario,
+            penaltisInterativoConcluido = penaltisInterativoConcluido,
+            onPenaltisConfirmados = { resultado -> vm.finalizarPenaltisJogador(resultado) },
             onSimulacaoFinalizada = { vm.fecharSimulacao() }
         )
         return
@@ -68,7 +72,7 @@ fun DashboardScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 80.dp)
+        contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         item {
             time?.let { TimeHeaderCard(it, Modifier.padding(16.dp)) }
@@ -136,9 +140,14 @@ fun DashboardScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
-                                    vm.simularProximaPartida(
-                                        campeonatoId = proximaPartida!!.campeonatoId,
-                                        rodada = proximaPartida!!.rodada
+                                    val adversarioId = if (proximaPartida!!.timeCasaId == (saveState?.timeIdJogador ?: -1))
+                                        proximaPartida!!.timeForaId
+                                    else
+                                        proximaPartida!!.timeCasaId
+                                    onIrParaPreJogo(
+                                        proximaPartida!!.campeonatoId,
+                                        proximaPartida!!.rodada,
+                                        adversarioId
                                     )
                                 },
                                 enabled = uiState != DashboardUiState.Simulando,
@@ -147,7 +156,7 @@ fun DashboardScreen(
                                 if (uiState == DashboardUiState.Simulando) {
                                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Text("Simular partida")
+                                    Text("Próxima Partida")
                                 }
                             }
                             OutlinedButton(onClick = onIrParaEscalacao, modifier = Modifier.weight(1f)) {
@@ -253,6 +262,7 @@ fun DashboardScreen(
                 OutlinedButton(onClick = onIrParaConfronto, modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") }
                 OutlinedButton(onClick = onIrParaMercado, modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") }
                 OutlinedButton(onClick = onIrParaFinancas, modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") }
+                OutlinedButton(onClick = onIrParaEstadio, modifier = Modifier.fillMaxWidth()) { Text("Estádio") }
                 OutlinedButton(onClick = { vm.fecharMes() }, modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") }
             }
         }

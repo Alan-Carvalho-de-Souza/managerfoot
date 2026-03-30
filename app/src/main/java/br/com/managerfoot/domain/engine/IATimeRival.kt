@@ -110,11 +110,19 @@ object IATimeRival {
         return carencias
     }
 
-    // Parseia "4-4-2" -> [1, 4, 4, 2]
+    // Parseia formação normalizando para [1(GL), nDef, nMeio, nAtk].
+    // Formações com múltiplos grupos centrais (ex: 4-3-2-1, 4-1-2-1-2) têm
+    // todos os grupos intermediários somados como MEIO.
     private fun parseFormacao(formacao: String): List<Int> {
         return try {
             val partes = formacao.split("-").map { it.toInt() }
-            listOf(1) + partes // goleiro implícito
+            val nDef  = partes.first()
+            val nAtk  = partes.last()
+            val nMeio = when {
+                partes.size >= 3 -> partes.subList(1, partes.size - 1).sum()
+                else             -> partes.getOrElse(1) { 4 }
+            }
+            listOf(1, nDef, nMeio, nAtk)
         } catch (e: Exception) {
             listOf(1, 4, 4, 2) // fallback
         }

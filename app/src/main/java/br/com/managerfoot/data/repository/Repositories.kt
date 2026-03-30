@@ -1,5 +1,6 @@
 package br.com.managerfoot.data.repository
 
+import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.JogadorDao
 import br.com.managerfoot.data.dao.TimeDao
 import br.com.managerfoot.data.database.entities.*
@@ -172,4 +173,66 @@ class JogadorRepository @Inject constructor(
         escalarStatus = escalarStatus,
         posicaoEscalado = posicaoEscalado
     )
+}
+
+// ─────────────────────────────────────────────────
+//  EstadioRepository
+// ─────────────────────────────────────────────────
+@Singleton
+class EstadioRepository @Inject constructor(
+    private val estadioDao: EstadioDao,
+    private val timeDao: TimeDao
+) {
+    /** Retorna o EstadioEntity do time, criando um registro inicial se necessário. */
+    suspend fun buscarOuCriar(timeId: Int): EstadioEntity {
+        estadioDao.buscarPorTime(timeId)?.let { return it }
+        val capacidade = timeDao.buscarPorId(timeId)?.estadioCapacidade ?: 0
+        val novo = EstadioEntity.inicializar(timeId, capacidade)
+        estadioDao.salvar(novo)
+        return novo
+    }
+
+    /**
+     * Faz o upgrade de um setor (0=arquibancada, 1=cadeira, 2=camarote).
+     * Debita o custo do saldo do time e atualiza estadioCapacidade no TimeEntity.
+     * Retorna false se o saldo for insuficiente ou o setor já estiver no nível máximo.
+     */
+    suspend fun upgradeSetor(timeId: Int, setor: Int): Boolean {
+        val estadio = buscarOuCriar(timeId)
+        val nivelAtual = when (setor) {
+            0 -> estadio.nivelArquibancada
+            1 -> estadio.nivelCadeira
+            2 -> estadio.nivelCamarote
+            else -> return false
+        }
+        if (nivelAtual >= 10) return false
+
+        val custoArray = when (setor) {
+            0 -> EstadioEntity.CUSTO_ARQUIBANCADA
+            1 -> EstadioEntity.CUSTO_CADEIRA
+            2 -> EstadioEntity.CUSTO_CAMAROTE
+            else -> return false
+        }
+        val custo = custoArray[nivelAtual]
+
+        val saldoAtual = timeDao.buscarPorId(timeId)?.saldo ?: 0L
+        if (saldoAtual < custo) return false
+
+        // Debita custo
+        timeDao.debitarSaldo(timeId, custo)
+
+        // Atualiza nível
+        val atualizado = when (setor) {
+            0 -> estadio.copy(nivelArquibancada = nivelAtual + 1)
+            1 -> estadio.copy(nivelCadeira      = nivelAtual + 1)
+            2 -> estadio.copy(nivelCamarote     = nivelAtual + 1)
+            else -> estadio
+        }
+        estadioDao.salvar(atualizado)
+
+        // Sincroniza estadioCapacidade no TimeEntity
+        timeDao.ampliarEstadio(timeId, atualizado.capacidadeTotal)
+
+        return true
+    }
 }
