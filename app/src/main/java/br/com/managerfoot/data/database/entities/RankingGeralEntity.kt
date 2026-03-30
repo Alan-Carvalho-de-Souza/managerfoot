@@ -23,6 +23,7 @@ data class RankingGeralEntity(
     val pontosAcumulados: Long = 0,
     val temporadasJogadas: Int = 0,
     val copasVencidas: Int = 0,
+    val titulosNacionais: Int = 0,
     val vitorias: Int = 0,
     val empates: Int = 0,
     val derrotas: Int = 0,

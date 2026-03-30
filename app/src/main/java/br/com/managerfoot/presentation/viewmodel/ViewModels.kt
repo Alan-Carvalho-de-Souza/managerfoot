@@ -54,11 +54,16 @@ class InicioViewModel @Inject constructor(
     fun iniciarSelecionarTime() = viewModelScope.launch {
         _uiState.value = InicioUiState.Carregando
         try {
-            // Sempre recarrega o seed para garantir que todos os times (A, B, C, D) estejam visíveis,
-            // mesmo que o banco tenha dados de uma versão anterior do jogo.
-            val seed = seedDataSource.carregar()
-            timeDao.inserirTodos(seed.times)
-            jogadorDao.inserirTodos(seed.jogadores)
+            // Só insere o seed quando o banco está vazio (nenhum time cadastrado).
+            // Se já houver times (jogo em andamento), preserva todos os dados para não
+            // corromper campeonatos, partidas e progresso do jogo atual caso o usuário
+            // feche o app antes de confirmar a seleção do novo time.
+            val timesExistentes = timeRepository.observeTodos().first()
+            if (timesExistentes.isEmpty()) {
+                val seed = seedDataSource.carregar()
+                timeDao.inserirTodos(seed.times)
+                jogadorDao.inserirTodos(seed.jogadores)
+            }
             _uiState.value = InicioUiState.SelecionandoTime
         } catch (e: Exception) {
             _uiState.value = InicioUiState.Erro(e.message ?: "Erro ao carregar clubes")

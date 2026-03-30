@@ -560,20 +560,24 @@ class GameRepository @Inject constructor(
     }
 
     // ── Atualiza ranking geral após término de uma competição ────────
-    // Chamado ao final de cada temporada: apenas registra +1 temporada jogada e atualiza divisão.
+    // Chamado ao final de cada temporada: registra +1 temporada jogada, atualiza divisão
+    // e contabiliza +1 título nacional para o campeão (1º colocado).
     // Pontos/V/E/D já foram acumulados em tempo real via atualizarRankingAposPartida.
     suspend fun atualizarRankingGeral(campeonatoId: Int) {
         if (campeonatoId <= 0) return
         val classificacoes = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
+        val campeaoTimeId = classificacoes.firstOrNull()?.timeId
         for (cls in classificacoes) {
             val time     = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
             val existing = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
+            val ehCampeao = cls.timeId == campeaoTimeId
             rankingGeralDao.inserirOuAtualizar(
                 existing.copy(
                     nomeTime          = time.nome,
                     escudoRes         = time.escudoRes,
                     divisaoAtual      = time.divisao,
-                    temporadasJogadas = existing.temporadasJogadas + 1
+                    temporadasJogadas = existing.temporadasJogadas + 1,
+                    titulosNacionais  = existing.titulosNacionais + if (ehCampeao) 1 else 0
                 )
             )
         }

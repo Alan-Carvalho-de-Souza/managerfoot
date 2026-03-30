@@ -238,15 +238,28 @@ fun PartidaSimulacaoScreen(
         // Segundo tempo (46-90 + acrÃ©scimo)
         faseAtual = "2º TEMPO"
         val limiteT2 = 90 + acrescimo2Tempo
+        // IDs dos jogadores substituídos pelo time do jogador (intervalo + lesão 1º tempo)
+        // Garante que eventos gerados antes das substituições não apareçam após a saída
+        val substituidosSaiIds = substituicoes.map { it.sai.jogador.id }.toSet()
         for (minuto in 46..limiteT2) {
             minutoAtual = minuto
 
             for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto > 45 }) {
-                eventosExibidos.add(0, ev)
+                // Contagem do placar sempre ocorre, independente de quem é o autor
                 if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
                     if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
                     else golsForaAtual++
                 }
+
+                // Filtra eventos de jogadores já substituídos (do time do jogador).
+                // O engine gera cartões/lesões/gols para todos os titulares iniciais antes de
+                // conhecer os minutos de substituição, por isso podem aparecer após a saída.
+                // O placar já foi atualizado acima antes deste ponto, então o `continue`
+                // apenas suprime a exibição no feed — o resultado da partida não é afetado.
+                val ehSubstituidoDoTimeJogador = ev.timeId == jogadorTimeId && ev.jogadorId in substituidosSaiIds
+                if (ehSubstituidoDoTimeJogador) continue
+
+                eventosExibidos.add(0, ev)
                 // Cartão vermelho: remove o expulso dos titulares
                 if (ev.tipo == TipoEvento.CARTAO_VERMELHO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
                     titularesAtuais.removeIf { it.jogador.id == ev.jogadorId }

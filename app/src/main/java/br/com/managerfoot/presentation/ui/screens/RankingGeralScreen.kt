@@ -78,6 +78,7 @@ fun RankingGeralScreen(
                 Text("E",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("D",   modifier = Modifier.width(26.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text("🏆",  modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text("🥇",  modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             }
             HorizontalDivider()
 
@@ -153,6 +154,15 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity) {
             textAlign = TextAlign.Center,
             fontWeight = if (entry.copasVencidas > 0) FontWeight.Bold else FontWeight.Normal,
             color = if (entry.copasVencidas > 0) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            if (entry.titulosNacionais > 0) "${entry.titulosNacionais}" else "—",
+            modifier = Modifier.width(28.dp),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            fontWeight = if (entry.titulosNacionais > 0) FontWeight.Bold else FontWeight.Normal,
+            color = if (entry.titulosNacionais > 0) MaterialTheme.colorScheme.secondary
                     else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

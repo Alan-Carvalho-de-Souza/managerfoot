@@ -546,15 +546,17 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 if (golsFora > golsCasa + maxGolsCasaRestantes) break
             }
 
-            // Segurança: máximo 30 cobranças totais
-            if (idx >= 15) break
+            // Segurança: máximo 50 cobranças para evitar loop infinito (probabilidade ínfima)
+            if (idx >= 50) break
         }
 
-        // Se ainda empatado após 15 rondas, desempate por sorteio
+        // Se ainda empatado após o limite de segurança, desempate por sorteio.
+        // Incrementa o gol do vencedor para garantir que o placar reflita o resultado
+        // e evitar inconsistências na determinação do vencedor ao persistir na copa.
         val vencedorId = when {
             golsCasa > golsFora -> timeCasaId
             golsFora > golsCasa -> timeForaId
-            else -> if (rng.nextBoolean()) timeCasaId else timeForaId
+            else -> if (rng.nextBoolean()) { golsCasa++; timeCasaId } else { golsFora++; timeForaId }
         }
 
         return ResultadoPenaltis(
