@@ -50,9 +50,8 @@ fun TeamBadge(
             painter = painterResource(id = resId),
             contentDescription = nome,
             modifier = modifier
-                .size(size)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
+                .size(size),
+            contentScale = ContentScale.Fit
         )
     } else {
         // Fallback: círculo colorido com iniciais
@@ -124,14 +123,7 @@ fun TimeHeaderCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Box {
-                    TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 56.dp)
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), CircleShape)
-                    )
-                }
+                TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 56.dp)
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = time.nome,
