@@ -12,8 +12,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.managerfoot.presentation.ui.components.*
@@ -49,6 +50,9 @@ fun DashboardScreen(
     val penaltisResultado by vm.penaltisResultado.collectAsStateWithLifecycle()
     val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsStateWithLifecycle()
     val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsStateWithLifecycle()
+    val posicaoNaTabela by vm.posicaoNaTabela.collectAsStateWithLifecycle()
+
+    var abaAtual by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -79,12 +83,14 @@ fun DashboardScreen(
     Scaffold(
         bottomBar = {
             DashboardBottomBar(
-                onIrParaEscalacao  = onIrParaEscalacao,
-                onIrParaTabela     = onIrParaTabela,
-                onIrParaMercado    = onIrParaMercado
+                abaAtual          = abaAtual,
+                onAbaChanged      = { abaAtual = it },
+                onIrParaEscalacao = onIrParaEscalacao,
+                onIrParaTabela    = onIrParaTabela
             )
         }
     ) { ip ->
+        if (abaAtual == 0) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = ip.calculateBottomPadding() + 32.dp)
@@ -94,6 +100,7 @@ fun DashboardScreen(
                     TimeHeaderCard(
                         it,
                         Modifier.padding(16.dp),
+                        posicao = posicaoNaTabela,
                         rodadaAtual = proximaPartida?.rodada ?: 0
                     )
                 }
@@ -228,40 +235,38 @@ fun DashboardScreen(
             }
         }
 
-        item {
-            SecaoHeader("Menu")
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(onClick = onIrParaTabela, modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") }
-                OutlinedButton(onClick = onIrParaArtilheiros, modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") }
-                OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") }
-                OutlinedButton(onClick = onIrParaCalendario, modifier = Modifier.fillMaxWidth()) { Text("Calendário") }
-                OutlinedButton(onClick = onIrParaCopaChaveamento, modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") }
-                OutlinedButton(onClick = onIrParaRankingGeral, modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") }
-                OutlinedButton(onClick = onIrParaHallDaFama, modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") }
-                OutlinedButton(onClick = onIrParaConfronto, modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") }
-                OutlinedButton(onClick = onIrParaMercado, modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") }
-                OutlinedButton(onClick = onIrParaFinancas, modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") }
-                OutlinedButton(onClick = onIrParaEstadio, modifier = Modifier.fillMaxWidth()) { Text("Estádio") }
-                OutlinedButton(onClick = { vm.fecharMes() }, modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") }
-            }
+        } // end LazyColumn
+        } else {
+            MenuAba(
+                padding                  = ip,
+                onIrParaTabela           = onIrParaTabela,
+                onIrParaArtilheiros      = onIrParaArtilheiros,
+                onIrParaEstatisticasTime = onIrParaEstatisticasTime,
+                onIrParaCalendario       = onIrParaCalendario,
+                onIrParaCopaChaveamento  = onIrParaCopaChaveamento,
+                onIrParaRankingGeral     = onIrParaRankingGeral,
+                onIrParaHallDaFama       = onIrParaHallDaFama,
+                onIrParaConfronto        = onIrParaConfronto,
+                onIrParaMercado          = onIrParaMercado,
+                onIrParaFinancas         = onIrParaFinancas,
+                onIrParaEstadio          = onIrParaEstadio,
+                onAvancarMes             = { vm.fecharMes() }
+            )
         }
-    } // end LazyColumn
     } // end Scaffold
 }
 
 @Composable
 private fun DashboardBottomBar(
+    abaAtual: Int,
+    onAbaChanged: (Int) -> Unit,
     onIrParaEscalacao: () -> Unit,
-    onIrParaTabela: () -> Unit,
-    onIrParaMercado: () -> Unit
+    onIrParaTabela: () -> Unit
 ) {
     NavigationBar(tonalElevation = 0.dp) {
         NavigationBarItem(
-            selected = true,
-            onClick  = {},
+            selected = abaAtual == 0,
+            onClick  = { onAbaChanged(0) },
             icon     = { Icon(Icons.Filled.Home, contentDescription = "Início") },
             label    = { Text("Início") }
         )
@@ -278,10 +283,51 @@ private fun DashboardBottomBar(
             label    = { Text("Tabela") }
         )
         NavigationBarItem(
-            selected = false,
-            onClick  = onIrParaMercado,
-            icon     = { Icon(Icons.Filled.ShoppingCart, contentDescription = "Mercado") },
-            label    = { Text("Mercado") }
+            selected = abaAtual == 1,
+            onClick  = { onAbaChanged(1) },
+            icon     = { Icon(Icons.Filled.Menu, contentDescription = "Menu") },
+            label    = { Text("Menu") }
         )
+    }
+}
+
+@Composable
+private fun MenuAba(
+    padding: PaddingValues,
+    onIrParaTabela: () -> Unit,
+    onIrParaArtilheiros: () -> Unit,
+    onIrParaEstatisticasTime: () -> Unit,
+    onIrParaCalendario: () -> Unit,
+    onIrParaCopaChaveamento: () -> Unit,
+    onIrParaRankingGeral: () -> Unit,
+    onIrParaHallDaFama: () -> Unit,
+    onIrParaConfronto: () -> Unit,
+    onIrParaMercado: () -> Unit,
+    onIrParaFinancas: () -> Unit,
+    onIrParaEstadio: () -> Unit,
+    onAvancarMes: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 16.dp,
+            bottom = padding.calculateBottomPadding() + 32.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item { OutlinedButton(onClick = onIrParaTabela,           modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") } }
+        item { OutlinedButton(onClick = onIrParaArtilheiros,      modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") } }
+        item { OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") } }
+        item { OutlinedButton(onClick = onIrParaCalendario,       modifier = Modifier.fillMaxWidth()) { Text("Calendário") } }
+        item { OutlinedButton(onClick = onIrParaCopaChaveamento,  modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") } }
+        item { OutlinedButton(onClick = onIrParaRankingGeral,     modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") } }
+        item { OutlinedButton(onClick = onIrParaHallDaFama,       modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") } }
+        item { OutlinedButton(onClick = onIrParaConfronto,        modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") } }
+        item { OutlinedButton(onClick = onIrParaMercado,          modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") } }
+        item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }
+        item { OutlinedButton(onClick = onIrParaEstadio,          modifier = Modifier.fillMaxWidth()) { Text("Estádio") } }
+        item { OutlinedButton(onClick = onAvancarMes,             modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") } }
     }
 }

@@ -30,7 +30,14 @@ object MotorCampeonato {
     // Copa Fase 0 ida fica após Brasileirão R3 (30), e assim por diante.
     // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em N*10+5.
     // Índices: 0=F0-ida, 1=F0-volta, 2=F1-ida, 3=F1-volta, ... 11=Final-volta
-    val COPA_ORDEM_GLOBAL = intArrayOf(35, 65, 95, 125, 155, 185, 215, 245, 275, 305, 335, 365)
+    // Copa encaixa entre as rodadas do Brasileirão (ordemGlobal = rodada*10):
+    //   Primeira Fase ─ Fev:  antes de R1 (10)
+    //   Segunda Fase  ─ Mar:  entre R1 (10) e R4 (40)
+    //   Oitavas       ─ Mai:  entre R9 (90) e R12 (120)
+    //   Quartas       ─ Jul:  entre R17 (170) e R19 (190)
+    //   Semifinal     ─ Set:  entre R24 (240) e R26 (260)
+    //   Final         ─ Nov:  entre R33 (330) e R35 (350)
+    val COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
 
     fun proximaFaseCopa(faseAtual: String): String? {
         val idx = COPA_FASES.indexOf(faseAtual)

@@ -543,7 +543,7 @@ fun MatchCard(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("▶ Simular Partida", fontWeight = FontWeight.SemiBold)
+                    Text("▶ Próxima Partida", fontWeight = FontWeight.SemiBold)
                 }
             }
             if (onEscalacao != null) {

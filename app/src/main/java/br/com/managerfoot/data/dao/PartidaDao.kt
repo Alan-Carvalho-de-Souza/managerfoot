@@ -254,6 +254,7 @@ interface PartidaDao {
     @Query("""
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada
@@ -262,7 +263,7 @@ interface PartidaDao {
         INNER JOIN times tc ON p.timeCasaId = tc.id
         INNER JOIN times tf ON p.timeForaId = tf.id
         WHERE p.timeCasaId = :timeId OR p.timeForaId = :timeId
-        ORDER BY p.jogada ASC, p.rodada ASC
+        ORDER BY p.ordemGlobal ASC
     """)
     fun observeCalendario(timeId: Int): Flow<List<CalendarioPartidaDto>>
 
@@ -386,6 +387,8 @@ data class CalendarioPartidaDto(
     val campeonatoId: Int,
     val nomeCampeonato: String,
     val rodada: Int,
+    val fase: String?,
+    val ordemGlobal: Int,
     val timeCasaId: Int,
     val nomeCasa: String,
     val escudoCasa: String,

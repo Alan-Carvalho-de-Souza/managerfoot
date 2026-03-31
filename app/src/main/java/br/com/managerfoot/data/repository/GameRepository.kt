@@ -85,6 +85,12 @@ class GameRepository @Inject constructor(
     suspend fun buscarClassificacaoDoTime(campeonatoId: Int, timeId: Int) =
         classificacaoDao.buscarPosicao(campeonatoId, timeId)
 
+    suspend fun buscarPosicaoNaTabela(campeonatoId: Int, timeId: Int): Int {
+        val tabela = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
+        val idx = tabela.indexOfFirst { it.timeId == timeId }
+        return if (idx >= 0) idx + 1 else 0
+    }
+
     suspend fun buscarHistoricoDoTime(timeId: Int) =
         classificacaoDao.buscarHistoricoDoTime(timeId)
 

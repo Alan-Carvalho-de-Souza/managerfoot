@@ -244,6 +244,9 @@ class DashboardViewModel @Inject constructor(
     private val _penaltisInterativoConcluido = MutableStateFlow(false)
     val penaltisInterativoConcluido: StateFlow<Boolean> = _penaltisInterativoConcluido.asStateFlow()
 
+    private val _posicaoNaTabela = MutableStateFlow(0)
+    val posicaoNaTabela: StateFlow<Int> = _posicaoNaTabela.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
         // Carrega todos os times para resolver nomes
         launch {
@@ -263,6 +266,7 @@ class DashboardViewModel @Inject constructor(
             timeId, listOf(campeonatoId, copaIdInicial).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
+        _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
         _uiState.value = DashboardUiState.Pronto
     }
 
@@ -338,6 +342,7 @@ class DashboardViewModel @Inject constructor(
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
             save.timeIdJogador, listOf(save.campeonatoId, save.copaId).filter { it > 0 }
         )
+        _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(save.campeonatoId, save.timeIdJogador)
         _resultadoSimulado.value = null
         _escalacaoSimulacao.value = null
         _penaltisResultado.value = null

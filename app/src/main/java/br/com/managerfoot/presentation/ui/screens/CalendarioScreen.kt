@@ -33,8 +33,23 @@ fun CalendarioScreen(
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
-    val proximos  = remember(partidas) { partidas.filter { !it.jogada } }
-    val realizados = remember(partidas) { partidas.filter { it.jogada }.reversed() }
+    val proximos = remember(partidas) {
+        partidas.filter { !it.jogada }.sortedWith(
+            compareBy(
+                { mesDePartida(it.nomeCampeonato, it.rodada, it.fase) },
+                { it.ordemGlobal }
+            )
+        )
+    }
+    val realizados = remember(partidas) {
+        partidas.filter { it.jogada }.sortedWith(
+            Comparator<CalendarioPartidaDto> { a, b ->
+                val mA = mesDePartida(a.nomeCampeonato, a.rodada, a.fase)
+                val mB = mesDePartida(b.nomeCampeonato, b.rodada, b.fase)
+                if (mA != mB) mB - mA else b.ordemGlobal - a.ordemGlobal
+            }
+        )
+    }
 
     var tabSelecionada by remember { mutableIntStateOf(0) }
     val tabs = listOf("Próximos (${proximos.size})", "Realizados (${realizados.size})")
@@ -80,12 +95,35 @@ fun CalendarioScreen(
                     )
                 }
             } else {
+                val itensList = remember(lista) {
+                    buildList {
+                        var mesPrev = -1
+                        lista.forEach { p ->
+                            val mes = mesDePartida(p.nomeCampeonato, p.rodada, p.fase)
+                            if (mes != mesPrev) {
+                                add(CalendarioItem.Header(mes))
+                                mesPrev = mes
+                            }
+                            add(CalendarioItem.Jogo(p))
+                        }
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 8.dp, horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(lista, key = { it.partidaId }) { partida ->
-                        CalendarioCard(partida = partida, timeJogadorId = timeId)
+                    items(itensList, key = { item ->
+                        when (item) {
+                            is CalendarioItem.Header -> "mes_${item.mes}"
+                            is CalendarioItem.Jogo   -> "jogo_${item.partida.partidaId}"
+                        }
+                    }) { item ->
+                        when (item) {
+                            is CalendarioItem.Header -> MesHeader(NOMES_MESES[item.mes])
+                            is CalendarioItem.Jogo   -> CalendarioCard(
+                                partida = item.partida, timeJogadorId = timeId
+                            )
+                        }
                     }
                 }
             }
@@ -123,7 +161,7 @@ private fun CalendarioCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Rodada ${partida.rodada}",
+                    text = partida.fase ?: "Rodada ${partida.rodada}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -196,3 +234,53 @@ private fun CalendarioCard(
         }
     }
 }
+
+// ─────────────────────────────────────────────
+//  Cabeçalho de mês
+// ─────────────────────────────────────────────
+@Composable
+private fun MesHeader(nome: String) {
+    Text(
+        text = nome.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 2.dp)
+    )
+}
+
+// ─────────────────────────────────────────────
+//  Tipos para lista agrupada
+// ─────────────────────────────────────────────
+private sealed class CalendarioItem {
+    data class Header(val mes: Int) : CalendarioItem()
+    data class Jogo(val partida: CalendarioPartidaDto) : CalendarioItem()
+}
+
+// ─────────────────────────────────────────────
+//  Mapeamento de mês
+//  • Copa do Brasil: fevereiro (Prim. Fase) → novembro (Final)
+//  • Brasileirão:   março (R1) → dezembro (R37-38), 38 rodadas / 10 meses
+// ─────────────────────────────────────────────
+private val NOMES_MESES = listOf(
+    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+)
+
+private fun mesDePartida(nomeCampeonato: String, rodada: Int, fase: String?): Int =
+    if (nomeCampeonato.contains("Copa", ignoreCase = true)) {
+        when (fase) {
+            "Primeira Fase" -> 2
+            "Segunda Fase"  -> 3
+            "Oitavas"       -> 5
+            "Quartas"       -> 7
+            "Semi"          -> 9
+            "Final"         -> 11
+            else            -> 5
+        }
+    } else {
+        // 38 rodadas de março (3) a dezembro (12) = 10 meses
+        (3 + ((rodada - 1) * 10 / 38)).coerceIn(3, 12)
+    }
