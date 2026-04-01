@@ -97,12 +97,19 @@ fun DashboardScreen(
         ) {
             item {
                 time?.let {
+                    // Deriva o mês do chip a partir do ordemGlobal da próxima partida (ou
+                    // do último resultado se a temporada já acabou), evitando depender do
+                    // mesAtual do DataStore que só avançava via botão removido.
+                    val ordemRef = (proximaPartida ?: ultimosResultados.firstOrNull())?.ordemGlobal ?: 0
+                    val mesChip = if (ordemRef > 0)
+                        (1 + (ordemRef.coerceAtLeast(1) - 1) * 11 / 379).coerceIn(1, 12)
+                    else saveState?.mesAtual ?: 0
                     TimeHeaderCard(
                         it,
                         Modifier.padding(16.dp),
                         posicao = posicaoNaTabela,
                         rodadaAtual = proximaPartida?.rodada ?: 0,
-                        mes = saveState?.mesAtual ?: 0,
+                        mes = mesChip,
                         ano = saveState?.anoAtual ?: 0
                     )
                 }
