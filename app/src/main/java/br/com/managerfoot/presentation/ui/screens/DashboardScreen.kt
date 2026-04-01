@@ -101,7 +101,9 @@ fun DashboardScreen(
                         it,
                         Modifier.padding(16.dp),
                         posicao = posicaoNaTabela,
-                        rodadaAtual = proximaPartida?.rodada ?: 0
+                        rodadaAtual = proximaPartida?.rodada ?: 0,
+                        mes = saveState?.mesAtual ?: 0,
+                        ano = saveState?.anoAtual ?: 0
                     )
                 }
             }
@@ -317,17 +319,16 @@ private fun MenuAba(
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item { OutlinedButton(onClick = onIrParaTabela,           modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") } }
         item { OutlinedButton(onClick = onIrParaArtilheiros,      modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") } }
-        item { OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") } }
         item { OutlinedButton(onClick = onIrParaCalendario,       modifier = Modifier.fillMaxWidth()) { Text("Calendário") } }
         item { OutlinedButton(onClick = onIrParaCopaChaveamento,  modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") } }
-        item { OutlinedButton(onClick = onIrParaRankingGeral,     modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") } }
+        item { OutlinedButton(onClick = onIrParaEstadio,          modifier = Modifier.fillMaxWidth()) { Text("Estádio") } }
+        item { OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") } }
+        item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }
         item { OutlinedButton(onClick = onIrParaHallDaFama,       modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") } }
         item { OutlinedButton(onClick = onIrParaConfronto,        modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") } }
         item { OutlinedButton(onClick = onIrParaMercado,          modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") } }
-        item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }
-        item { OutlinedButton(onClick = onIrParaEstadio,          modifier = Modifier.fillMaxWidth()) { Text("Estádio") } }
-        item { OutlinedButton(onClick = onAvancarMes,             modifier = Modifier.fillMaxWidth()) { Text("Avançar Mês") } }
+        item { OutlinedButton(onClick = onIrParaRankingGeral,     modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") } }
+        item { OutlinedButton(onClick = onIrParaTabela,           modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") } }
     }
 }

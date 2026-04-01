@@ -64,6 +64,7 @@ fun EscalacaoScreen(
     // Em modo pré-jogo, começa na aba Tática (3) para o jogador definir o esquema
     var abaAtiva by remember { mutableIntStateOf(if (modoPreJogo) 3 else 0) }
     val abas = listOf("Titulares", "Reservas", "Elenco", "Tática")
+    var titularParaTroca by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         // Banner pré-jogo: mostra escalação tática dos dois times
@@ -164,24 +165,76 @@ fun EscalacaoScreen(
                 if (escalacao == null) {
                     EmptyState("Carregando escalação...")
                 } else {
-                    LazyColumn {
-                        items(escalacao!!.titulares) { jne ->
-                            JogadorRow(
-                                jogador = jne.jogador,
-                                onClick = { vm.selecionarJogador(jne.jogador) },
-                                trailing = {
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(jne.posicaoUsada.abreviacao, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                        if (jne.posicaoUsada != jne.jogador.posicao) {
-                                            Text("*Improvisado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                        }
-                                        IconButton(onClick = { vm.moverParaReserva(jne.jogador) }, modifier = Modifier.size(24.dp)) {
-                                            Icon(Icons.Default.Remove, contentDescription = "Mover para reserva", modifier = Modifier.size(16.dp))
+                    Column(Modifier.fillMaxSize()) {
+                        if (titularParaTroca != null) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Trocar posição com: ${titularParaTroca!!.jogador.nomeAbreviado} (${titularParaTroca!!.posicaoUsada.abreviacao})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                TextButton(onClick = { titularParaTroca = null }) { Text("Cancelar") }
+                            }
+                        }
+                        LazyColumn {
+                            items(escalacao!!.titulares) { jne ->
+                                val eSelecionado = titularParaTroca?.jogador?.id == jne.jogador.id
+                                JogadorRow(
+                                    jogador = jne.jogador,
+                                    onClick = { if (titularParaTroca == null) vm.selecionarJogador(jne.jogador) },
+                                    trailing = {
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(jne.posicaoUsada.abreviacao, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                            if (jne.posicaoUsada != jne.jogador.posicao) {
+                                                Text("*Improvisado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                            }
+                                            Spacer(Modifier.height(2.dp))
+                                            when {
+                                                eSelecionado -> {
+                                                    OutlinedButton(
+                                                        onClick = { titularParaTroca = null },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) { Text("✕ Cancelar", style = MaterialTheme.typography.labelSmall) }
+                                                }
+                                                titularParaTroca != null -> {
+                                                    Button(
+                                                        onClick = {
+                                                            vm.trocarPosicoes(titularParaTroca!!, jne)
+                                                            titularParaTroca = null
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) { Text("↔ Trocar", style = MaterialTheme.typography.labelSmall) }
+                                                }
+                                                else -> {
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        OutlinedButton(
+                                                            onClick = { titularParaTroca = jne },
+                                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) { Text("↔", style = MaterialTheme.typography.labelSmall) }
+                                                        IconButton(onClick = { vm.moverParaReserva(jne.jogador) }, modifier = Modifier.size(24.dp)) {
+                                                            Icon(Icons.Default.Remove, contentDescription = "Mover para reserva", modifier = Modifier.size(16.dp))
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                            )
-                            HorizontalDivider(thickness = 0.5.dp)
+                                )
+                                HorizontalDivider(thickness = 0.5.dp)
+                            }
                         }
                     }
                 }

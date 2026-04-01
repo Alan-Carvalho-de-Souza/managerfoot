@@ -117,6 +117,12 @@ fun PartidaSimulacaoScreen(
     var jogadorLesionadoAtual by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
     val lesaoDeferred = remember { mutableStateOf<CompletableDeferred<JogadorNaEscalacao?>?>(null) }
 
+    // Pausa voluntária "Mexer no Time" durante a partida
+    var pausadoParaMexerNoTime by remember { mutableStateOf(false) }
+    val mexerNoTimeDeferred = remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
+    // Número de substituições já injetadas no feed antes da última pausa (para injetar somente as novas)
+    var subsInjetadasNoFeed by remember { mutableIntStateOf(0) }
+
     // Enriquece eventos. Os eventos SUBSTITUICAO_SAI/ENTRA do time do jogador humano
     // por lesão nunca chegam no resultado (o motor não os gera — é escolha interativa).
     // Filtramos apenas eventos de tipos que devem ser visíveis na timeline.
@@ -208,6 +214,10 @@ fun PartidaSimulacaoScreen(
                 it.minuto == minuto && it.minuto <= 45
             }
             delay(if (temEventoNesteMinuto) 300L else 80L)
+
+            // Pausa voluntária do jogador (Mexer no Time) — aguarda entre minutos
+            val def1 = mexerNoTimeDeferred.value
+            if (def1 != null) { def1.await(); mexerNoTimeDeferred.value = null }
         }
 
         // Intervalo â€” exibe separador e pausa para intervenÃ§Ã£o do jogador
@@ -294,6 +304,10 @@ fun PartidaSimulacaoScreen(
                 it.minuto == minuto && it.minuto > 45
             }
             delay(if (temEventoNesteMinuto) 300L else 80L)
+
+            // Pausa voluntária do jogador (Mexer no Time) — aguarda entre minutos
+            val def2 = mexerNoTimeDeferred.value
+            if (def2 != null) { def2.await(); mexerNoTimeDeferred.value = null }
         }
 
         // Fim de jogo
@@ -312,6 +326,56 @@ fun PartidaSimulacaoScreen(
                 lesaoDeferred.value?.complete(entra)
             },
             onSemReservas = { lesaoDeferred.value?.complete(null) }
+        )
+        return
+    }
+
+    // Painel "Mexer no Time" — pausa voluntária durante a partida
+    if (pausadoParaMexerNoTime && escalacaoJogador != null) {
+        val nomeTimeJog = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
+        val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+        IntervaloPainel(
+            formacaoAtual = formacaoAtual,
+            estiloAtual = estiloAtual,
+            titulares = titularesAtuais,
+            reservas = reservasDisponiveis,
+            substituicoes = substituicoes,
+            onFormacaoChange = { formacaoAtual = it },
+            onEstiloChange = { estiloAtual = it },
+            onSubstituicao = { sai, entra ->
+                if (substituicoes.size < 6) {
+                    substituicoes.add(SubstituicaoIntervalo(minuto = minutoAtual, sai = sai, entra = entra, timeId = timeJogadorId))
+                    titularesAtuais.remove(sai)
+                    titularesAtuais.add(entra)
+                    reservasDisponiveis.remove(entra)
+                    reservasDisponiveis.add(sai)
+                }
+            },
+            onContinuar = {
+                // Injeta no feed apenas as substituições feitas nesta pausa
+                val subsTotais = substituicoes.filter { !it.ehLesao }
+                val novas = subsTotais.drop(subsInjetadasNoFeed)
+                novas.forEach { sub ->
+                    eventosExibidos.add(0, EventoExibicao(sub.minuto, TipoEvento.SUBSTITUICAO_SAI, "↓ ${sub.sai.jogador.nomeAbreviado}", timeJogadorId, nomeTimeJog))
+                    eventosExibidos.add(0, EventoExibicao(sub.minuto, TipoEvento.SUBSTITUICAO_ENTRA, "↑ ${sub.entra.jogador.nomeAbreviado}", timeJogadorId, nomeTimeJog))
+                }
+                subsInjetadasNoFeed = subsTotais.size
+                pausadoParaMexerNoTime = false
+                mexerNoTimeDeferred.value?.complete(Unit)
+            },
+            onTrocarPosicoes = { a, b ->
+                val idxA = titularesAtuais.indexOfFirst { it.jogador.id == a.jogador.id }
+                val idxB = titularesAtuais.indexOfFirst { it.jogador.id == b.jogador.id }
+                if (idxA >= 0 && idxB >= 0) {
+                    val posA = titularesAtuais[idxA].posicaoUsada
+                    val posB = titularesAtuais[idxB].posicaoUsada
+                    titularesAtuais[idxA] = titularesAtuais[idxA].copy(posicaoUsada = posB)
+                    titularesAtuais[idxB] = titularesAtuais[idxB].copy(posicaoUsada = posA)
+                }
+            },
+            rotuloBotao = "Continuar Partida",
+            tituloHeader = "MEXER NO TIME",
+            subtituloHeader = "Partida pausada — jogo continua do minuto ${minutoAtual}'"
         )
         return
     }
@@ -335,7 +399,17 @@ fun PartidaSimulacaoScreen(
                     reservasDisponiveis.add(sai)
                 }
             },
-            onContinuar = { intervaloDeferred.complete(Unit) }
+            onContinuar = { intervaloDeferred.complete(Unit) },
+            onTrocarPosicoes = { a, b ->
+                val idxA = titularesAtuais.indexOfFirst { it.jogador.id == a.jogador.id }
+                val idxB = titularesAtuais.indexOfFirst { it.jogador.id == b.jogador.id }
+                if (idxA >= 0 && idxB >= 0) {
+                    val posA = titularesAtuais[idxA].posicaoUsada
+                    val posB = titularesAtuais[idxB].posicaoUsada
+                    titularesAtuais[idxA] = titularesAtuais[idxA].copy(posicaoUsada = posB)
+                    titularesAtuais[idxB] = titularesAtuais[idxB].copy(posicaoUsada = posA)
+                }
+            }
         )
         return
     }
@@ -489,6 +563,26 @@ fun PartidaSimulacaoScreen(
         }
 
         // â”€â”€ Feed de eventos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Botão Mexer no Time ─────────────────────────────────────
+        if (escalacaoJogador != null && !simulacaoEncerrada && !pausadoNoIntervalo
+            && faseAtual in listOf("1º TEMPO", "2º TEMPO")
+        ) {
+            OutlinedButton(
+                onClick = {
+                    if (mexerNoTimeDeferred.value == null) {
+                        val d = CompletableDeferred<Unit>()
+                        mexerNoTimeDeferred.value = d
+                        pausadoParaMexerNoTime = true
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Text("Mexer no Time")
+            }
+        }
+
         Text(
             text = "Eventos da partida",
             style = MaterialTheme.typography.titleSmall,
@@ -1138,7 +1232,11 @@ private fun IntervaloPainel(
     onFormacaoChange: (String) -> Unit,
     onEstiloChange: (EstiloJogo) -> Unit,
     onSubstituicao: (sai: JogadorNaEscalacao, entra: JogadorNaEscalacao) -> Unit,
-    onContinuar: () -> Unit
+    onContinuar: () -> Unit,
+    onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit = { _, _ -> },
+    rotuloBotao: String = "Continuar para o 2º Tempo",
+    tituloHeader: String = "INTERVALO",
+    subtituloHeader: String = "Faça sua intervenção antes do 2º tempo"
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
     // Titular selecionado aguardando escolha do reserva
@@ -1160,10 +1258,10 @@ private fun IntervaloPainel(
                 Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("INTERVALO", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(tituloHeader, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Faça sua intervenção antes do 2º tempo",
+                    subtituloHeader,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1181,6 +1279,7 @@ private fun IntervaloPainel(
         TabRow(selectedTabIndex = abaAtiva) {
             Tab(selected = abaAtiva == 0, onClick = { abaAtiva = 0; titularSelecionado = null }, text = { Text("Substituições") })
             Tab(selected = abaAtiva == 1, onClick = { abaAtiva = 1 }, text = { Text("Tática") })
+            Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Posições") })
         }
 
         Box(Modifier.weight(1f)) {
@@ -1203,6 +1302,10 @@ private fun IntervaloPainel(
                     onFormacaoChange = onFormacaoChange,
                     onEstiloChange = onEstiloChange
                 )
+                2 -> TrocarPosicoesTab(
+                    titulares = titulares,
+                    onTrocarPosicoes = onTrocarPosicoes
+                )
             }
         }
 
@@ -1212,7 +1315,7 @@ private fun IntervaloPainel(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text("Continuar para o 2º Tempo")
+            Text(rotuloBotao)
         }
     }
 }
@@ -1293,6 +1396,87 @@ private fun SubstituicoesTab(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                             ) {
                                 Text("Colocar", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrocarPosicoesTab(
+    titulares: List<JogadorNaEscalacao>,
+    onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit
+) {
+    var selecionado by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
+    if (selecionado == null) {
+        Column(Modifier.fillMaxSize()) {
+            Text(
+                "Selecione o jogador para mover de posição:",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+            LazyColumn {
+                items(titulares) { jne ->
+                    ListItem(
+                        headlineContent = { Text(jne.jogador.nome) },
+                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
+                        trailingContent = {
+                            OutlinedButton(
+                                onClick = { selecionado = jne },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("Selecionar", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
+            }
+        }
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Trocar posição de:", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "${selecionado!!.jogador.nome} (${selecionado!!.posicaoUsada.abreviacao})",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                TextButton(onClick = { selecionado = null }) { Text("Cancelar") }
+            }
+            Text(
+                "Selecione quem vai receber a posição:",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+            LazyColumn {
+                items(titulares.filter { it.jogador.id != selecionado!!.jogador.id }) { jne ->
+                    ListItem(
+                        headlineContent = { Text(jne.jogador.nome) },
+                        supportingContent = {
+                            Text("${selecionado!!.posicaoUsada.abreviacao} ↔ ${jne.posicaoUsada.abreviacao}")
+                        },
+                        trailingContent = {
+                            Button(
+                                onClick = {
+                                    onTrocarPosicoes(selecionado!!, jne)
+                                    selecionado = null
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("Trocar", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     )
@@ -1417,6 +1601,8 @@ fun EventoCard(evento: EventoExibicao, nomeTimeCasa: String) {
             "🚑" to Color(0xFF880E4F).copy(alpha = 0.15f)
         TipoEvento.PENALTI_PERDIDO ->
             "❌" to Color(0xFFE65100).copy(alpha = 0.15f)
+        TipoEvento.ASSISTENCIA ->
+            "👟" to Color(0xFF0D47A1).copy(alpha = 0.12f)
         TipoEvento.SUBSTITUICAO_ENTRA ->
             "↑" to Color(0xFF1565C0).copy(alpha = 0.12f)
         TipoEvento.SUBSTITUICAO_SAI ->

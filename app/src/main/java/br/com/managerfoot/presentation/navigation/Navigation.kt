@@ -231,12 +231,13 @@ fun ManagerFootNavGraph() {
             PlaceholderScreen("Mercado de transferências — em breve")
         }
 
-        // Finanças (placeholder — próxima fase)
+        // Finanças
         composable(
             route = Rota.Financas.caminho,
             arguments = listOf(navArgument("timeId") { type = NavType.IntType })
-        ) {
-            FinancasPlaceholderScreen()
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            FinancasScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
         }
 
         // Hall da Fama
@@ -310,12 +311,3 @@ private fun PlaceholderScreen(mensagem: String) {
     }
 }
 
-@Composable
-private fun FinancasPlaceholderScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Tela de Finanças — em breve")
-    }
-}

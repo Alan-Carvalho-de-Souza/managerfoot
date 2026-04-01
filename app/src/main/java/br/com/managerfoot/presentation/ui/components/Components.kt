@@ -101,18 +101,26 @@ private fun hslToRgb(h: Float, s: Float, l: Float): Int {
 }
 
 // ─── Cabeçalho do time do jogador ───────────────────────────
+private val NOMES_MESES_HEADER = listOf(
+    "", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+)
+
 @Composable
 fun TimeHeaderCard(
     time: Time,
     modifier: Modifier = Modifier,
     posicao: Int = 0,
-    rodadaAtual: Int = 0
+    rodadaAtual: Int = 0,
+    mes: Int = 0,
+    ano: Int = 0
 ) {
     val serieLabel = when (time.divisao) { 1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; else -> "Série" }
     val subtitle = buildString {
         append(serieLabel)
         if (rodadaAtual > 0) append(" · Rodada $rodadaAtual")
     }
+    val periodoLabel = if (mes in 1..12 && ano > 0) "${NOMES_MESES_HEADER[mes]}. $ano" else ""
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -136,6 +144,20 @@ fun TimeHeaderCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (periodoLabel.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            periodoLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))

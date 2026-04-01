@@ -135,8 +135,6 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
 
             // Campeão
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🏆", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.width(8.dp))
                 Column {
                     Text("Campeão", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -153,8 +151,6 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
             if (entrada.viceNome.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🥈", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.width(8.dp))
                     Column {
                         Text("Vice-campeão", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -171,8 +167,6 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
             if (entrada.artilheiroNome.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⚽", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.width(8.dp))
                     Column {
                         Text("Artilheiro", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -193,8 +187,6 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
             if (entrada.assistenteNome.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🎯", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.width(8.dp))
                     Column {
                         Text("Garçom", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)

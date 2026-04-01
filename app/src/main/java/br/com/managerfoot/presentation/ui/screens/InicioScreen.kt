@@ -67,12 +67,35 @@ fun InicioScreen(
             }
 
             is InicioUiState.TemSave -> {
+                val saveState by vm.saveState.collectAsState()
+                val nomesMeses = listOf(
+                    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+                )
+                val mes = saveState?.mesAtual ?: 0
+                val ano = saveState?.anoAtual ?: 0
+                val periodoLabel = if (mes in 1..12 && ano > 0)
+                    "${nomesMeses[mes]} de $ano" else ""
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.padding(32.dp)
                 ) {
                     Text("⚽ ManagerFoot", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    if (periodoLabel.isNotEmpty()) {
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                periodoLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
                     Button(onClick = { vm.continuarJogo() }, modifier = Modifier.fillMaxWidth()) {
                         Text("Continuar", style = MaterialTheme.typography.titleMedium)
                     }

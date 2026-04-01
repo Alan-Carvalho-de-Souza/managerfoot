@@ -523,6 +523,22 @@ class EscalacaoViewModel @Inject constructor(
         if (!jaEhReserva && atual.reservas.size < 11) persistirEscalacao(jogador.id, 2)
     }
 
+    fun trocarPosicoes(a: JogadorNaEscalacao, b: JogadorNaEscalacao) {
+        val atual = _escalacao.value ?: return
+        val novosTitulares = atual.titulares.map { jne ->
+            when (jne.jogador.id) {
+                a.jogador.id -> jne.copy(posicaoUsada = b.posicaoUsada)
+                b.jogador.id -> jne.copy(posicaoUsada = a.posicaoUsada)
+                else         -> jne
+            }
+        }
+        _escalacao.value = atual.copy(titulares = novosTitulares)
+        viewModelScope.launch {
+            jogadorRepository.atualizarEscalacao(a.jogador.id, 1, b.posicaoUsada)
+            jogadorRepository.atualizarEscalacao(b.jogador.id, 1, a.posicaoUsada)
+        }
+    }
+
     fun adicionarComoReserva(jogador: Jogador) {
         val atual = _escalacao.value ?: return
         if (atual.reservas.any { it.jogador.id == jogador.id }) return
@@ -1184,6 +1200,27 @@ class EstatisticasTimeViewModel @Inject constructor(
         _historicoStats.value = (ligaEntries + copaEntries).sortedByDescending { it.temporadaId }
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
+    }
+}
+
+// ══════════════════════════════════════════════════════
+//  FinancasViewModel
+// ══════════════════════════════════════════════════════
+@HiltViewModel
+class FinancasViewModel @Inject constructor(
+    private val gameDataStore: GameDataStore,
+    private val jogadorRepository: JogadorRepository
+) : ViewModel() {
+
+    val saveState = gameDataStore.saveState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
+    val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        jogadorRepository.observeElenco(timeId)
+            .collect { lista -> _elenco.value = lista.sortedByDescending { it.salario } }
     }
 }
 
