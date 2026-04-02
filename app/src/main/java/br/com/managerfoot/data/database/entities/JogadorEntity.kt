@@ -50,7 +50,12 @@ data class JogadorEntity(
 
     // Escalação pré-definida pelo jogador
     val escalarStatus: Int = 0,          // 0=não escalado, 1=titular, 2=reserva
-    val posicaoEscalado: Posicao? = null // null = jogar na posição natural
+    val posicaoEscalado: Posicao? = null, // null = jogar na posição natural
+
+    // Progressão de habilidades
+    val notaMedia: Float = 6.0f,         // média das notas por partida na temporada (1.0–10.0)
+    val partidasTemporada: Int = 0,      // partidas jogadas na temporada atual
+    val aposentado: Boolean = false      // true = encerrou carreira
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

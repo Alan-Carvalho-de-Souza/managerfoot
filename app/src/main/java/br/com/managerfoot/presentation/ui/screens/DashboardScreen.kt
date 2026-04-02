@@ -37,6 +37,7 @@ fun DashboardScreen(
     onIrParaRankingGeral: () -> Unit = {},
     onIrParaEstatisticasTime: () -> Unit = {},
     onIrParaEstadio: () -> Unit = {},
+    onIrParaJuniores: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
@@ -74,6 +75,12 @@ fun DashboardScreen(
             penaltisResultado = penaltisResultado,
             dadosPenaltisAdversario = dadosPenaltisAdversario,
             penaltisInterativoConcluido = penaltisInterativoConcluido,
+            onObterEventosSegundoTempo = { titulares, reservas, subs, formacao, estilo, minInicio, minFim ->
+                vm.obterEventosSegundoTempo(titulares, reservas, subs, formacao, estilo, minInicio, minFim)
+            },
+            onFinalizarPartida = { golsCasa, golsFora ->
+                vm.finalizarPartidaSimulada(golsCasa, golsFora)
+            },
             onPenaltisConfirmados = { resultado -> vm.finalizarPenaltisJogador(resultado) },
             onSimulacaoFinalizada = { vm.fecharSimulacao() }
         )
@@ -259,6 +266,7 @@ fun DashboardScreen(
                 onIrParaMercado          = onIrParaMercado,
                 onIrParaFinancas         = onIrParaFinancas,
                 onIrParaEstadio          = onIrParaEstadio,
+                onIrParaJuniores         = onIrParaJuniores,
                 onAvancarMes             = { vm.fecharMes() }
             )
         }
@@ -314,6 +322,7 @@ private fun MenuAba(
     onIrParaMercado: () -> Unit,
     onIrParaFinancas: () -> Unit,
     onIrParaEstadio: () -> Unit,
+    onIrParaJuniores: () -> Unit,
     onAvancarMes: () -> Unit
 ) {
     LazyColumn(
@@ -334,6 +343,7 @@ private fun MenuAba(
         item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }
         item { OutlinedButton(onClick = onIrParaHallDaFama,       modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") } }
         item { OutlinedButton(onClick = onIrParaConfronto,        modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") } }
+        item { OutlinedButton(onClick = onIrParaJuniores,         modifier = Modifier.fillMaxWidth()) { Text("Juniores") } }
         item { OutlinedButton(onClick = onIrParaMercado,          modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") } }
         item { OutlinedButton(onClick = onIrParaRankingGeral,     modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") } }
         item { OutlinedButton(onClick = onIrParaTabela,           modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") } }

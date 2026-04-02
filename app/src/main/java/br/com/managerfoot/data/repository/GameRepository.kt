@@ -153,7 +153,7 @@ class GameRepository @Inject constructor(
             fora          = escalacaoFinalFora,
             timeJogadorId = timeJogadorId
         )
-        persistirResultado(resultadoJogador)
+        val notasPartida = persistirResultado(resultadoJogador)
 
         // Simula as demais partidas da rodada com IA
         for (partida in partidas) {
@@ -195,9 +195,256 @@ class GameRepository @Inject constructor(
         }
 
         return resultadoJogador.copy(
-            precisaPenaltis = precisaPenaltis,
+            precisaPenaltis  = precisaPenaltis,
             golsAgregadoCasa = golsAgregadoCasa,
-            golsAgregadoFora = golsAgregadoFora
+            golsAgregadoFora = golsAgregadoFora,
+            notasJogadores   = notasPartida
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Simulação por períodos — a partida é dividida em 1º e 2º
+    //  tempos (com possíveis re-simulações) para que as mudanças
+    //  do jogador interfiram no resultado real.
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Inicia a partida do jogador: simula apenas o 1º tempo (sem persistência).
+     * Retorna um [ContextoSimulacaoMetade] com o estado do jogo ao intervalo e
+     * um [ResultadoPartida] parcial (somente eventos do 1º tempo) para a UI.
+     */
+    suspend fun iniciarPartidaComJogador(
+        campeonatoId: Int,
+        rodada: Int,
+        timeJogadorId: Int,
+        escalacaoJogador: Escalacao
+    ): Pair<ContextoSimulacaoMetade, ResultadoPartida> {
+        val partidas = partidaDao.buscarPorRodada(campeonatoId, rodada).filter { !it.jogada }
+        val partidaDoJogador = partidas.firstOrNull {
+            it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId
+        } ?: throw IllegalStateException("Partida do jogador não encontrada na rodada $rodada")
+
+        val ehMandante = partidaDoJogador.timeCasaId == timeJogadorId
+        val escalacaoAdversario = gerarEscalacaoIA(
+            if (ehMandante) partidaDoJogador.timeForaId else partidaDoJogador.timeCasaId
+        )
+        val escalacaoCasa = if (ehMandante) escalacaoJogador else escalacaoAdversario
+        val escalacaoFora = if (ehMandante) escalacaoAdversario else escalacaoJogador
+
+        // Estado inicial: todos os titulares entram no minuto 0
+        val entryMinutes0 = (escalacaoCasa.titulares + escalacaoFora.titulares)
+            .associate { it.jogador.id to 0 }
+        val estadoInicial = EstadoMetade(
+            titsCasa     = escalacaoCasa.titulares,
+            titsFora     = escalacaoFora.titulares,
+            resCasa      = escalacaoCasa.reservas,
+            resFora      = escalacaoFora.reservas,
+            entryMinutes = entryMinutes0
+        )
+
+        // Registra participação dos titulares iniciais
+        val eventosParticipacao = escalacaoCasa.titulares.map { jne ->
+            EventoSimulado(0, TipoEvento.PARTICIPOU, jne.jogador.id, escalacaoCasa.time.id, "")
+        } + escalacaoFora.titulares.map { jne ->
+            EventoSimulado(0, TipoEvento.PARTICIPOU, jne.jogador.id, escalacaoFora.time.id, "")
+        }
+
+        // Simula 1º tempo (minutos 1–45, fração = 0,5 dos gols esperados)
+        val (estadoApos1H, eventos1H) = simulador.simularPeriodo(
+            minInicio     = 1,
+            minFim        = 45,
+            fracaoGols    = 0.5,
+            escalacaoCasa = escalacaoCasa,
+            escalacaoFora = escalacaoFora,
+            estado        = estadoInicial,
+            timeJogadorId = timeJogadorId
+        )
+
+        val golsCasa1H = eventos1H.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoCasa.time.id }
+        val golsFora1H = eventos1H.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoFora.time.id }
+        val todosEventos1H = (eventosParticipacao + eventos1H).sortedBy { it.minuto }
+
+        val resultadoParcial = ResultadoPartida(
+            partidaId        = partidaDoJogador.id,
+            timeCasaId       = escalacaoCasa.time.id,
+            timeForaId       = escalacaoFora.time.id,
+            golsCasa         = golsCasa1H,
+            golsFora         = golsFora1H,
+            eventos          = todosEventos1H,
+            estatisticasCasa = EstatisticasTime(0, 0, 50, 0, 0, 0),
+            estatisticasFora = EstatisticasTime(0, 0, 50, 0, 0, 0)
+        )
+
+        val contexto = ContextoSimulacaoMetade(
+            campeonatoId             = campeonatoId,
+            rodada                   = rodada,
+            timeJogadorId            = timeJogadorId,
+            ehMandante               = ehMandante,
+            partidaDoJogadorId       = partidaDoJogador.id,
+            escalacaoJogadorOriginal = escalacaoJogador,
+            escalacaoAdversario      = escalacaoAdversario,
+            estadoMetade1            = estadoApos1H,
+            golsCasaMetade1          = golsCasa1H,
+            golsForaMetade1          = golsFora1H,
+            eventosAcumulados        = todosEventos1H
+        )
+        return Pair(contexto, resultadoParcial)
+    }
+
+    /**
+     * Simula um período da partida com a escalação atualizada pelo jogador.
+     * Deve ser chamado após o intervalo e opcionalmente após cada "Mexer no Time".
+     * Retorna o contexto atualizado (com eventos acumulados) e os eventos do período.
+     */
+    suspend fun simularPeriodoComJogador(
+        ctx: ContextoSimulacaoMetade,
+        titularesJogador: List<JogadorNaEscalacao>,
+        reservasJogador: List<JogadorNaEscalacao>,
+        substituicoes: List<InfoSubstituicao>,
+        formacao: String,
+        estilo: EstiloJogo,
+        minInicio: Int,
+        minFim: Int
+    ): Pair<ContextoSimulacaoMetade, List<EventoSimulado>> {
+        // Reconstrói escalação do jogador com a tática/estilo atual
+        val timeJogadorAtualizado = ctx.escalacaoJogadorOriginal.time.copy(
+            taticaFormacao = formacao,
+            estiloJogo     = estilo
+        )
+        val escalacaoAtualJogador = Escalacao(
+            time      = timeJogadorAtualizado,
+            titulares = titularesJogador,
+            reservas  = reservasJogador
+        )
+        // Adversário usa a última formação conhecida do motor (pós-1º tempo)
+        val escalacaoAtualAdversario = Escalacao(
+            time      = ctx.escalacaoAdversario.time,
+            titulares = if (ctx.ehMandante) ctx.estadoMetade1.titsFora else ctx.estadoMetade1.titsCasa,
+            reservas  = if (ctx.ehMandante) ctx.estadoMetade1.resFora  else ctx.estadoMetade1.resCasa
+        )
+        val escalacaoCasaAtual = if (ctx.ehMandante) escalacaoAtualJogador else escalacaoAtualAdversario
+        val escalacaoForaAtual = if (ctx.ehMandante) escalacaoAtualAdversario else escalacaoAtualJogador
+
+        // Mescla entry/exit do motor com as substituições manuais do jogador
+        val combinedEntry = ctx.estadoMetade1.entryMinutes.toMutableMap()
+        val combinedExit  = ctx.estadoMetade1.exitMinutes.toMutableMap()
+        for (sub in substituicoes) {
+            combinedExit[sub.saiId]    = sub.minuto
+            combinedEntry[sub.entrouId] = sub.minuto
+        }
+
+        val estadoPeriodo = EstadoMetade(
+            titsCasa     = escalacaoCasaAtual.titulares,
+            titsFora     = escalacaoForaAtual.titulares,
+            resCasa      = escalacaoCasaAtual.reservas,
+            resFora      = escalacaoForaAtual.reservas,
+            penalCasa    = ctx.estadoMetade1.penalCasa,
+            penalFora    = ctx.estadoMetade1.penalFora,
+            entryMinutes = combinedEntry,
+            exitMinutes  = combinedExit
+        )
+
+        val fracaoGols = (minFim - minInicio + 1).toDouble() / 90.0
+        val (estadoFinal, eventosPeriodo) = simulador.simularPeriodo(
+            minInicio     = minInicio,
+            minFim        = minFim,
+            fracaoGols    = fracaoGols,
+            escalacaoCasa = escalacaoCasaAtual,
+            escalacaoFora = escalacaoForaAtual,
+            estado        = estadoPeriodo,
+            timeJogadorId = ctx.timeJogadorId
+        )
+
+        // Acumula eventos: mantém os anteriores a minInicio, substitui os restantes
+        val eventosAnteriores = ctx.eventosAcumulados.filter { it.minuto < minInicio }
+        val novosAcumulados   = (eventosAnteriores + eventosPeriodo).sortedBy { it.minuto }
+
+        val ctxAtualizado = ctx.copy(
+            estadoMetade1     = estadoFinal,
+            eventosAcumulados = novosAcumulados
+        )
+        return Pair(ctxAtualizado, eventosPeriodo)
+    }
+
+    /**
+     * Finaliza a partida: persiste o resultado completo, simula outros campeonatos,
+     * avança rodada e retorna o [ResultadoPartida] definitivo (com notas + Copa check).
+     */
+    suspend fun finalizarPartidaComJogador(
+        ctx: ContextoSimulacaoMetade,
+        golsCasaFinal: Int,
+        golsForaFinal: Int
+    ): ResultadoPartida {
+        val escalacaoCasa = if (ctx.ehMandante) ctx.escalacaoJogadorOriginal else ctx.escalacaoAdversario
+        val escalacaoFora = if (ctx.ehMandante) ctx.escalacaoAdversario else ctx.escalacaoJogadorOriginal
+
+        val resultadoBase = ResultadoPartida(
+            partidaId        = ctx.partidaDoJogadorId,
+            timeCasaId       = escalacaoCasa.time.id,
+            timeForaId       = escalacaoFora.time.id,
+            golsCasa         = golsCasaFinal,
+            golsFora         = golsForaFinal,
+            eventos          = ctx.eventosAcumulados,
+            estatisticasCasa = EstatisticasTime(
+                chutes        = golsCasaFinal * 4 + 3,
+                chutesNoGol   = golsCasaFinal + 2,
+                posse         = 50,
+                faltas        = 12,
+                cartaoAmarelo  = 0,
+                cartaoVermelho = 0
+            ),
+            estatisticasFora = EstatisticasTime(
+                chutes        = golsForaFinal * 4 + 3,
+                chutesNoGol   = golsForaFinal + 2,
+                posse         = 50,
+                faltas        = 12,
+                cartaoAmarelo  = 0,
+                cartaoVermelho = 0
+            )
+        )
+
+        val notasPartida = persistirResultado(resultadoBase)
+
+        // Simula demais partidas da rodada com IA
+        val partidas = partidaDao.buscarPorRodada(ctx.campeonatoId, ctx.rodada).filter { !it.jogada }
+        for (partida in partidas) {
+            if (partida.id != ctx.partidaDoJogadorId) simularPartidaInterna(partida)
+        }
+
+        campeonatoDao.avancarRodada(ctx.campeonatoId)
+
+        // Verifica Copa (agregado + pênaltis)
+        var precisaPenaltis = false
+        var golsAgregadoCasa = 0
+        var golsAgregadoFora = 0
+        val partidaDoJogador = partidaDao.buscarPorId(ctx.partidaDoJogadorId)
+        if (partidaDoJogador?.confrontoId != null) {
+            val todasDoConfronto = partidaDao.buscarTodasPorCampeonato(ctx.campeonatoId)
+                .filter { it.confrontoId == partidaDoJogador.confrontoId }
+            val ida   = todasDoConfronto.minByOrNull { it.rodada }
+            val volta = todasDoConfronto.maxByOrNull { it.rodada }
+            if (volta != null && ida != null && volta.id == ctx.partidaDoJogadorId && ida.jogada) {
+                val vencedor = MotorCampeonato.determinarVencedorTie(
+                    timeCasaIdaId = ida.timeCasaId,
+                    timeForaIdaId = ida.timeForaId,
+                    golsCasaIda   = ida.golsCasa ?: 0,
+                    golsForaIda   = ida.golsFora ?: 0,
+                    golsCasaVolta = golsCasaFinal,
+                    golsForaVolta = golsForaFinal
+                )
+                if (vencedor == null) {
+                    precisaPenaltis  = true
+                    golsAgregadoCasa = (ida.golsFora ?: 0) + golsCasaFinal
+                    golsAgregadoFora = (ida.golsCasa ?: 0) + golsForaFinal
+                }
+            }
+        }
+
+        return resultadoBase.copy(
+            precisaPenaltis  = precisaPenaltis,
+            golsAgregadoCasa = golsAgregadoCasa,
+            golsAgregadoFora = golsAgregadoFora,
+            notasJogadores   = notasPartida
         )
     }
 
@@ -814,7 +1061,7 @@ class GameRepository @Inject constructor(
         return IATimeRival.gerarEscalacao(time, elenco)
     }
 
-    private suspend fun persistirResultado(resultado: ResultadoPartida) {
+    private suspend fun persistirResultado(resultado: ResultadoPartida): Map<Int, Float> {
         partidaDao.registrarResultado(
             resultado.partidaId,
             resultado.golsCasa,
@@ -851,6 +1098,48 @@ class GameRepository @Inject constructor(
         resultado.eventos
             .filter { it.tipo == TipoEvento.LESAO }
             .forEach { _ -> }
+
+        // Calcula e persiste a nota de cada jogador participante
+        val notas = calcularNotasJogadores(resultado)
+        notas.forEach { (jogadorId, nota) ->
+            jogadorRepository.atualizarNotaAposPartida(jogadorId, nota)
+        }
+        return notas
+    }
+
+    /**
+     * Calcula a nota da partida (1.0–10.0) para cada jogador que entrou em campo.
+     * Base 6.0 · +1.2 por gol · +0.7 por assistência · -0.3 amarelo · -1.5 vermelho ·
+     * -0.5 lesão · +0.3 bônus de vitória.
+     */
+    private fun calcularNotasJogadores(resultado: ResultadoPartida): Map<Int, Float> {
+        // Participantes = titulares (PARTICIPOU) + substitutos (SUBSTITUICAO_ENTRA)
+        val participantes = resultado.eventos
+            .filter { it.tipo == TipoEvento.PARTICIPOU || it.tipo == TipoEvento.SUBSTITUICAO_ENTRA }
+            .groupBy { it.jogadorId }
+
+        val vitoriosaCasa = resultado.golsCasa > resultado.golsFora
+        val vitoriosafora = resultado.golsFora > resultado.golsCasa
+
+        return participantes.mapValues { (jogadorId, participacoes) ->
+            var nota = 6.0f
+            val ehCasa = participacoes.any { it.timeId == resultado.timeCasaId }
+            val eventos = resultado.eventos.filter { it.jogadorId == jogadorId }
+            for (ev in eventos) {
+                when (ev.tipo) {
+                    TipoEvento.GOL                  -> nota += 1.2f
+                    TipoEvento.ASSISTENCIA          -> nota += 0.7f
+                    TipoEvento.PENALTI_CONVERTIDO   -> nota += 0.5f
+                    TipoEvento.PENALTI_PERDIDO      -> nota -= 0.5f
+                    TipoEvento.CARTAO_AMARELO        -> nota -= 0.3f
+                    TipoEvento.CARTAO_VERMELHO       -> nota -= 1.5f
+                    TipoEvento.LESAO                 -> nota -= 0.5f
+                    else -> Unit
+                }
+            }
+            if ((ehCasa && vitoriosaCasa) || (!ehCasa && vitoriosafora)) nota += 0.3f
+            nota.coerceIn(1.0f, 10.0f)
+        }
     }
 
     private suspend fun atualizarRankingAposPartida(resultado: ResultadoPartida) {

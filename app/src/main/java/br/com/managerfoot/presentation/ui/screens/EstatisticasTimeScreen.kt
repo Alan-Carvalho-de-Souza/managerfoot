@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.dao.EstatisticaJogadorDto
+import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.presentation.viewmodel.EstatisticasTimeViewModel
 import br.com.managerfoot.presentation.viewmodel.HistoricoTemporada
 import br.com.managerfoot.presentation.viewmodel.TemporadaCompeticao
@@ -29,11 +30,12 @@ fun EstatisticasTimeScreen(
     val temporadaStats by vm.temporadaStats.collectAsState()
     val historicoStats by vm.historicoStats.collectAsState()
     val jogadoresHistorico by vm.jogadoresHistorico.collectAsState()
+    val notasElenco by vm.notasElenco.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
     var abaSelecionada by remember { mutableStateOf(0) }
-    val abas = listOf("Temporada", "Histórico")
+    val abas = listOf("Temporada", "Histórico", "Notas")
 
     Scaffold(
         topBar = {
@@ -65,6 +67,7 @@ fun EstatisticasTimeScreen(
             when (abaSelecionada) {
                 0 -> AbaTemporada(temporadaStats)
                 1 -> AbaHistorico(historicoStats, jogadoresHistorico)
+                2 -> AbaNotas(notasElenco)
             }
         }
     }
@@ -405,4 +408,123 @@ private fun String.faseLabel() = when (this) {
     "Semi"          -> "Semifinal"
     "Final"         -> "Final"
     else            -> this
+}
+
+// ─────────────────────────────────────────────
+//  Aba: Notas médias da temporada
+// ─────────────────────────────────────────────
+@Composable
+private fun AbaNotas(jogadores: List<Jogador>) {
+    if (jogadores.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "Nenhum jogador com partidas disputadas ainda.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    val mediaGeral = jogadores.map { it.notaMedia }.average().toFloat()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Média geral do elenco",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        "%.2f".format(mediaGeral),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = notaColorEstat(mediaGeral)
+                    )
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Jogador", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("P", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(24.dp),
+                    textAlign = TextAlign.Center)
+                Text("Nota", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(44.dp),
+                    textAlign = TextAlign.End)
+            }
+            HorizontalDivider()
+        }
+
+        items(jogadores, key = { it.id }) { j ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        j.nomeAbreviado,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        j.posicao.abreviacao,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    j.partidasTemporada.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.width(24.dp),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    "%.2f".format(j.notaMedia),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = notaColorEstat(j.notaMedia),
+                    modifier = Modifier.width(44.dp),
+                    textAlign = TextAlign.End
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+        }
+    }
+}
+
+private fun notaColorEstat(nota: Float): androidx.compose.ui.graphics.Color = when {
+    nota >= 8.0f -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+    nota >= 6.5f -> androidx.compose.ui.graphics.Color(0xFF2196F3)
+    nota >= 5.0f -> androidx.compose.ui.graphics.Color(0xFFFFC107)
+    else         -> androidx.compose.ui.graphics.Color(0xFFF44336)
 }

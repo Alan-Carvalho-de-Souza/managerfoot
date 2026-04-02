@@ -27,6 +27,7 @@ import br.com.managerfoot.data.database.entities.TipoEvento
 import br.com.managerfoot.domain.model.Escalacao
 import br.com.managerfoot.domain.model.EventoSimulado
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
+import br.com.managerfoot.domain.model.InfoSubstituicao
 import br.com.managerfoot.domain.model.ResultadoPartida
 import br.com.managerfoot.domain.model.ResultadoPenaltis
 import br.com.managerfoot.presentation.ui.components.TeamBadge
@@ -77,6 +78,8 @@ fun PartidaSimulacaoScreen(
     dadosPenaltisAdversario: DadosPenaltiAdversario? = null,
     penaltisInterativoConcluido: Boolean = false,
     onPenaltisConfirmados: ((ResultadoPenaltis) -> Unit)? = null,
+    onObterEventosSegundoTempo: (suspend (List<JogadorNaEscalacao>, List<JogadorNaEscalacao>, List<InfoSubstituicao>, String, EstiloJogo, Int, Int) -> List<EventoSimulado>)? = null,
+    onFinalizarPartida: (suspend (Int, Int) -> Unit)? = null,
     onSimulacaoFinalizada: () -> Unit
 ) {
     // Tamanho adaptativo do placar — reduz em telas mais estreitas (ex.: S23 ~393dp vs S23 Ultra ~412dp)
@@ -84,44 +87,44 @@ fun PartidaSimulacaoScreen(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val scoreFontSize = if (screenWidthDp < 400) 36.sp else 48.sp
 
-    // Estado do placar
-    var golsCasaAtual by remember { mutableIntStateOf(0) }
-    var golsForaAtual by remember { mutableIntStateOf(0) }
+    // Estado do placar — chaveado ao ID da partida para garantir reset limpo a cada jogo
+    var golsCasaAtual by remember(resultado.partidaId) { mutableIntStateOf(0) }
+    var golsForaAtual by remember(resultado.partidaId) { mutableIntStateOf(0) }
 
-    // RelÃ³gio da partida
-    var minutoAtual by remember { mutableIntStateOf(0) }
-    var faseAtual by remember { mutableStateOf("PRÉ-JOGO") }
-    var simulacaoEncerrada by remember { mutableStateOf(false) }
+    // Relógio da partida
+    var minutoAtual by remember(resultado.partidaId) { mutableIntStateOf(0) }
+    var faseAtual by remember(resultado.partidaId) { mutableStateOf("PRÉ-JOGO") }
+    var simulacaoEncerrada by remember(resultado.partidaId) { mutableStateOf(false) }
 
-    // Intervalo: pausa para intervenÃ§Ã£o do jogador
-    var pausadoNoIntervalo by remember { mutableStateOf(false) }
-    val intervaloDeferred = remember { CompletableDeferred<Unit>() }
+    // Intervalo: pausa para intervenção do jogador
+    var pausadoNoIntervalo by remember(resultado.partidaId) { mutableStateOf(false) }
+    val intervaloDeferred = remember(resultado.partidaId) { CompletableDeferred<Unit>() }
 
     // Estado do painel do intervalo
-    var formacaoAtual by remember { mutableStateOf(escalacaoJogador?.time?.taticaFormacao ?: "4-4-2") }
-    var estiloAtual by remember { mutableStateOf(escalacaoJogador?.time?.estiloJogo ?: EstiloJogo.EQUILIBRADO) }
-    val substituicoes = remember { mutableStateListOf<SubstituicaoIntervalo>() }
-    // Jogadores titulares correntes (pode perder jogadores pÃ³s-substituiÃ§Ã£o de tela)
-    val titularesAtuais = remember { mutableStateListOf<JogadorNaEscalacao>() }
-    val reservasDisponiveis = remember { mutableStateListOf<JogadorNaEscalacao>() }
+    var formacaoAtual by remember(resultado.partidaId) { mutableStateOf(escalacaoJogador?.time?.taticaFormacao ?: "4-4-2") }
+    var estiloAtual by remember(resultado.partidaId) { mutableStateOf(escalacaoJogador?.time?.estiloJogo ?: EstiloJogo.EQUILIBRADO) }
+    val substituicoes = remember(resultado.partidaId) { mutableStateListOf<SubstituicaoIntervalo>() }
+    // Jogadores titulares correntes (pode perder jogadores pós-substituição de tela)
+    val titularesAtuais = remember(resultado.partidaId) { mutableStateListOf<JogadorNaEscalacao>() }
+    val reservasDisponiveis = remember(resultado.partidaId) { mutableStateListOf<JogadorNaEscalacao>() }
 
     // Feed de eventos já exibidos
-    val eventosExibidos = remember { mutableStateListOf<EventoExibicao>() }
+    val eventosExibidos = remember(resultado.partidaId) { mutableStateListOf<EventoExibicao>() }
     val listState = rememberLazyListState()
 
     // ID do time controlado pelo jogador (constante para esta composição)
     val jogadorTimeId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
 
     // Lesão em campo: pausa a animação para o jogador escolher o substituto
-    var pausadoPorLesao by remember { mutableStateOf(false) }
-    var jogadorLesionadoAtual by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
-    val lesaoDeferred = remember { mutableStateOf<CompletableDeferred<JogadorNaEscalacao?>?>(null) }
+    var pausadoPorLesao by remember(resultado.partidaId) { mutableStateOf(false) }
+    var jogadorLesionadoAtual by remember(resultado.partidaId) { mutableStateOf<JogadorNaEscalacao?>(null) }
+    val lesaoDeferred = remember(resultado.partidaId) { mutableStateOf<CompletableDeferred<JogadorNaEscalacao?>?>(null) }
 
     // Pausa voluntária "Mexer no Time" durante a partida
-    var pausadoParaMexerNoTime by remember { mutableStateOf(false) }
-    val mexerNoTimeDeferred = remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
+    var pausadoParaMexerNoTime by remember(resultado.partidaId) { mutableStateOf(false) }
+    val mexerNoTimeDeferred = remember(resultado.partidaId) { mutableStateOf<CompletableDeferred<Unit>?>(null) }
     // Número de substituições já injetadas no feed antes da última pausa (para injetar somente as novas)
-    var subsInjetadasNoFeed by remember { mutableIntStateOf(0) }
+    var subsInjetadasNoFeed by remember(resultado.partidaId) { mutableIntStateOf(0) }
 
     // Enriquece eventos. Os eventos SUBSTITUICAO_SAI/ENTRA do time do jogador humano
     // por lesão nunca chegam no resultado (o motor não os gera — é escolha interativa).
@@ -142,9 +145,9 @@ fun PartidaSimulacaoScreen(
         }
     }
 
-    // AcrÃ©scimos gerados aleatoriamente
-    val acrescimo1Tempo = remember { (1..5).random() }
-    val acrescimo2Tempo = remember { (2..7).random() }
+    // Acréscimos gerados aleatoriamente — vinculados ao ID da partida para consistência
+    val acrescimo1Tempo = remember(resultado.partidaId) { (1..5).random() }
+    val acrescimo2Tempo = remember(resultado.partidaId) { (2..7).random() }
 
     // Inicializa titulares/reservas do painel a partir da escalaÃ§Ã£o passada
     LaunchedEffect(escalacaoJogador) {
@@ -156,8 +159,8 @@ fun PartidaSimulacaoScreen(
         }
     }
 
-    // SimulaÃ§Ã£o do relÃ³gio e eventos
-    LaunchedEffect(Unit) {
+    // Simulação do relógio e eventos — reinicia se a partida mudar (chave = partidaId)
+    LaunchedEffect(resultado.partidaId) {
         // PrÃ©-jogo
         faseAtual = "PRÉ-JOGO"
         delay(1500)
@@ -245,27 +248,42 @@ fun PartidaSimulacaoScreen(
             delay(2500)
         }
 
-        // Segundo tempo (46-90 + acrÃ©scimo)
+        // Obtém eventos do 2o tempo da engine (reflete mudanças táticas do intervalo)
+        val subsInfoIntervalo = substituicoes.map { InfoSubstituicao(it.sai.jogador.id, it.entra.jogador.id, it.minuto, it.timeId) }
+        var eventosT2: List<EventoExibicao> = if (onObterEventosSegundoTempo != null) {
+            val rawT2 = onObterEventosSegundoTempo.invoke(
+                titularesAtuais.toList(),
+                reservasDisponiveis.toList(),
+                subsInfoIntervalo,
+                formacaoAtual,
+                estiloAtual,
+                46,
+                90 + acrescimo2Tempo
+            )
+            rawT2.map { ev ->
+                val ehCasa = ev.timeId == resultado.timeCasaId
+                EventoExibicao(ev.minuto, ev.tipo, ev.descricao, ev.timeId,
+                    if (ehCasa) nomeTimeCasa else nomeTimeFora, ev.jogadorId)
+            }
+        } else {
+            eventosOrdenados.filter { it.minuto > 45 }
+        }
+
+        // Segundo tempo (46-90 + acrescimo)
         faseAtual = "2º TEMPO"
         val limiteT2 = 90 + acrescimo2Tempo
-        // IDs dos jogadores substituídos pelo time do jogador (intervalo + lesão 1º tempo)
-        // Garante que eventos gerados antes das substituições não apareçam após a saída
-        val substituidosSaiIds = substituicoes.map { it.sai.jogador.id }.toSet()
+        // IDs dos jogadores substituídos pelo time do jogador (intervalo + lesão 1o tempo)
+        var substituidosSaiIds = substituicoes.map { it.sai.jogador.id }.toSet()
         for (minuto in 46..limiteT2) {
             minutoAtual = minuto
 
-            for (ev in eventosOrdenados.filter { it.minuto == minuto && it.minuto > 45 }) {
+            for (ev in eventosT2.filter { it.minuto == minuto }) {
                 // Contagem do placar sempre ocorre, independente de quem é o autor
                 if (ev.tipo == TipoEvento.GOL || ev.tipo == TipoEvento.PENALTI_CONVERTIDO) {
                     if (ev.timeId == resultado.timeCasaId) golsCasaAtual++
                     else golsForaAtual++
                 }
 
-                // Filtra eventos de jogadores já substituídos (do time do jogador).
-                // O engine gera cartões/lesões/gols para todos os titulares iniciais antes de
-                // conhecer os minutos de substituição, por isso podem aparecer após a saída.
-                // O placar já foi atualizado acima antes deste ponto, então o `continue`
-                // apenas suprime a exibição no feed — o resultado da partida não é afetado.
                 val ehSubstituidoDoTimeJogador = ev.timeId == jogadorTimeId && ev.jogadorId in substituidosSaiIds
                 if (ehSubstituidoDoTimeJogador) continue
 
@@ -274,7 +292,7 @@ fun PartidaSimulacaoScreen(
                 if (ev.tipo == TipoEvento.CARTAO_VERMELHO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
                     titularesAtuais.removeIf { it.jogador.id == ev.jogadorId }
                 }
-                // Lesão no 2º tempo: pausa e pede substituto
+                // Lesão no 2o tempo: pausa e pede substituto
                 if (ev.tipo == TipoEvento.LESAO && ev.timeId == jogadorTimeId && escalacaoJogador != null) {
                     val lesionado = titularesAtuais.find { it.jogador.id == ev.jogadorId }
                     if (lesionado != null) {
@@ -290,8 +308,8 @@ fun PartidaSimulacaoScreen(
                             val nomeTimeJog = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
                             val minSub = (ev.minuto + 1).coerceAtMost(90)
                             substituicoes.add(SubstituicaoIntervalo(minuto = minSub, sai = lesionado, entra = substituto, timeId = ev.timeId, ehLesao = true))
-                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_SAI, "↓ ${lesionado.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
-                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_ENTRA, "↑ ${substituto.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_SAI, "\u2193 ${lesionado.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
+                            eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_ENTRA, "\u2191 ${substituto.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
                             launch { listState.animateScrollToItem(0) }
                         }
                     }
@@ -300,18 +318,39 @@ fun PartidaSimulacaoScreen(
                 delay(800)
             }
 
-            val temEventoNesteMinuto = eventosOrdenados.any {
-                it.minuto == minuto && it.minuto > 45
-            }
+            val temEventoNesteMinuto = eventosT2.any { it.minuto == minuto }
             delay(if (temEventoNesteMinuto) 300L else 80L)
 
-            // Pausa voluntária do jogador (Mexer no Time) — aguarda entre minutos
+            // Pausa voluntária do jogador (Mexer no Time)  aguarda entre minutos
             val def2 = mexerNoTimeDeferred.value
-            if (def2 != null) { def2.await(); mexerNoTimeDeferred.value = null }
+            if (def2 != null) {
+                def2.await()
+                mexerNoTimeDeferred.value = null
+                // Re-simula o restante do 2o tempo com o novo lineup
+                if (onObterEventosSegundoTempo != null) {
+                    val subsInfo2 = substituicoes.map { InfoSubstituicao(it.sai.jogador.id, it.entra.jogador.id, it.minuto, it.timeId) }
+                    val rawT2novo = onObterEventosSegundoTempo.invoke(
+                        titularesAtuais.toList(),
+                        reservasDisponiveis.toList(),
+                        subsInfo2,
+                        formacaoAtual,
+                        estiloAtual,
+                        minuto + 1,
+                        90 + acrescimo2Tempo
+                    )
+                    eventosT2 = rawT2novo.map { ev ->
+                        val ehCasa = ev.timeId == resultado.timeCasaId
+                        EventoExibicao(ev.minuto, ev.tipo, ev.descricao, ev.timeId,
+                            if (ehCasa) nomeTimeCasa else nomeTimeFora, ev.jogadorId)
+                    }
+                    substituidosSaiIds = substituicoes.map { it.sai.jogador.id }.toSet()
+                }
+            }
         }
 
         // Fim de jogo
         faseAtual = "FIM DE JOGO"
+        onFinalizarPartida?.invoke(golsCasaAtual, golsForaAtual)
         simulacaoEncerrada = true
     }
 
@@ -392,7 +431,7 @@ fun PartidaSimulacaoScreen(
             onEstiloChange = { estiloAtual = it },
             onSubstituicao = { sai, entra ->
                 if (substituicoes.size < 6) {
-                    substituicoes.add(SubstituicaoIntervalo(sai = sai, entra = entra, timeId = resultado.timeCasaId))
+                    substituicoes.add(SubstituicaoIntervalo(sai = sai, entra = entra, timeId = jogadorTimeId))
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
                     reservasDisponiveis.remove(entra)
@@ -610,7 +649,12 @@ fun PartidaSimulacaoScreen(
         // â”€â”€ BotÃ£o de encerrar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (simulacaoEncerrada) {
             if (resultado.precisaPenaltis && penaltisInterativoConcluido) {
-                // Disputa interativa já concluída — botão simples de retorno
+                // Disputa interativa já concluída — notas + botão de retorno
+                NotasDaPartidaCard(
+                    resultado          = resultado,
+                    escalacaoJogador   = escalacaoJogador,
+                    isTimeCasaOJogador = isTimeCasaOJogador
+                )
                 Button(
                     onClick = onSimulacaoFinalizada,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
@@ -651,6 +695,11 @@ fun PartidaSimulacaoScreen(
                     onConcluir    = onSimulacaoFinalizada
                 )
             } else {
+                NotasDaPartidaCard(
+                    resultado          = resultado,
+                    escalacaoJogador   = escalacaoJogador,
+                    isTimeCasaOJogador = isTimeCasaOJogador
+                )
                 Button(
                     onClick = onSimulacaoFinalizada,
                     modifier = Modifier
@@ -664,6 +713,99 @@ fun PartidaSimulacaoScreen(
     }
 }
 
+
+// 
+//  Notas da Partida  card exibido ao encerrar a simulação
+// 
+@Composable
+private fun NotasDaPartidaCard(
+    resultado: ResultadoPartida,
+    escalacaoJogador: Escalacao?,
+    isTimeCasaOJogador: Boolean
+) {
+    if (escalacaoJogador == null || resultado.notasJogadores.isEmpty()) return
+
+    val jogadoresDoTime = (escalacaoJogador.titulares + escalacaoJogador.reservas)
+        .associate { it.jogador.id to it.jogador }
+
+    val notasDoTime = resultado.notasJogadores
+        .filter { (id, _) -> id in jogadoresDoTime }
+        .entries.sortedByDescending { it.value }
+
+    if (notasDoTime.isEmpty()) return
+
+    val mediaTime = notasDoTime.map { it.value }.average().toFloat()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Notas da Partida",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Média: ${"%.1f".format(mediaTime)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = notaColor(mediaTime)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            notasDoTime.forEach { (jogadorId, nota) ->
+                val j = jogadoresDoTime[jogadorId] ?: return@forEach
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            j.posicao.abreviacao,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(28.dp)
+                        )
+                        Text(
+                            j.nomeAbreviado,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        "%.1f".format(nota),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = notaColor(nota)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun notaColor(nota: Float): Color = when {
+    nota >= 8.0f -> Color(0xFF4CAF50)
+    nota >= 6.5f -> Color(0xFF2196F3)
+    nota >= 5.0f -> Color(0xFFFFC107)
+    else         -> Color(0xFFF44336)
+}
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

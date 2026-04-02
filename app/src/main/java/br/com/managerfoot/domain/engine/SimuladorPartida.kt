@@ -569,4 +569,260 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             timeForaId = timeForaId
         )
     }
+
+    // ─────────────────────────────────────────────────────────────
+    //  simularPeriodo — simulação de um janela de minutos
+    //  Usada para dividir a partida em 1º/2º tempos e re-simulações
+    //  após mudanças táticas do jogador, de forma que cada alteração
+    //  (substituição, formação, estilo) influencie o resultado real.
+    // ─────────────────────────────────────────────────────────────
+    fun simularPeriodo(
+        minInicio: Int,
+        minFim: Int,
+        fracaoGols: Double,
+        escalacaoCasa: Escalacao,
+        escalacaoFora: Escalacao,
+        estado: EstadoMetade,
+        timeJogadorId: Int = -1
+    ): Pair<EstadoMetade, List<EventoSimulado>> {
+
+        val fCasaRaw = CalculadoraForca.calcularForcaTime(escalacaoCasa) *
+                CalculadoraForca.fatorMandante(escalacaoCasa.time.estadioCapacidade) *
+                CalculadoraForca.fatorEstilo(escalacaoCasa.time.estiloJogo, escalacaoFora.time.estiloJogo)
+        val fForaRaw = CalculadoraForca.calcularForcaTime(escalacaoFora) *
+                CalculadoraForca.fatorEstilo(escalacaoFora.time.estiloJogo, escalacaoCasa.time.estiloJogo)
+        val fCasa = if (fCasaRaw > 0.0) fCasaRaw else 50.0
+        val fFora = if (fForaRaw > 0.0) fForaRaw else 50.0
+
+        val titsCasa = estado.titsCasa.toMutableList()
+        val titsFora = estado.titsFora.toMutableList()
+        val resCasa  = estado.resCasa.toMutableList()
+        val resFora  = estado.resFora.toMutableList()
+        val entryMinutes = estado.entryMinutes.toMutableMap()
+        val exitMinutes  = estado.exitMinutes.toMutableMap()
+        var penalCasa = estado.penalCasa
+        var penalFora = estado.penalFora
+
+        val eventos = mutableListOf<EventoSimulado>()
+
+        // Incidentes (cartões + lesões) dentro do período
+        val incidentes = (
+            gerarIncidentesPeriodo(titsCasa.toList(), escalacaoCasa.time.id, minInicio, minFim) +
+            gerarIncidentesPeriodo(titsFora.toList(), escalacaoFora.time.id, minInicio, minFim)
+        ).sortedBy { it.minuto }
+
+        for (inc in incidentes) {
+            val ehCasaInc  = inc.timeId == escalacaoCasa.time.id
+            val titsAtivos = if (ehCasaInc) titsCasa else titsFora
+            val reservas   = if (ehCasaInc) resCasa  else resFora
+
+            if (titsAtivos.none { it.jogador.id == inc.jogadorId }) continue
+            eventos.add(inc)
+
+            when (inc.tipo) {
+                TipoEvento.CARTAO_VERMELHO -> {
+                    titsAtivos.removeIf { it.jogador.id == inc.jogadorId }
+                    exitMinutes[inc.jogadorId] = inc.minuto
+                    if (ehCasaInc) penalCasa *= 0.87 else penalFora *= 0.87
+                }
+                TipoEvento.LESAO -> {
+                    val lesionado = titsAtivos.find { it.jogador.id == inc.jogadorId }
+                    if (lesionado != null) {
+                        titsAtivos.remove(lesionado)
+                        exitMinutes[lesionado.jogador.id] = inc.minuto
+                        val ehTimeJogador = inc.timeId == timeJogadorId
+                        if (!ehTimeJogador && reservas.isNotEmpty()) {
+                            val substituto = reservas.removeAt(0)
+                            titsAtivos.add(substituto)
+                            val minSub = (inc.minuto + 1).coerceAtMost(minFim)
+                            entryMinutes[substituto.jogador.id] = minSub
+                            eventos.add(EventoSimulado(minSub, TipoEvento.SUBSTITUICAO_SAI,
+                                lesionado.jogador.id, inc.timeId, lesionado.jogador.nomeAbreviado))
+                            eventos.add(EventoSimulado(minSub, TipoEvento.SUBSTITUICAO_ENTRA,
+                                substituto.jogador.id, inc.timeId, substituto.jogador.nomeAbreviado))
+                        } else {
+                            if (ehCasaInc) penalCasa *= 0.87 else penalFora *= 0.87
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
+
+        val total    = fCasa + fFora
+        val probCasa = fCasa / total
+        val probFora = fFora / total
+
+        // Substituições táticas da IA (apenas no 2º tempo ou em períodos >= 46)
+        if (minFim >= 46) {
+            val minInicioSubs = minInicio.coerceAtLeast(46)
+            if (escalacaoCasa.time.id != timeJogadorId)
+                aplicarSubstituicoesTaticasPeriodo(titsCasa, resCasa, escalacaoCasa.time.id,
+                    entryMinutes, exitMinutes, eventos, minInicioSubs, minFim)
+            if (escalacaoFora.time.id != timeJogadorId)
+                aplicarSubstituicoesTaticasPeriodo(titsFora, resFora, escalacaoFora.time.id,
+                    entryMinutes, exitMinutes, eventos, minInicioSubs, minFim)
+        }
+
+        val dominance = ((fCasa - fFora) / total).coerceIn(-1.0, 1.0)
+        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 0.55
+        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 0.55
+
+        val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa
+        val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora
+
+        val golsCasa = poissonRandom(mediaGolsCasa)
+        val golsFora = poissonRandom(mediaGolsFora)
+
+        eventos.addAll(gerarEventosGolPeriodo(golsCasa, titsCasa, escalacaoCasa.time.id,
+            entryMinutes, exitMinutes, minInicio, minFim))
+        eventos.addAll(gerarEventosGolPeriodo(golsFora, titsFora, escalacaoFora.time.id,
+            entryMinutes, exitMinutes, minInicio, minFim))
+
+        val estadoFinal = EstadoMetade(
+            titsCasa     = titsCasa.toList(),
+            titsFora     = titsFora.toList(),
+            resCasa      = resCasa.toList(),
+            resFora      = resFora.toList(),
+            penalCasa    = penalCasa,
+            penalFora    = penalFora,
+            entryMinutes = entryMinutes.toMap(),
+            exitMinutes  = exitMinutes.toMap()
+        )
+
+        return Pair(estadoFinal, eventos.sortedBy { it.minuto })
+    }
+
+    // Gera incidentes (cartões/lesões) restritos a [minInicio, minFim]
+    private fun gerarIncidentesPeriodo(
+        titulares: List<JogadorNaEscalacao>,
+        timeId: Int,
+        minInicio: Int,
+        minFim: Int
+    ): List<EventoSimulado> {
+        val efetMin = minInicio.coerceAtLeast(1)
+        val efetMax = minFim.coerceAtLeast(efetMin + 1)
+        return titulares.flatMap { jne ->
+            val lista = mutableListOf<EventoSimulado>()
+            if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
+                val minuto = rng.nextInt(efetMin, efetMax)
+                val vermelho = rng.nextDouble() < 0.08
+                lista.add(EventoSimulado(
+                    minuto    = minuto,
+                    tipo      = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
+                    jogadorId = jne.jogador.id,
+                    timeId    = timeId,
+                    descricao = jne.jogador.nomeAbreviado
+                ))
+            }
+            val probLesao = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            if (rng.nextDouble() < probLesao) {
+                val lesaoMin = efetMin.coerceAtLeast(10)
+                val lesaoMax = efetMax.coerceAtMost(85).coerceAtLeast(lesaoMin + 1)
+                lista.add(EventoSimulado(
+                    minuto    = rng.nextInt(lesaoMin, lesaoMax),
+                    tipo      = TipoEvento.LESAO,
+                    jogadorId = jne.jogador.id,
+                    timeId    = timeId,
+                    descricao = "${jne.jogador.nomeAbreviado} saiu lesionado"
+                ))
+            }
+            lista
+        }
+    }
+
+    // Gera eventos de gol restritos a [minInicio, minFim]
+    private fun gerarEventosGolPeriodo(
+        totalGols: Int,
+        titsAtivos: List<JogadorNaEscalacao>,
+        timeId: Int,
+        entryMinutes: Map<Int, Int>,
+        exitMinutes: Map<Int, Int>,
+        minInicio: Int,
+        minFim: Int
+    ): List<EventoSimulado> {
+        if (totalGols == 0) return emptyList()
+        val candidatos = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+        if (candidatos.isEmpty()) return emptyList()
+
+        fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
+            Setor.ATAQUE -> jne.jogador.finalizacao * 3 + jne.jogador.velocidade + 50
+            Setor.MEIO   -> jne.jogador.finalizacao * 2 + jne.jogador.passe
+            Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
+            else         -> 1
+        }
+        fun pesoAssist(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
+            Setor.MEIO   -> jne.jogador.passe * 3 + jne.jogador.tecnica
+            Setor.ATAQUE -> jne.jogador.passe * 2 + jne.jogador.velocidade
+            Setor.DEFESA -> jne.jogador.passe * 2 + jne.jogador.tecnica
+            else         -> 1
+        }
+
+        return (1..totalGols).flatMap {
+            val marcador = sortearPonderado(candidatos, ::pesoGol)
+            val minEntry = (entryMinutes[marcador.jogador.id] ?: 0).coerceAtLeast(minInicio)
+            val minExit  = (exitMinutes[marcador.jogador.id]  ?: minFim).coerceAtMost(minFim)
+            val minuto   = if (minEntry < minExit) rng.nextInt(minEntry, minExit) else minEntry
+
+            val lista = mutableListOf(EventoSimulado(
+                minuto    = minuto,
+                tipo      = TipoEvento.GOL,
+                jogadorId = marcador.jogador.id,
+                timeId    = timeId,
+                descricao = "${marcador.jogador.nomeAbreviado} ${minuto}'"
+            ))
+            if (rng.nextDouble() < 0.72) {
+                val candidatosAssist = candidatos.filter { c ->
+                    if (c.jogador.id == marcador.jogador.id) return@filter false
+                    val cEntry = (entryMinutes[c.jogador.id] ?: 0)
+                    val cExit  = (exitMinutes[c.jogador.id]  ?: minFim)
+                    minuto in cEntry..cExit
+                }
+                if (candidatosAssist.isNotEmpty()) {
+                    val assistente = sortearPonderado(candidatosAssist, ::pesoAssist)
+                    lista.add(EventoSimulado(
+                        minuto    = minuto,
+                        tipo      = TipoEvento.ASSISTENCIA,
+                        jogadorId = assistente.jogador.id,
+                        timeId    = timeId,
+                        descricao = "Ass. ${assistente.jogador.nomeAbreviado}"
+                    ))
+                }
+            }
+            lista
+        }
+    }
+
+    // Substituições táticas da IA restritas ao período [minInicio, minFim]
+    private fun aplicarSubstituicoesTaticasPeriodo(
+        titsAtivos:   MutableList<JogadorNaEscalacao>,
+        reservas:     MutableList<JogadorNaEscalacao>,
+        timeId:       Int,
+        entryMinutes: MutableMap<Int, Int>,
+        exitMinutes:  MutableMap<Int, Int>,
+        eventos:      MutableList<EventoSimulado>,
+        minInicio:    Int,
+        minFim:       Int
+    ) {
+        if (reservas.isEmpty()) return
+        val rangeMax = minFim.coerceAtMost(88)
+        if (minInicio > rangeMax) return
+
+        val minutosSub = (minInicio..rangeMax).toList().shuffled(rng).take(3).sorted()
+        var subsFeitas = 0
+        for (minuto in minutosSub) {
+            if (subsFeitas >= 3 || reservas.isEmpty()) break
+            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+            if (candidatosSaida.isEmpty()) break
+            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
+            val entrando = reservas.removeAt(0)
+            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
+            titsAtivos.add(entrando)
+            exitMinutes[saindo.jogador.id]    = minuto
+            entryMinutes[entrando.jogador.id] = minuto
+            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_SAI,   saindo.jogador.id,   timeId, saindo.jogador.nomeAbreviado))
+            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_ENTRA, entrando.jogador.id, timeId, entrando.jogador.nomeAbreviado))
+            subsFeitas++
+        }
+    }
 }

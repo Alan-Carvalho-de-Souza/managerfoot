@@ -54,6 +54,9 @@ interface PartidaDao {
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
 
+    @Query("SELECT * FROM partidas WHERE id = :id")
+    suspend fun buscarPorId(id: Int): PartidaEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserir(partida: PartidaEntity): Long
 

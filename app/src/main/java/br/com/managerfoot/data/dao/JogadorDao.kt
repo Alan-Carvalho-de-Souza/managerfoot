@@ -13,10 +13,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface JogadorDao {
 
-    @Query("SELECT * FROM jogadores WHERE timeId = :timeId ORDER BY posicao, forca DESC")
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 0 ORDER BY posicao, forca DESC")
     fun observeElenco(timeId: Int): Flow<List<JogadorEntity>>
 
-    @Query("SELECT * FROM jogadores WHERE timeId IS NULL ORDER BY forca DESC")
+    @Query("SELECT * FROM jogadores WHERE timeId IS NULL AND aposentado = 0 AND categoriaBase = 0 ORDER BY forca DESC")
     fun observeLivres(): Flow<List<JogadorEntity>>
 
     @Query("SELECT * FROM jogadores WHERE id = :id")
@@ -25,6 +25,7 @@ interface JogadorDao {
     @Query("""
         SELECT * FROM jogadores
         WHERE timeId = :timeId
+          AND categoriaBase = 0
           AND lesionado = 0
           AND suspensoCicloAmarelos = 0
         ORDER BY forca DESC
@@ -67,23 +68,6 @@ interface JogadorDao {
     @Query("SELECT * FROM jogadores WHERE timeId IS NOT NULL AND contratoAnos = 0")
     suspend fun buscarComContratoExpirado(): List<JogadorEntity>
 
-    // Desenvolvimento anual: jogadores jovens crescem, veteranos decaem
-    @Query("""
-        UPDATE jogadores
-        SET forca = MIN(99, forca + CASE
-            WHEN idade <= 22 THEN 2
-            WHEN idade <= 25 THEN 1
-            ELSE 0
-        END),
-        forca = MAX(1, forca + CASE
-            WHEN idade >= 33 THEN -2
-            WHEN idade >= 30 THEN -1
-            ELSE 0
-        END),
-        idade = idade + 1
-    """)
-    suspend fun processarDesenvolvimentoAnual()
-
     @Delete
     suspend fun deletar(jogador: JogadorEntity)
 
@@ -106,4 +90,36 @@ interface JogadorDao {
 
     @Query("UPDATE jogadores SET escalarStatus = 0, posicaoEscalado = NULL WHERE timeId = :timeId")
     suspend fun limparEscalacaoTime(timeId: Int)
+
+    // ─── Progressão de habilidades ─────────────────────────────────
+
+    /** Retorna todos os jogadores (para processamento de desenvolvimento anual em Kotlin). */
+    @Query("SELECT * FROM jogadores")
+    suspend fun buscarTodos(): List<JogadorEntity>
+
+    /** Persiste em lote todos os jogadores com atributos atualizados. */
+    @Update
+    suspend fun atualizarTodos(jogadores: List<JogadorEntity>)
+
+    /**
+     * Atualiza a nota média acumulada na temporada e o contador de partidas.
+     * Deve ser chamado após cada partida para cada jogador participante.
+     */
+    @Query("UPDATE jogadores SET notaMedia = :nota, partidasTemporada = :partidas WHERE id = :jogadorId")
+    suspend fun atualizarNota(jogadorId: Int, nota: Float, partidas: Int)
+
+    /**
+     * Aposenta o jogador: remove do time e marca como aposentado.
+     * Disponível para jogadores com idade entre 33 e 44 anos.
+     */
+    @Query("UPDATE jogadores SET aposentado = 1, timeId = NULL WHERE id = :jogadorId")
+    suspend fun aposentarJogador(jogadorId: Int)
+
+    /** Retorna os jogadores da base de juniores de um clube. */
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 1 ORDER BY posicao, forca DESC")
+    fun observeJuniores(timeId: Int): Flow<List<JogadorEntity>>
+
+    /** Promove um jogador da base para o elenco principal. */
+    @Query("UPDATE jogadores SET categoriaBase = 0 WHERE id = :jogadorId")
+    suspend fun promoverJunior(jogadorId: Int)
 }

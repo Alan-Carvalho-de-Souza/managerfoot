@@ -74,6 +74,22 @@ class TimeRepository @Inject constructor(
 }
 
 // ─────────────────────────────────────────────
+//  Dados para geração de juniores
+// ─────────────────────────────────────────────
+private val NOMES_JUNIOR_PRIMEIRO = listOf(
+    "Gabriel", "Lucas", "Mateus", "Rafael", "Felipe",
+    "Bruno", "Diego", "Thiago", "Leonardo", "Guilherme",
+    "Eduardo", "Gustavo", "Henrique", "Carlos", "Pedro",
+    "João", "André", "Vinícius", "Renato", "Arthur"
+)
+private val NOMES_JUNIOR_SOBRENOME = listOf(
+    "Silva", "Santos", "Oliveira", "Souza", "Lima",
+    "Pereira", "Costa", "Ferreira", "Rodrigues", "Alves",
+    "Nascimento", "Carvalho", "Araújo", "Gomes", "Martins",
+    "Ribeiro", "Castro", "Freitas", "Rocha", "Barbosa"
+)
+
+// ─────────────────────────────────────────────
 //  JogadorRepository
 // ─────────────────────────────────────────────
 @Singleton
@@ -123,8 +139,168 @@ class JogadorRepository @Inject constructor(
         )
     }
 
-    suspend fun processarDesenvolvimentoAnual() =
-        jogadorDao.processarDesenvolvimentoAnual()
+    /**
+     * Processa o desenvolvimento anual de todos os jogadores:
+     * - Incrementa um ano na idade de todos
+     * - Jovens (16–24): evoluem até 5% nos atributos principais e 2% nos demais,
+     *   escalonado pela nota média (nota=10 → evolução máxima)
+     * - Adultos (25–32): evoluem até 3% nos principais e 1% nos demais
+     * - Veteranos (33+): regridem 2% em todos os atributos, independente de nota
+     * - Reseta notaMedia e partidasTemporada para a nova temporada
+     */
+    suspend fun processarDesenvolvimentoAnual() {
+        val todos = jogadorDao.buscarTodos()
+        val atualizados = todos.map { j -> aplicarDesenvolvimento(j) }
+        jogadorDao.atualizarTodos(atualizados)
+    }
+
+    private fun atributosPrincipais(posicao: Posicao): Set<String> = when (posicao) {
+        Posicao.GOLEIRO            -> setOf("defesa", "fisico", "tecnica")
+        Posicao.ZAGUEIRO           -> setOf("defesa", "fisico", "tecnica")
+        Posicao.LATERAL_DIREITO,
+        Posicao.LATERAL_ESQUERDO   -> setOf("defesa", "velocidade", "passe")
+        Posicao.VOLANTE            -> setOf("defesa", "fisico", "passe")
+        Posicao.MEIA_CENTRAL       -> setOf("passe", "tecnica", "fisico")
+        Posicao.MEIA_ATACANTE      -> setOf("tecnica", "passe", "velocidade")
+        Posicao.PONTA_DIREITA,
+        Posicao.PONTA_ESQUERDA     -> setOf("velocidade", "finalizacao", "tecnica")
+        Posicao.CENTROAVANTE       -> setOf("finalizacao", "fisico", "tecnica")
+        Posicao.SEGUNDA_ATACANTE   -> setOf("finalizacao", "tecnica", "velocidade")
+    }
+
+    private fun aplicarDesenvolvimento(j: JogadorEntity): JogadorEntity {
+        val principais = atributosPrincipais(j.posicao)
+        val novaIdade  = j.idade + 1
+
+        fun evoluir(attr: Int, isPrincipal: Boolean, fatorPos: Double, fatorOther: Double): Int {
+            val delta = if (isPrincipal) (attr * fatorPos).toInt() else (attr * fatorOther).toInt()
+            return (attr + delta.coerceAtLeast(1)).coerceIn(1, 99)
+        }
+        fun regredir(attr: Int): Int {
+            val delta = (attr * 0.02).toInt().coerceAtLeast(1)
+            return (attr - delta).coerceAtLeast(1)
+        }
+
+        val attrs = when {
+            j.idade in 16..24 -> {
+                val fator = (j.notaMedia / 10.0).coerceIn(0.0, 1.0)
+                listOf(
+                    evoluir(j.tecnica,     "tecnica"     in principais, 0.05 * fator, 0.02 * fator),
+                    evoluir(j.passe,       "passe"       in principais, 0.05 * fator, 0.02 * fator),
+                    evoluir(j.velocidade,  "velocidade"  in principais, 0.05 * fator, 0.02 * fator),
+                    evoluir(j.finalizacao, "finalizacao" in principais, 0.05 * fator, 0.02 * fator),
+                    evoluir(j.defesa,      "defesa"      in principais, 0.05 * fator, 0.02 * fator),
+                    evoluir(j.fisico,      "fisico"      in principais, 0.05 * fator, 0.02 * fator)
+                )
+            }
+            j.idade in 25..32 -> {
+                val fator = (j.notaMedia / 10.0).coerceIn(0.0, 1.0)
+                listOf(
+                    evoluir(j.tecnica,     "tecnica"     in principais, 0.03 * fator, 0.01 * fator),
+                    evoluir(j.passe,       "passe"       in principais, 0.03 * fator, 0.01 * fator),
+                    evoluir(j.velocidade,  "velocidade"  in principais, 0.03 * fator, 0.01 * fator),
+                    evoluir(j.finalizacao, "finalizacao" in principais, 0.03 * fator, 0.01 * fator),
+                    evoluir(j.defesa,      "defesa"      in principais, 0.03 * fator, 0.01 * fator),
+                    evoluir(j.fisico,      "fisico"      in principais, 0.03 * fator, 0.01 * fator)
+                )
+            }
+            else -> listOf(
+                regredir(j.tecnica), regredir(j.passe),    regredir(j.velocidade),
+                regredir(j.finalizacao), regredir(j.defesa), regredir(j.fisico)
+            )
+        }
+        val tecnica     = attrs[0]
+        val passe       = attrs[1]
+        val velocidade  = attrs[2]
+        val finalizacao = attrs[3]
+        val defesa      = attrs[4]
+        val fisico      = attrs[5]
+
+        val novaForca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6)
+            .coerceIn(1, 99)
+
+        return j.copy(
+            tecnica     = tecnica,
+            passe       = passe,
+            velocidade  = velocidade,
+            finalizacao = finalizacao,
+            defesa      = defesa,
+            fisico      = fisico,
+            forca       = novaForca,
+            idade       = novaIdade,
+            notaMedia   = 6.0f,         // reset para a nova temporada
+            partidasTemporada = 0
+        )
+    }
+
+    /**
+     * Atualiza a nota média de um jogador após cada partida (média corrida).
+     * Não deve ser chamado para aposentados ou jogadores sem time.
+     */
+    suspend fun atualizarNotaAposPartida(jogadorId: Int, novaNota: Float) {
+        val jogador = jogadorDao.buscarPorId(jogadorId) ?: return
+        val qtd = jogador.partidasTemporada
+        val novaMedia = if (qtd == 0) novaNota
+                        else ((jogador.notaMedia * qtd.toFloat() + novaNota) / (qtd + 1).toFloat())
+        jogadorDao.atualizarNota(jogadorId, novaMedia, qtd + 1)
+    }
+
+    /** Aposenta o jogador e gera automaticamente um jogador na base de juniores do mesmo clube. */
+    suspend fun aposentarJogador(jogadorId: Int) {
+        val entity = jogadorDao.buscarPorId(jogadorId) ?: return
+        val timeId = entity.timeId
+        jogadorDao.aposentarJogador(jogadorId)
+        if (timeId != null) {
+            val junior = gerarJuniorDeAposentado(entity, timeId)
+            jogadorDao.inserir(junior)
+        }
+    }
+
+    private fun gerarJuniorDeAposentado(aposentado: JogadorEntity, timeId: Int): JogadorEntity {
+        val rng = kotlin.random.Random.Default
+        val principais = atributosPrincipais(aposentado.posicao)
+        val baseForca = rng.nextInt(65, 81)
+        fun attr(nome: String): Int =
+            if (nome in principais) (baseForca + rng.nextInt(5, 16)).coerceIn(1, 99)
+            else (baseForca - rng.nextInt(5, 16)).coerceIn(1, 99)
+        val tecnica     = attr("tecnica")
+        val passe       = attr("passe")
+        val velocidade  = attr("velocidade")
+        val finalizacao = attr("finalizacao")
+        val defesa      = attr("defesa")
+        val fisico      = attr("fisico")
+        val forca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
+        val idade = rng.nextInt(16, 20)
+        val primeiro = NOMES_JUNIOR_PRIMEIRO[rng.nextInt(NOMES_JUNIOR_PRIMEIRO.size)]
+        val sobre    = NOMES_JUNIOR_SOBRENOME[rng.nextInt(NOMES_JUNIOR_SOBRENOME.size)]
+        return JogadorEntity(
+            timeId            = timeId,
+            nome              = "$primeiro $sobre",
+            nomeAbreviado     = "$primeiro ${sobre.first()}.",
+            idade             = idade,
+            posicao           = aposentado.posicao,
+            posicaoSecundaria = aposentado.posicaoSecundaria,
+            forca             = forca,
+            tecnica           = tecnica,
+            passe             = passe,
+            velocidade        = velocidade,
+            finalizacao       = finalizacao,
+            defesa            = defesa,
+            fisico            = fisico,
+            salario           = 200_000L,
+            contratoAnos      = 3,
+            valorMercado      = forca.toLong() * 500_000L,
+            categoriaBase     = true,
+            notaMedia         = 6.0f,
+            partidasTemporada = 0,
+            aposentado        = false
+        )
+    }
+
+    fun observeJuniores(timeId: Int): Flow<List<Jogador>> =
+        jogadorDao.observeJuniores(timeId).map { lista -> lista.map { it.toDomain() } }
+
+    suspend fun promoverJunior(jogadorId: Int) = jogadorDao.promoverJunior(jogadorId)
 
     suspend fun atualizarEscalacao(jogadorId: Int, status: Int, posicao: Posicao? = null) {
         if (posicao != null) jogadorDao.atualizarEscalacaoComPosicao(jogadorId, status, posicao)
@@ -171,7 +347,10 @@ class JogadorRepository @Inject constructor(
         suspenso = suspensoCicloAmarelos,
         moraleEstado = moraleEstado,
         escalarStatus = escalarStatus,
-        posicaoEscalado = posicaoEscalado
+        posicaoEscalado = posicaoEscalado,
+        notaMedia = notaMedia,
+        partidasTemporada = partidasTemporada,
+        aposentado = aposentado
     )
 }
 

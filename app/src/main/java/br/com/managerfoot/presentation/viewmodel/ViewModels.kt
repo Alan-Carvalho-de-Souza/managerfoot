@@ -1,4 +1,4 @@
-package br.com.managerfoot.presentation.viewmodel
+﻿package br.com.managerfoot.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -228,6 +228,9 @@ class DashboardViewModel @Inject constructor(
     private val _resultadoSimulado = MutableStateFlow<ResultadoPartida?>(null)
     val resultadoSimulado: StateFlow<ResultadoPartida?> = _resultadoSimulado.asStateFlow()
 
+    // Contexto entre metades - armazena estado do 1o tempo para continuar no 2o
+    private var _contextoSimulacao: ContextoSimulacaoMetade? = null
+
     // Escalação em uso durante a simulação (para o painel do intervalo)
     private val _escalacaoSimulacao = MutableStateFlow<Escalacao?>(null)
     val escalacaoSimulacao: StateFlow<Escalacao?> = _escalacaoSimulacao.asStateFlow()
@@ -278,61 +281,83 @@ class DashboardViewModel @Inject constructor(
         _uiState.value = DashboardUiState.Simulando
 
         try {
-            // Carrega escalação salva pelo jogador (ou cai no IA se não houver)
+            // Carrega escalacao salva pelo jogador (ou cai no IA se nao houver)
             val escalacaoJogador = gameRepository.gerarEscalacaoJogador(save.timeIdJogador)
             _escalacaoSimulacao.value = escalacaoJogador
 
-            // Simula a rodada inteira uma única vez: o mesmo resultado é persistido
-            // no banco e exibido na animação, eliminando divergência de placar.
-            val resultado = gameRepository.simularRodadaComJogador(
-                campeonatoId = campeonatoId,
-                rodada = rodada,
-                timeJogadorId = save.timeIdJogador,
-                escalacaoCasa = escalacaoJogador
+            // Simula apenas o 1o tempo; o 2o sera simulado apos o intervalo
+            val (contexto, resultadoParcial) = gameRepository.iniciarPartidaComJogador(
+                campeonatoId     = campeonatoId,
+                rodada           = rodada,
+                timeJogadorId    = save.timeIdJogador,
+                escalacaoJogador = escalacaoJogador
             )
-            _resultadoSimulado.value = resultado
+            _contextoSimulacao = contexto
+            _resultadoSimulado.value = resultadoParcial
+        } catch (e: Exception) {
+            // Ignora erro e volta para o estado normal
+        }
 
-            // Simula a mesma rodada nas demais divisões APENAS se for uma partida da liga
-            // (não da Copa). A Copa é independente e não deve arrastar o Brasileirão junto.
-            val ehPartidaCopa = save.copaId > 0 && campeonatoId == save.copaId
-            if (!ehPartidaCopa) {
-                for (campId in listOf(save.campeonatoAId, save.campeonatoBId, save.campeonatoCId, save.campeonatoDId)) {
-                    if (campId > 0 && campId != campeonatoId) {
-                        gameRepository.simularRodada(campId, rodada)
-                    }
-                }
-            }
+        _uiState.value = DashboardUiState.Pronto
+    }
 
-            // Verifica avanço de fase da Copa (se a rodada simulada era da Copa
-            // e NÃO há pênaltis pendentes — esses serão resolvidos pelo jogador)
-            if (save.copaId > 0 && campeonatoId == save.copaId && !resultado.precisaPenaltis) {
+    // Chamado pela tela de simulacao para obter eventos do 2o tempo (ou re-simulacao)
+    suspend fun obterEventosSegundoTempo(
+        titularesJogador: List<JogadorNaEscalacao>,
+        reservasJogador: List<JogadorNaEscalacao>,
+        substituicoes: List<InfoSubstituicao>,
+        formacao: String,
+        estilo: EstiloJogo,
+        minInicio: Int,
+        minFim: Int
+    ): List<EventoSimulado> {
+        val ctx = _contextoSimulacao ?: return emptyList()
+        val (ctxAtualizado, eventos) = gameRepository.simularPeriodoComJogador(
+            ctx              = ctx,
+            titularesJogador = titularesJogador,
+            reservasJogador  = reservasJogador,
+            substituicoes    = substituicoes,
+            formacao         = formacao,
+            estilo           = estilo,
+            minInicio        = minInicio,
+            minFim           = minFim
+        )
+        _contextoSimulacao = ctxAtualizado
+        return eventos
+    }
+
+    // Chamado pela tela de simulacao apos animacao do 2o tempo para finalizar e persistir
+    suspend fun finalizarPartidaSimulada(golsCasa: Int, golsFora: Int) {
+        val ctx  = _contextoSimulacao ?: return
+        val save = gameDataStore.saveState.first()
+        try {
+            val resultadoFinal = gameRepository.finalizarPartidaComJogador(
+                ctx           = ctx,
+                golsCasaFinal = golsCasa,
+                golsForaFinal = golsFora
+            )
+            _resultadoSimulado.value = resultadoFinal
+
+            if (save.copaId > 0 && ctx.campeonatoId == save.copaId && !resultadoFinal.precisaPenaltis) {
                 gameRepository.verificarEAvancarFaseCopa(save.copaId, save.anoAtual)
             }
-
-            // Pré-carrega dados do adversário para a disputa interativa
-            if (save.copaId > 0 && campeonatoId == save.copaId && resultado.precisaPenaltis) {
+            if (save.copaId > 0 && ctx.campeonatoId == save.copaId && resultadoFinal.precisaPenaltis) {
                 _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
                     copaId         = save.copaId,
-                    voltaPartidaId = resultado.partidaId,
+                    voltaPartidaId = resultadoFinal.partidaId,
                     timeJogadorId  = save.timeIdJogador
                 )
             }
-
-            // Quando o jogador joga a liga e já foi eliminado da Copa,
-            // simula a fase Copa pendente para manter o chaveamento atualizado.
-            if (!ehPartidaCopa && save.copaId > 0) {
+            if (ctx.campeonatoId != save.copaId && save.copaId > 0) {
                 gameRepository.simularProximaFaseCopaSeJogadorEliminado(
                     copaId        = save.copaId,
                     timeJogadorId = save.timeIdJogador,
                     anoAtual      = save.anoAtual
                 )
             }
-        } catch (e: Exception) {
-            // Ignora erro e volta para o estado normal
-        }
-
+        } catch (e: Exception) { /* ignora */ }
+        _contextoSimulacao = null
         _proximaPartida.value = gameRepository.buscarProximaPartida(save.timeIdJogador)
-        _uiState.value = DashboardUiState.Pronto
     }
 
     // Chamado quando o jogador fecha a tela de simulação
@@ -492,6 +517,10 @@ class EscalacaoViewModel @Inject constructor(
     }
 
     fun selecionarJogador(jogador: Jogador?) { _jogadorSelecionado.value = jogador }
+
+    fun aposentarJogador(jogadorId: Int) = viewModelScope.launch {
+        jogadorRepository.aposentarJogador(jogadorId)
+    }
 
     fun carregarAdversario(timeId: Int) = viewModelScope.launch {
         _adversario.value = timeRepository.buscarPorId(timeId)
@@ -1062,7 +1091,8 @@ data class HistoricoTemporada(
 @HiltViewModel
 class EstatisticasTimeViewModel @Inject constructor(
     private val gameDataStore: GameDataStore,
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
+    private val jogadorRepository: br.com.managerfoot.data.repository.JogadorRepository
 ) : ViewModel() {
 
     private val _temporadaStats = MutableStateFlow<List<TemporadaCompeticao>>(emptyList())
@@ -1073,6 +1103,9 @@ class EstatisticasTimeViewModel @Inject constructor(
 
     private val _jogadoresHistorico = MutableStateFlow<List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>>(emptyList())
     val jogadoresHistorico: StateFlow<List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>> = _jogadoresHistorico.asStateFlow()
+
+    private val _notasElenco = MutableStateFlow<List<br.com.managerfoot.domain.model.Jogador>>(emptyList())
+    val notasElenco: StateFlow<List<br.com.managerfoot.domain.model.Jogador>> = _notasElenco.asStateFlow()
 
     fun carregar(timeId: Int) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
@@ -1200,6 +1233,14 @@ class EstatisticasTimeViewModel @Inject constructor(
         _historicoStats.value = (ligaEntries + copaEntries).sortedByDescending { it.temporadaId }
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
+
+        // Notas médias do elenco na temporada atual
+        jogadorRepository.observeElenco(timeId)
+            .collect { lista ->
+                _notasElenco.value = lista
+                    .filter { it.partidasTemporada > 0 }
+                    .sortedByDescending { it.notaMedia }
+            }
     }
 }
 
@@ -1256,6 +1297,39 @@ class EstadioViewModel @Inject constructor(
         } else {
             _mensagem.value = "Saldo insuficiente ou nível máximo atingido."
         }
+    }
+
+    fun limparMensagem() { _mensagem.value = null }
+}
+
+// ══════════════════════════════════════════════════════
+//  JunioresViewModel
+// ══════════════════════════════════════════════════════
+@HiltViewModel
+class JunioresViewModel @Inject constructor(
+    private val jogadorRepository: br.com.managerfoot.data.repository.JogadorRepository
+) : ViewModel() {
+
+    private val _juniores = MutableStateFlow<List<br.com.managerfoot.domain.model.Jogador>>(emptyList())
+    val juniores: StateFlow<List<br.com.managerfoot.domain.model.Jogador>> = _juniores.asStateFlow()
+
+    private val _jogadorSelecionado = MutableStateFlow<br.com.managerfoot.domain.model.Jogador?>(null)
+    val jogadorSelecionado: StateFlow<br.com.managerfoot.domain.model.Jogador?> = _jogadorSelecionado.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        jogadorRepository.observeJuniores(timeId).collect { _juniores.value = it }
+    }
+
+    fun selecionarJogador(jogador: br.com.managerfoot.domain.model.Jogador?) {
+        _jogadorSelecionado.value = jogador
+    }
+
+    fun promoverJunior(jogadorId: Int, nomeAbrev: String) = viewModelScope.launch {
+        jogadorRepository.promoverJunior(jogadorId)
+        _mensagem.value = "$nomeAbrev promovido ao elenco principal!"
     }
 
     fun limparMensagem() { _mensagem.value = null }

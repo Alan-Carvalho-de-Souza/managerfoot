@@ -1,6 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -369,7 +370,11 @@ fun EscalacaoScreen(
 
     // Dialog de detalhe do jogador selecionado
     selecionado?.let { jogador ->
-        JogadorDetalheDialog(jogador = jogador, onDismiss = { vm.selecionarJogador(null) })
+        JogadorDetalheDialog(
+            jogador    = jogador,
+            onDismiss  = { vm.selecionarJogador(null) },
+            onAposentar = { id -> vm.aposentarJogador(id); vm.selecionarJogador(null) }
+        )
     }
 }
 
@@ -596,15 +601,136 @@ internal fun posicaoColor(posicao: Posicao): Color = when (posicao.setor) {
 }
 
 @Composable
-private fun JogadorDetalheDialog(jogador: Jogador, onDismiss: () -> Unit) {
+private fun JogadorDetalheDialog(
+    jogador: Jogador,
+    onDismiss: () -> Unit,
+    onAposentar: ((Int) -> Unit)? = null
+) {
+    var confirmarAposentadoria by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(jogador.nome) },
+        title = { Text(jogador.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Posição: ${jogador.posicao.name}", style = MaterialTheme.typography.bodySmall)
-                Text("Idade: ${jogador.idade} anos", style = MaterialTheme.typography.bodySmall)
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // ── Informações gerais ──────────────────────────────
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "${jogador.posicao.name.replace("_", " ")} · ${jogador.idade} anos",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (jogador.posicaoSecundaria != null) {
+                            Text(
+                                "Alt: ${jogador.posicaoSecundaria.abreviacao}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    ForcaBadge(jogador.forca)
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                // ── Progressão / Desenvolvimento ────────────────────
+                val statusDesenv = when {
+                    jogador.idade in 16..24 -> Triple("Crescimento", Color(0xFF2E7D32), "↑ 5%/2% por temporada")
+                    jogador.idade in 25..32 -> Triple("Estabilização", Color(0xFF1565C0), "↑ 3%/1% por temporada")
+                    else                    -> Triple("Declínio", Color(0xFFC62828), "↓ 2% por temporada")
+                }
+                Text(
+                    "Desenvolvimento",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = statusDesenv.second.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                statusDesenv.first,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = statusDesenv.second,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Text(
+                            statusDesenv.third,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                // Nota média e partidas da temporada
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val notaColor = when {
+                            jogador.notaMedia >= 8.0f -> Color(0xFF2E7D32)
+                            jogador.notaMedia >= 6.5f -> MaterialTheme.colorScheme.primary
+                            jogador.notaMedia >= 5.0f -> Color(0xFFE65100)
+                            else -> Color(0xFFC62828)
+                        }
+                        Text(
+                            "%.1f".format(jogador.notaMedia),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = notaColor
+                        )
+                        Text(
+                            "Nota média",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${jogador.partidasTemporada}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Partidas",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                // ── Atributos ───────────────────────────────────────
+                Text(
+                    "Atributos",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(2.dp))
                 AtributoRow("Força geral", jogador.forca)
                 AtributoRow("Técnica", jogador.tecnica)
                 AtributoRow("Passe", jogador.passe)
@@ -612,10 +738,60 @@ private fun JogadorDetalheDialog(jogador: Jogador, onDismiss: () -> Unit) {
                 AtributoRow("Finalização", jogador.finalizacao)
                 AtributoRow("Defesa", jogador.defesa)
                 AtributoRow("Físico", jogador.fisico)
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                // ── Contrato ────────────────────────────────────────
+                Text(
+                    "Contrato",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(2.dp))
                 Text("Salário: ${formatarSaldo(jogador.salario)}/mês", style = MaterialTheme.typography.bodySmall)
-                Text("Contrato: ${jogador.contratoAnos} anos", style = MaterialTheme.typography.bodySmall)
+                Text("Contrato: ${jogador.contratoAnos} anos restantes", style = MaterialTheme.typography.bodySmall)
                 Text("Valor de mercado: ${formatarSaldo(jogador.valorMercado)}", style = MaterialTheme.typography.bodySmall)
+
+                // ── Aposentadoria ───────────────────────────────────
+                if (onAposentar != null && jogador.idade in 33..44 && !jogador.aposentado) {
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    if (confirmarAposentadoria) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Confirma a aposentadoria de ${jogador.nomeAbreviado}? Esta ação não pode ser desfeita.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { confirmarAposentadoria = false },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Cancelar", style = MaterialTheme.typography.labelSmall) }
+                                Button(
+                                    onClick = {
+                                        onAposentar(jogador.id)
+                                        onDismiss()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                ) { Text("Aposentar", style = MaterialTheme.typography.labelSmall) }
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { confirmarAposentadoria = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Text(
+                                "Aposentar jogador",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } }

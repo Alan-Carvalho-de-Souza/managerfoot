@@ -46,7 +46,10 @@ data class Jogador(
     val suspenso: Boolean,
     val moraleEstado: MoraleEstado,
     val escalarStatus: Int = 0,          // 0=não escalado, 1=titular, 2=reserva
-    val posicaoEscalado: Posicao? = null // posição salva na escalação manual
+    val posicaoEscalado: Posicao? = null, // posição salva na escalação manual
+    val notaMedia: Float = 6.0f,         // média das notas na temporada (1.0–10.0)
+    val partidasTemporada: Int = 0,      // partidas jogadas na temporada atual
+    val aposentado: Boolean = false      // true = encerrou carreira
 ) {
     // Força efetiva: penaliza improvisos e considera morale
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {
@@ -122,7 +125,8 @@ data class ResultadoPartida(
     val estatisticasFora: EstatisticasTime,
     val precisaPenaltis: Boolean = false,
     val golsAgregadoCasa: Int = 0,
-    val golsAgregadoFora: Int = 0
+    val golsAgregadoFora: Int = 0,
+    val notasJogadores: Map<Int, Float> = emptyMap()  // jogadorId → nota da partida (1–10)
 )
 
 data class EventoSimulado(
@@ -140,6 +144,45 @@ data class EstatisticasTime(
     val faltas: Int,
     val cartaoAmarelo: Int,
     val cartaoVermelho: Int
+)
+
+/**
+ * Estado do jogo ao final de um período (1º ou 2º tempo).
+ * Captura o squad atualizado e as penalizações acumuladas para que o
+ * período seguinte seja simulado a partir do estado real do momento.
+ */
+data class EstadoMetade(
+    val titsCasa: List<JogadorNaEscalacao>,
+    val titsFora: List<JogadorNaEscalacao>,
+    val resCasa: List<JogadorNaEscalacao>,
+    val resFora: List<JogadorNaEscalacao>,
+    val penalCasa: Double = 1.0,        // multiplicador de penalização acumulada (expulsões/lesões)
+    val penalFora: Double = 1.0,
+    val entryMinutes: Map<Int, Int> = emptyMap(),   // jogadorId → minuto de entrada em campo
+    val exitMinutes: Map<Int, Int> = emptyMap()     // jogadorId → minuto de saída do campo
+)
+
+/** Contexto que o ViewModel mantém entre o fim do 1º tempo e o início do 2º. */
+data class ContextoSimulacaoMetade(
+    val campeonatoId: Int,
+    val rodada: Int,
+    val timeJogadorId: Int,
+    val ehMandante: Boolean,
+    val partidaDoJogadorId: Int,
+    val escalacaoJogadorOriginal: Escalacao,    // escalação inicial do jogador (para Time info)
+    val escalacaoAdversario: Escalacao,          // escalação inicial do adversário
+    val estadoMetade1: EstadoMetade,             // squad + penas após 1º tempo
+    val golsCasaMetade1: Int,
+    val golsForaMetade1: Int,
+    val eventosAcumulados: List<EventoSimulado>  // eventos canônicos acumulados para persistência
+)
+
+/** Substituição passada da UI para o motor — sem dependência de Compose. */
+data class InfoSubstituicao(
+    val saiId: Int,
+    val entrouId: Int,
+    val minuto: Int,
+    val timeId: Int
 )
 
 data class OfertaTransferencia(

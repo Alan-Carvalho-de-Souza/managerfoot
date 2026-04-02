@@ -60,6 +60,9 @@ sealed class Rota(val caminho: String) {
     object Estadio          : Rota("estadio/{timeId}") {
         fun com(timeId: Int) = "estadio/$timeId"
     }
+    object Juniores         : Rota("juniores/{timeId}") {
+        fun comTimeId(id: Int) = "juniores/$id"
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -132,7 +135,8 @@ fun ManagerFootNavGraph() {
                 },
                 onIrParaRankingGeral = { navController.navigate(Rota.RankingGeral.caminho) },
                 onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) },
-                onIrParaEstadio      = { navController.navigate(Rota.Estadio.com(timeId)) }
+                onIrParaEstadio      = { navController.navigate(Rota.Estadio.com(timeId)) },
+                onIrParaJuniores     = { navController.navigate(Rota.Juniores.comTimeId(timeId)) }
             )
         }
 
@@ -297,6 +301,15 @@ fun ManagerFootNavGraph() {
         ) { backStack ->
             val timeId = backStack.arguments!!.getInt("timeId")
             EstadioScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Base de Juniores
+        composable(
+            route = Rota.Juniores.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            JunioresScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
         }
     }
 }
