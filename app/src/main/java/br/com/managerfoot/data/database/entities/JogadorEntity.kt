@@ -55,7 +55,12 @@ data class JogadorEntity(
     // Progressão de habilidades
     val notaMedia: Float = 6.0f,         // média das notas por partida na temporada (1.0–10.0)
     val partidasTemporada: Int = 0,      // partidas jogadas na temporada atual
-    val aposentado: Boolean = false      // true = encerrou carreira
+    val aposentado: Boolean = false,     // true = encerrou carreira
+
+    // Acumulador fracionário de evolução durante a temporada.
+    // Cada partida adiciona uma fração baseada na nota e na idade.
+    // Ao cruzar ±1.0, os atributos são incrementados/decrementados e o valor é reduzido.
+    val progressoEvolucao: Float = 0f
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

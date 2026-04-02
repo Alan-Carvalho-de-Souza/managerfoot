@@ -30,13 +30,14 @@ fun FinancasScreen(
     vm: FinancasViewModel = hiltViewModel()
 ) {
     val elenco by vm.elenco.collectAsState()
-    val saveState by vm.saveState.collectAsState()
+    val mesAtual by vm.mesAtual.collectAsState()
+    val anoAtual by vm.anoAtual.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
     val totalFolha = elenco.sumOf { it.salario }
-    val mesLabel = saveState?.mesAtual?.let { NOMES_MESES_FIN.getOrNull(it) } ?: ""
-    val anoLabel = saveState?.anoAtual?.toString() ?: ""
+    val mesLabel = NOMES_MESES_FIN.getOrElse(mesAtual) { "" }
+    val anoLabel = anoAtual.toString()
 
     Scaffold(
         topBar = {

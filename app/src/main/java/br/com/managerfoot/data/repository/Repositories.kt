@@ -140,17 +140,69 @@ class JogadorRepository @Inject constructor(
     }
 
     /**
-     * Processa o desenvolvimento anual de todos os jogadores:
-     * - Incrementa um ano na idade de todos
-     * - Jovens (16–24): evoluem até 5% nos atributos principais e 2% nos demais,
-     *   escalonado pela nota média (nota=10 → evolução máxima)
-     * - Adultos (25–32): evoluem até 3% nos principais e 1% nos demais
-     * - Veteranos (33+): regridem 2% em todos os atributos, independente de nota
-     * - Reseta notaMedia e partidasTemporada para a nova temporada
+     * Processa o fim de temporada de todos os jogadores:
+     * - Incrementa um ano na idade
+     * - Jogadores sem clube (timeId=null) e não aposentados recebem pequena regressão
+     *   por inatividade (não jogaram partidas para acumular evolução natural)
+     * - Juniores (categoriaBase=true) recebem pequena evolução automática de treinamento
+     * - Reseta notaMedia, partidasTemporada e progressoEvolucao para a nova temporada
+     *
+     * A evolução/regressão dos jogadores ativos durante a temporada já ocorreu
+     * incrementalmente via [atualizarNotaEEvolucao] após cada partida.
      */
     suspend fun processarDesenvolvimentoAnual() {
         val todos = jogadorDao.buscarTodos()
-        val atualizados = todos.map { j -> aplicarDesenvolvimento(j) }
+        val atualizados = todos.map { j ->
+            val novaIdade = j.idade + 1
+            when {
+                j.aposentado -> j.copy(idade = novaIdade)
+
+                // Juniores: evolução natural de treinamento (sem partidas sênior)
+                j.categoriaBase -> {
+                    val principais = atributosPrincipais(j.posicao)
+                    fun crescer(attr: Int, nome: String) =
+                        if (nome in principais) (attr + 1).coerceIn(1, 99)
+                        else attr
+                    val t = crescer(j.tecnica,     "tecnica")
+                    val p = crescer(j.passe,        "passe")
+                    val v = crescer(j.velocidade,   "velocidade")
+                    val f = crescer(j.finalizacao,  "finalizacao")
+                    val d = crescer(j.defesa,       "defesa")
+                    val fi= crescer(j.fisico,       "fisico")
+                    val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
+                    j.copy(
+                        idade = novaIdade, forca = novaForca,
+                        tecnica = t, passe = p, velocidade = v,
+                        finalizacao = f, defesa = d, fisico = fi,
+                        notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                    )
+                }
+
+                // Jogadores sem clube: regressão por inatividade
+                j.timeId == null -> {
+                    fun regredir(attr: Int) = (attr - 1).coerceIn(1, 99)
+                    val t = regredir(j.tecnica);    val p = regredir(j.passe)
+                    val v = regredir(j.velocidade); val f = regredir(j.finalizacao)
+                    val d = regredir(j.defesa);     val fi= regredir(j.fisico)
+                    val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
+                    j.copy(
+                        idade = novaIdade, forca = novaForca,
+                        tecnica = t, passe = p, velocidade = v,
+                        finalizacao = f, defesa = d, fisico = fi,
+                        notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                    )
+                }
+
+                // Jogadores ativos: apenas incrementa idade e reseta estatísticas sazonais.
+                // A evolução/regressão de atributos já aconteceu durante a temporada.
+                else -> j.copy(
+                    idade = novaIdade,
+                    notaMedia = 6.0f,
+                    partidasTemporada = 0,
+                    progressoEvolucao = 0f
+                )
+            }
+        }
         jogadorDao.atualizarTodos(atualizados)
     }
 
@@ -168,81 +220,87 @@ class JogadorRepository @Inject constructor(
         Posicao.SEGUNDA_ATACANTE   -> setOf("finalizacao", "tecnica", "velocidade")
     }
 
-    private fun aplicarDesenvolvimento(j: JogadorEntity): JogadorEntity {
-        val principais = atributosPrincipais(j.posicao)
-        val novaIdade  = j.idade + 1
+    /**
+     * Atualiza nota média e aplica evolução/regressão incremental após cada partida.
+     *
+     * O acumulador [progressoEvolucao] cresce ou diminui a cada partida conforme
+     * a nota do jogador e sua faixa etária:
+     * - Jovens (16–24): nota alta → acumula positivo → ao cruzar +1.0, atributos
+     *   principais ganham +1; nota baixa → acumula negativo → todos os atributos perdem -1.
+     * - Adultos (25–32): mesma lógica, porém com taxas menores.
+     * - Veteranos (33+): sempre acumulam negativo (declínio progressivo independente
+     *   da nota, mas boas atuações desaceleram a queda).
+     *
+     * Ao final de uma temporada completa (~38 partidas):
+     * - Jovem com nota média ≈ 10 → +4 a +5 pts nos atributos principais → +2 a +3 força
+     * - Adulto com nota média ≈ 10 → +2 a +3 pts nos atributos principais → +1 a +2 força
+     * - Veterano com nota média ≈ 6  → -1 a -2 força (declínio natural)
+     */
+    suspend fun atualizarNotaEEvolucao(jogadorId: Int, notaPartida: Float) {
+        val j = jogadorDao.buscarPorId(jogadorId) ?: return
+        if (j.aposentado || j.categoriaBase) return
 
-        fun evoluir(attr: Int, isPrincipal: Boolean, fatorPos: Double, fatorOther: Double): Int {
-            val delta = if (isPrincipal) (attr * fatorPos).toInt() else (attr * fatorOther).toInt()
-            return (attr + delta.coerceAtLeast(1)).coerceIn(1, 99)
-        }
-        fun regredir(attr: Int): Int {
-            val delta = (attr * 0.02).toInt().coerceAtLeast(1)
-            return (attr - delta).coerceAtLeast(1)
+        // Atualiza nota média (média corrida)
+        val qtd = j.partidasTemporada
+        val novaMedia = if (qtd == 0) notaPartida
+                        else ((j.notaMedia * qtd.toFloat() + notaPartida) / (qtd + 1).toFloat())
+
+        // Delta por partida: baseado na nota individual desta partida
+        // notaFactor in [-1, +1]: 10 → +1.0 | 5.5 → 0.0 | 1 → -1.0
+        val notaFactor = ((notaPartida - 5.5f) / 4.5f).coerceIn(-1.0f, 1.0f)
+        val deltaPartida: Float = when {
+            j.idade in 16..24 -> notaFactor * 0.13f
+            j.idade in 25..32 -> notaFactor * 0.08f
+            // Veterano: declina sempre; nota muito boa desacelera a queda
+            else -> -(0.055f - notaFactor * 0.025f)
         }
 
-        val attrs = when {
-            j.idade in 16..24 -> {
-                val fator = (j.notaMedia / 10.0).coerceIn(0.0, 1.0)
-                listOf(
-                    evoluir(j.tecnica,     "tecnica"     in principais, 0.05 * fator, 0.02 * fator),
-                    evoluir(j.passe,       "passe"       in principais, 0.05 * fator, 0.02 * fator),
-                    evoluir(j.velocidade,  "velocidade"  in principais, 0.05 * fator, 0.02 * fator),
-                    evoluir(j.finalizacao, "finalizacao" in principais, 0.05 * fator, 0.02 * fator),
-                    evoluir(j.defesa,      "defesa"      in principais, 0.05 * fator, 0.02 * fator),
-                    evoluir(j.fisico,      "fisico"      in principais, 0.05 * fator, 0.02 * fator)
-                )
-            }
-            j.idade in 25..32 -> {
-                val fator = (j.notaMedia / 10.0).coerceIn(0.0, 1.0)
-                listOf(
-                    evoluir(j.tecnica,     "tecnica"     in principais, 0.03 * fator, 0.01 * fator),
-                    evoluir(j.passe,       "passe"       in principais, 0.03 * fator, 0.01 * fator),
-                    evoluir(j.velocidade,  "velocidade"  in principais, 0.03 * fator, 0.01 * fator),
-                    evoluir(j.finalizacao, "finalizacao" in principais, 0.03 * fator, 0.01 * fator),
-                    evoluir(j.defesa,      "defesa"      in principais, 0.03 * fator, 0.01 * fator),
-                    evoluir(j.fisico,      "fisico"      in principais, 0.03 * fator, 0.01 * fator)
-                )
-            }
-            else -> listOf(
-                regredir(j.tecnica), regredir(j.passe),    regredir(j.velocidade),
-                regredir(j.finalizacao), regredir(j.defesa), regredir(j.fisico)
-            )
+        var prog = j.progressoEvolucao + deltaPartida
+        var tecnica     = j.tecnica
+        var passe       = j.passe
+        var velocidade  = j.velocidade
+        var finalizacao = j.finalizacao
+        var defesa      = j.defesa
+        var fisico      = j.fisico
+        val principais  = atributosPrincipais(j.posicao)
+
+        // Evolução: incrementa apenas os atributos principais da posição
+        while (prog >= 1.0f) {
+            if ("tecnica"     in principais) tecnica     = (tecnica     + 1).coerceIn(1, 99)
+            if ("passe"       in principais) passe       = (passe       + 1).coerceIn(1, 99)
+            if ("velocidade"  in principais) velocidade  = (velocidade  + 1).coerceIn(1, 99)
+            if ("finalizacao" in principais) finalizacao = (finalizacao + 1).coerceIn(1, 99)
+            if ("defesa"      in principais) defesa      = (defesa      + 1).coerceIn(1, 99)
+            if ("fisico"      in principais) fisico      = (fisico      + 1).coerceIn(1, 99)
+            prog -= 1.0f
         }
-        val tecnica     = attrs[0]
-        val passe       = attrs[1]
-        val velocidade  = attrs[2]
-        val finalizacao = attrs[3]
-        val defesa      = attrs[4]
-        val fisico      = attrs[5]
+
+        // Regressão: decrementa todos os atributos (declínio é universal)
+        while (prog <= -1.0f) {
+            tecnica     = (tecnica     - 1).coerceIn(1, 99)
+            passe       = (passe       - 1).coerceIn(1, 99)
+            velocidade  = (velocidade  - 1).coerceIn(1, 99)
+            finalizacao = (finalizacao - 1).coerceIn(1, 99)
+            defesa      = (defesa      - 1).coerceIn(1, 99)
+            fisico      = (fisico      - 1).coerceIn(1, 99)
+            prog += 1.0f
+        }
 
         val novaForca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6)
             .coerceIn(1, 99)
 
-        return j.copy(
-            tecnica     = tecnica,
-            passe       = passe,
-            velocidade  = velocidade,
-            finalizacao = finalizacao,
-            defesa      = defesa,
-            fisico      = fisico,
-            forca       = novaForca,
-            idade       = novaIdade,
-            notaMedia   = 6.0f,         // reset para a nova temporada
-            partidasTemporada = 0
-        )
-    }
-
-    /**
-     * Atualiza a nota média de um jogador após cada partida (média corrida).
-     * Não deve ser chamado para aposentados ou jogadores sem time.
-     */
-    suspend fun atualizarNotaAposPartida(jogadorId: Int, novaNota: Float) {
-        val jogador = jogadorDao.buscarPorId(jogadorId) ?: return
-        val qtd = jogador.partidasTemporada
-        val novaMedia = if (qtd == 0) novaNota
-                        else ((jogador.notaMedia * qtd.toFloat() + novaNota) / (qtd + 1).toFloat())
-        jogadorDao.atualizarNota(jogadorId, novaMedia, qtd + 1)
+        jogadorDao.atualizar(j.copy(
+            notaMedia         = novaMedia,
+            partidasTemporada = qtd + 1,
+            progressoEvolucao = prog,
+            tecnica           = tecnica,
+            passe             = passe,
+            velocidade        = velocidade,
+            finalizacao       = finalizacao,
+            defesa            = defesa,
+            fisico            = fisico,
+            forca             = novaForca
+        ))
     }
 
     /** Aposenta o jogador e gera automaticamente um jogador na base de juniores do mesmo clube. */

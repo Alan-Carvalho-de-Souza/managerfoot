@@ -1099,10 +1099,11 @@ class GameRepository @Inject constructor(
             .filter { it.tipo == TipoEvento.LESAO }
             .forEach { _ -> }
 
-        // Calcula e persiste a nota de cada jogador participante
+        // Calcula e persiste a nota de cada jogador participante;
+        // aplica também a evolução/regressão incremental baseada na performance
         val notas = calcularNotasJogadores(resultado)
         notas.forEach { (jogadorId, nota) ->
-            jogadorRepository.atualizarNotaAposPartida(jogadorId, nota)
+            jogadorRepository.atualizarNotaEEvolucao(jogadorId, nota)
         }
         return notas
     }

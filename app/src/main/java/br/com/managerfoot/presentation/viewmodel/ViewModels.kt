@@ -1250,7 +1250,8 @@ class EstatisticasTimeViewModel @Inject constructor(
 @HiltViewModel
 class FinancasViewModel @Inject constructor(
     private val gameDataStore: GameDataStore,
-    private val jogadorRepository: JogadorRepository
+    private val jogadorRepository: JogadorRepository,
+    private val gameRepository: GameRepository
 ) : ViewModel() {
 
     val saveState = gameDataStore.saveState
@@ -1259,9 +1260,32 @@ class FinancasViewModel @Inject constructor(
     private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
     val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
 
+    // Mês e ano derivados da progressão real do calendário de partidas,
+    // igual à lógica do Dashboard (baseado em ordemGlobal da próxima partida).
+    private val _mesAtual = MutableStateFlow(1)
+    val mesAtual: StateFlow<Int> = _mesAtual.asStateFlow()
+
+    private val _anoAtual = MutableStateFlow(2026)
+    val anoAtual: StateFlow<Int> = _anoAtual.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
-        jogadorRepository.observeElenco(timeId)
-            .collect { lista -> _elenco.value = lista.sortedByDescending { it.salario } }
+        // Carrega elenco de forma reativa
+        launch {
+            jogadorRepository.observeElenco(timeId)
+                .collect { lista -> _elenco.value = lista.sortedByDescending { it.salario } }
+        }
+        // Carrega mês/ano a partir do calendário de partidas
+        val save = gameDataStore.saveState.first()
+        val proximaPartida = gameRepository.buscarProximaPartida(save.timeIdJogador)
+        val ultimosResultados = gameRepository.buscarUltimosResultados(
+            save.timeIdJogador,
+            listOf(save.campeonatoId, save.copaId).filter { it > 0 }
+        )
+        val ordemRef = (proximaPartida ?: ultimosResultados.firstOrNull())?.ordemGlobal ?: 0
+        _mesAtual.value = if (ordemRef > 0)
+            (1 + (ordemRef.coerceAtLeast(1) - 1) * 11 / 379).coerceIn(1, 12)
+        else save.mesAtual
+        _anoAtual.value = save.anoAtual
     }
 }
 
