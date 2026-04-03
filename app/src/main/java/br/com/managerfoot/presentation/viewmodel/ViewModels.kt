@@ -7,6 +7,8 @@ import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
 import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.PartidaDao
+import br.com.managerfoot.data.dao.TransferenciaDetalhe
+import kotlinx.coroutines.Job
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.data.datasource.GameDataStore
 import br.com.managerfoot.data.datasource.SeedDataSource
@@ -331,10 +333,26 @@ class DashboardViewModel @Inject constructor(
         val ctx  = _contextoSimulacao ?: return
         val save = gameDataStore.saveState.first()
         try {
+            // B/C/D avançam APENAS quando o jogador joga na sua própria liga (nunca em Copa).
+            // Isso garante sincronismo exato: 1 rodada da liga do jogador = 1 rodada nos outros campeonatos.
+            // Se incluíssemos partidas de Copa, B/C/D acumulariam rodadas extras e esgotariam
+            // o totalRodadas antes do fim da Série A, fazendo com que parassem de avançar.
+            val ehJogoDaLiga = ctx.campeonatoId == save.campeonatoId
+            val outrosCampeonatos = if (ehJogoDaLiga) {
+                listOf(
+                    save.campeonatoAId,
+                    save.campeonatoBId,
+                    save.campeonatoCId,
+                    save.campeonatoDId
+                ).filter { it > 0 && it != save.campeonatoId }
+            } else {
+                emptyList()
+            }
             val resultadoFinal = gameRepository.finalizarPartidaComJogador(
-                ctx           = ctx,
-                golsCasaFinal = golsCasa,
-                golsForaFinal = golsFora
+                ctx                  = ctx,
+                golsCasaFinal        = golsCasa,
+                golsForaFinal        = golsFora,
+                outrosCampeonatoIds  = outrosCampeonatos
             )
             _resultadoSimulado.value = resultadoFinal
 
@@ -490,7 +508,8 @@ class EscalacaoViewModel @Inject constructor(
     fun carregar(timeId: Int) = viewModelScope.launch {
         timeIdCarregado = timeId
         jogadorRepository.observeElenco(timeId).collect { lista ->
-            _elenco.value = lista
+            val listaOrdenada = lista.sortedWith(compareBy({ it.posicao.ordinal }, { -it.forca }))
+            _elenco.value = listaOrdenada
             if (_escalacao.value == null) {
                 val time = timeRepository.buscarPorId(timeId) ?: return@collect
                 val titularesSalvos = jogadorRepository.buscarTitularesSalvos(timeId)
@@ -511,6 +530,23 @@ class EscalacaoViewModel @Inject constructor(
                     val reservasSalvas = jogadorRepository.buscarReservasSalvas(timeId)
                     val reservas = reservasSalvas.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
                     _escalacao.value = gerada.copy(reservas = reservas)
+                }
+            } else {
+                // Atualiza os atributos dos jogadores na escalação sempre que o elenco
+                // mudar no banco (ex.: após evolução/regressão de atributos no jogo).
+                // Preserva posicaoUsada e estrutura da escalação definida pelo usuário.
+                val esc = _escalacao.value ?: return@collect
+                val mapaJogadores = lista.associateBy { it.id }
+                val novosTitulares = esc.titulares.map { jne ->
+                    val atualizado = mapaJogadores[jne.jogador.id]
+                    if (atualizado != null) jne.copy(jogador = atualizado) else jne
+                }
+                val novasReservas = esc.reservas.map { jne ->
+                    val atualizado = mapaJogadores[jne.jogador.id]
+                    if (atualizado != null) jne.copy(jogador = atualizado) else jne
+                }
+                if (novosTitulares != esc.titulares || novasReservas != esc.reservas) {
+                    _escalacao.value = esc.copy(titulares = novosTitulares, reservas = novasReservas)
                 }
             }
         }
@@ -654,6 +690,9 @@ class MercadoViewModel @Inject constructor(
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
 
+    private val _transferencias = MutableStateFlow<List<TransferenciaDetalhe>>(emptyList())
+    val transferencias: StateFlow<List<TransferenciaDetalhe>> = _transferencias.asStateFlow()
+
     private var timeId = -1
 
     fun carregar(tId: Int) {
@@ -666,6 +705,7 @@ class MercadoViewModel @Inject constructor(
                     _saldo.value = times.find { it.id == tId }?.saldo ?: 0L
                 }
             }
+            launch { jogadorRepository.observeTodasTransferencias().collect { _transferencias.value = it } }
         }
     }
 
@@ -706,6 +746,102 @@ class MercadoViewModel @Inject constructor(
             mes = save.mesAtual
         )
         _mensagem.value = "${jogador.nomeAbreviado} vendido por ${formatarValor(jogador.valorMercado)}"
+    }
+
+    fun limparMensagem() { _mensagem.value = null }
+
+    private fun formatarValor(centavos: Long): String {
+        val reais = centavos / 100.0
+        return when {
+            reais >= 1_000_000 -> "R$ %.1f M".format(reais / 1_000_000)
+            reais >= 1_000     -> "R$ %.0f mil".format(reais / 1_000)
+            else               -> "R$ %.0f".format(reais)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ClubesViewModel
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class ClubesViewModel @Inject constructor(
+    private val gameDataStore: GameDataStore,
+    private val timeRepository: TimeRepository,
+    private val jogadorRepository: JogadorRepository
+) : ViewModel() {
+
+    private val _times = MutableStateFlow<List<Time>>(emptyList())
+    val times: StateFlow<List<Time>> = _times.asStateFlow()
+
+    private val _timeSelecionado = MutableStateFlow<Time?>(null)
+    val timeSelecionado: StateFlow<Time?> = _timeSelecionado.asStateFlow()
+
+    private val _elencoTimeSelecionado = MutableStateFlow<List<Jogador>>(emptyList())
+    val elencoTimeSelecionado: StateFlow<List<Jogador>> = _elencoTimeSelecionado.asStateFlow()
+
+    private val _saldo = MutableStateFlow(0L)
+    val saldo: StateFlow<Long> = _saldo.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    private var timeJogadorId = -1
+    private var elencoJob: Job? = null
+
+    fun carregar(timeId: Int) {
+        timeJogadorId = timeId
+        viewModelScope.launch {
+            launch {
+                timeRepository.observeTodos().collect { todos ->
+                    _times.value = todos.filter { it.id != timeId }
+                    _saldo.value = todos.find { it.id == timeId }?.saldo ?: 0L
+                }
+            }
+        }
+    }
+
+    fun selecionarTime(time: Time) {
+        _timeSelecionado.value = time
+        elencoJob?.cancel()
+        elencoJob = viewModelScope.launch {
+            jogadorRepository.observeElenco(time.id).collect { elenco ->
+                _elencoTimeSelecionado.value = elenco.sortedWith(
+                    compareBy({ it.posicao.ordinal }, { -it.forca })
+                )
+            }
+        }
+    }
+
+    fun limparTimeSelecionado() {
+        _timeSelecionado.value = null
+        elencoJob?.cancel()
+        _elencoTimeSelecionado.value = emptyList()
+    }
+
+    fun fazerOferta(jogador: Jogador) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        val time = timeRepository.buscarPorId(timeJogadorId) ?: return@launch
+        if (time.saldo < jogador.valorMercado) {
+            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(jogador.valorMercado)}"
+            return@launch
+        }
+        timeRepository.debitarSaldo(timeJogadorId, jogador.valorMercado)
+        jogador.timeId?.let { vendedorId ->
+            timeRepository.creditarSaldo(vendedorId, jogador.valorMercado)
+        }
+        jogadorRepository.realizarTransferencia(
+            oferta = OfertaTransferencia(
+                jogadorId = jogador.id,
+                timeCompradorId = timeJogadorId,
+                timeVendedorId = jogador.timeId,
+                valor = jogador.valorMercado,
+                salarioProposto = jogador.salario,
+                contratoAnos = 3
+            ),
+            temporadaId = save.temporadaId,
+            mes = save.mesAtual
+        )
+        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(jogador.valorMercado)}!"
     }
 
     fun limparMensagem() { _mensagem.value = null }
@@ -1260,13 +1396,23 @@ class FinancasViewModel @Inject constructor(
     private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
     val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
 
-    // Mês e ano derivados da progressão real do calendário de partidas,
-    // igual à lógica do Dashboard (baseado em ordemGlobal da próxima partida).
     private val _mesAtual = MutableStateFlow(1)
     val mesAtual: StateFlow<Int> = _mesAtual.asStateFlow()
 
     private val _anoAtual = MutableStateFlow(2026)
     val anoAtual: StateFlow<Int> = _anoAtual.asStateFlow()
+
+    private val _receitasPartidas = MutableStateFlow<List<br.com.managerfoot.data.dao.CalendarioPartidaDto>>(emptyList())
+    val receitasPartidas: StateFlow<List<br.com.managerfoot.data.dao.CalendarioPartidaDto>> = _receitasPartidas.asStateFlow()
+
+    private val _transferencias = MutableStateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>>(emptyList())
+    val transferencias: StateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> = _transferencias.asStateFlow()
+
+    private val _despesasMensais = MutableStateFlow<List<br.com.managerfoot.data.database.entities.FinancaEntity>>(emptyList())
+    val despesasMensais: StateFlow<List<br.com.managerfoot.data.database.entities.FinancaEntity>> = _despesasMensais.asStateFlow()
+
+    private val _compras = MutableStateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>>(emptyList())
+    val compras: StateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> = _compras.asStateFlow()
 
     fun carregar(timeId: Int) = viewModelScope.launch {
         // Carrega elenco de forma reativa
@@ -1286,6 +1432,26 @@ class FinancasViewModel @Inject constructor(
             (1 + (ordemRef.coerceAtLeast(1) - 1) * 11 / 379).coerceIn(1, 12)
         else save.mesAtual
         _anoAtual.value = save.anoAtual
+        // Carrega receitas de partidas em casa
+        launch {
+            gameRepository.observarReceitasPartidas(timeId)
+                .collect { lista -> _receitasPartidas.value = lista }
+        }
+        // Carrega vendas de jogadores do time
+        launch {
+            jogadorRepository.observeVendasDoTime(timeId)
+                .collect { lista -> _transferencias.value = lista }
+        }
+        // Carrega histórico de despesas mensais
+        launch {
+            gameRepository.observarFinancasMensais(timeId)
+                .collect { lista -> _despesasMensais.value = lista }
+        }
+        // Carrega compras de jogadores
+        launch {
+            jogadorRepository.observeComprasDoTime(timeId)
+                .collect { lista -> _compras.value = lista }
+        }
     }
 }
 

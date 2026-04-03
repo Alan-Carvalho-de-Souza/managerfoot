@@ -65,10 +65,11 @@ interface PartidaDao {
 
     @Query("""
         UPDATE partidas
-        SET golsCasa = :golsCasa, golsFora = :golsFora, jogada = 1
+        SET golsCasa = :golsCasa, golsFora = :golsFora, jogada = 1,
+            torcedores = :torcedores, receitaPartida = :receitaPartida
         WHERE id = :partidaId
     """)
-    suspend fun registrarResultado(partidaId: Int, golsCasa: Int, golsFora: Int)
+    suspend fun registrarResultado(partidaId: Int, golsCasa: Int, golsFora: Int, torcedores: Int = 0, receitaPartida: Long = 0L)
 
     @Query("""
         UPDATE partidas
@@ -260,7 +261,8 @@ interface PartidaDao {
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
-               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
         FROM partidas p
         INNER JOIN campeonatos c  ON p.campeonatoId = c.id
         INNER JOIN times tc ON p.timeCasaId = tc.id
@@ -269,6 +271,23 @@ interface PartidaDao {
         ORDER BY p.ordemGlobal ASC
     """)
     fun observeCalendario(timeId: Int): Flow<List<CalendarioPartidaDto>>
+
+    @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.timeCasaId = :timeId AND p.jogada = 1 AND p.receitaPartida IS NOT NULL
+        ORDER BY p.ordemGlobal DESC
+    """)
+    fun observeReceitasPartidas(timeId: Int): Flow<List<CalendarioPartidaDto>>
 
     @Query("SELECT * FROM partidas WHERE campeonatoId = :campeonatoId ORDER BY confrontoId, rodada")
     suspend fun buscarTodasPorCampeonato(campeonatoId: Int): List<PartidaEntity>
@@ -400,7 +419,9 @@ data class CalendarioPartidaDto(
     val escudoFora: String,
     val golsCasa: Int?,
     val golsFora: Int?,
-    val jogada: Boolean
+    val jogada: Boolean,
+    val torcedores: Int? = null,
+    val receitaPartida: Long? = null
 )
 
 data class CopaPartidaDto(

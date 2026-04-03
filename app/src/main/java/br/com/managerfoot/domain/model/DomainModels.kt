@@ -126,7 +126,9 @@ data class ResultadoPartida(
     val precisaPenaltis: Boolean = false,
     val golsAgregadoCasa: Int = 0,
     val golsAgregadoFora: Int = 0,
-    val notasJogadores: Map<Int, Float> = emptyMap()  // jogadorId → nota da partida (1–10)
+    val notasJogadores: Map<Int, Float> = emptyMap(),  // jogadorId → nota da partida (1–10)
+    val torcedores: Int = 0,          // público presente na partida
+    val receitaPartida: Long = 0L     // receita de bilheteria (centavos)
 )
 
 data class EventoSimulado(

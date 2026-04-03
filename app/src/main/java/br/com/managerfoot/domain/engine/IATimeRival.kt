@@ -136,19 +136,51 @@ object IATimeRival {
 // ─────────────────────────────────────────────
 object MotorFinanceiro {
 
-    private const val PERCENTUAL_CAPACIDADE_MEDIA = 0.72 // 72% do estádio cheio (média)
-
-    // Receita de bilheteria por partida em casa
-    fun calcularBilheteria(time: Time, adversarioNivel: Int): Long {
-        val fatorRivalidade = when {
-            adversarioNivel >= 8 -> 1.30  // clássico / rival forte
-            adversarioNivel >= 6 -> 1.10
-            adversarioNivel >= 4 -> 1.00
-            else -> 0.85
-        }
-        val torcedores = (time.estadioCapacidade * PERCENTUAL_CAPACIDADE_MEDIA * fatorRivalidade).roundToLong()
-        return torcedores * time.precoIngresso  // centavos
+    // Fator de ocupação baseado na reputação do clube
+    private fun fatorReputacao(reputacao: Int): Double = when {
+        reputacao >= 90 -> 0.95
+        reputacao >= 70 -> 0.80
+        reputacao >= 50 -> 0.65
+        reputacao >= 30 -> 0.50
+        else            -> 0.35
     }
+
+    // Fator de rivalidade baseado no nível do adversário
+    private fun fatorRivalidade(adversarioNivel: Int): Double = when {
+        adversarioNivel >= 8 -> 1.25  // clássico / rival forte
+        adversarioNivel >= 6 -> 1.10
+        adversarioNivel >= 4 -> 1.00
+        else                 -> 0.85
+    }
+
+    /**
+     * Calcula público e receita de bilheteria para uma partida em casa,
+     * dividindo o estádio em três setores:
+     *  - Arquibancada (60% dos assentos): preço base
+     *  - Cadeira     (30% dos assentos): 2× preço base
+     *  - Camarote    (10% dos assentos): 5× preço base
+     *
+     * @return Pair(torcedores, receita em centavos)
+     */
+    fun calcularPublico(time: Time, adversarioNivel: Int): Pair<Int, Long> {
+        val fatorOcup  = fatorReputacao(time.reputacao) * fatorRivalidade(adversarioNivel)
+        val publico    = (time.estadioCapacidade * fatorOcup).toInt().coerceAtLeast(0)
+
+        val arquibancada = (publico * 0.60).toLong()
+        val cadeira      = (publico * 0.30).toLong()
+        val camarote     = (publico * 0.10).toLong()
+
+        val precoBase = time.precoIngresso
+        val receita   = arquibancada * precoBase +
+                        cadeira      * precoBase * 2 +
+                        camarote     * precoBase * 5
+
+        return Pair(publico, receita)
+    }
+
+    // Mantém compatibilidade com chamadas que precisam apenas da receita total
+    fun calcularBilheteria(time: Time, adversarioNivel: Int): Long =
+        calcularPublico(time, adversarioNivel).second
 
     // Patrocínio mensal baseado na reputação do clube
     fun calcularPatrocinioMensal(time: Time): Long {

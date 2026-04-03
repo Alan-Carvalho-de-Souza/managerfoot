@@ -264,6 +264,14 @@ class GameRepository @Inject constructor(
         val golsFora1H = eventos1H.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoFora.time.id }
         val todosEventos1H = (eventosParticipacao + eventos1H).sortedBy { it.minuto }
 
+        // Calcula público antes de montar o resultado parcial — exibido desde o início da partida
+        val timeCasaInfo = timeRepository.buscarPorId(escalacaoCasa.time.id)
+        val (torcedoresParcial, receitaParcial) = if (timeCasaInfo != null) {
+            MotorFinanceiro.calcularPublico(timeCasaInfo, adversarioNivel = 5)
+        } else {
+            Pair(0, 0L)
+        }
+
         val resultadoParcial = ResultadoPartida(
             partidaId        = partidaDoJogador.id,
             timeCasaId       = escalacaoCasa.time.id,
@@ -272,7 +280,9 @@ class GameRepository @Inject constructor(
             golsFora         = golsFora1H,
             eventos          = todosEventos1H,
             estatisticasCasa = EstatisticasTime(0, 0, 50, 0, 0, 0),
-            estatisticasFora = EstatisticasTime(0, 0, 50, 0, 0, 0)
+            estatisticasFora = EstatisticasTime(0, 0, 50, 0, 0, 0),
+            torcedores       = torcedoresParcial,
+            receitaPartida   = receitaParcial
         )
 
         val contexto = ContextoSimulacaoMetade(
@@ -369,11 +379,15 @@ class GameRepository @Inject constructor(
     /**
      * Finaliza a partida: persiste o resultado completo, simula outros campeonatos,
      * avança rodada e retorna o [ResultadoPartida] definitivo (com notas + Copa check).
+     *
+     * [outrosCampeonatoIds] — IDs dos campeonatos paralelos (Séries B, C, D e Copa) que
+     * devem ter sua rodada atual simulada simultaneamente ao jogo do jogador.
      */
     suspend fun finalizarPartidaComJogador(
         ctx: ContextoSimulacaoMetade,
         golsCasaFinal: Int,
-        golsForaFinal: Int
+        golsForaFinal: Int,
+        outrosCampeonatoIds: List<Int> = emptyList()
     ): ResultadoPartida {
         val escalacaoCasa = if (ctx.ehMandante) ctx.escalacaoJogadorOriginal else ctx.escalacaoAdversario
         val escalacaoFora = if (ctx.ehMandante) ctx.escalacaoAdversario else ctx.escalacaoJogadorOriginal
@@ -405,6 +419,14 @@ class GameRepository @Inject constructor(
 
         val notasPartida = persistirResultado(resultadoBase)
 
+        // Calcula público para exibição na tela da partida
+        val timeCasa = timeRepository.buscarPorId(resultadoBase.timeCasaId)
+        val (torcedoresCalc, receitaCalc) = if (timeCasa != null) {
+            MotorFinanceiro.calcularPublico(timeCasa, adversarioNivel = 5)
+        } else {
+            Pair(0, 0L)
+        }
+
         // Simula demais partidas da rodada com IA
         val partidas = partidaDao.buscarPorRodada(ctx.campeonatoId, ctx.rodada).filter { !it.jogada }
         for (partida in partidas) {
@@ -412,6 +434,9 @@ class GameRepository @Inject constructor(
         }
 
         campeonatoDao.avancarRodada(ctx.campeonatoId)
+
+        // Simula rodada atual em todos os outros campeonatos paralelos (Séries B, C, D, Copa)
+        simularRodadaEmOutrosCampeonatos(ctx.campeonatoId, outrosCampeonatoIds)
 
         // Verifica Copa (agregado + pênaltis)
         var precisaPenaltis = false
@@ -444,7 +469,9 @@ class GameRepository @Inject constructor(
             precisaPenaltis  = precisaPenaltis,
             golsAgregadoCasa = golsAgregadoCasa,
             golsAgregadoFora = golsAgregadoFora,
-            notasJogadores   = notasPartida
+            notasJogadores   = notasPartida,
+            torcedores       = torcedoresCalc,
+            receitaPartida   = receitaCalc
         )
     }
 
@@ -471,6 +498,12 @@ class GameRepository @Inject constructor(
 
     fun observarUltimosResultados(timeId: Int, campeonatoId: Int): Flow<List<PartidaEntity>> =
         partidaDao.observeUltimosResultados(timeId, campeonatoId)
+
+    fun observarReceitasPartidas(timeId: Int): Flow<List<br.com.managerfoot.data.dao.CalendarioPartidaDto>> =
+        partidaDao.observeReceitasPartidas(timeId)
+
+    fun observarFinancasMensais(timeId: Int): Flow<List<br.com.managerfoot.data.database.entities.FinancaEntity>> =
+        financaDao.observeFinancasMensais(timeId)
 
     suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int): List<PartidaEntity> =
         partidaDao.buscarUltimosResultados(timeId, campeonatoId)
@@ -894,6 +927,26 @@ class GameRepository @Inject constructor(
 
     // ─── Helpers privados ───
 
+    /**
+     * Para cada campeonato em [outrasIds] que não seja o [playerCampeonatoId], simula
+     * a próxima rodada pendente (rodadaAtual + 1) de forma a manter todos os campeonatos
+     * progredindo em sincronismo com o jogo do jogador.
+     */
+    private suspend fun simularRodadaEmOutrosCampeonatos(
+        playerCampeonatoId: Int,
+        outrasIds: List<Int>
+    ) {
+        for (campId in outrasIds) {
+            if (campId <= 0 || campId == playerCampeonatoId) continue
+            val camp = campeonatoDao.buscarPorId(campId) ?: continue
+            if (camp.encerrado) continue
+            val proximaRodada = camp.rodadaAtual + 1
+            if (proximaRodada <= camp.totalRodadas) {
+                simularRodada(campId, proximaRodada)
+            }
+        }
+    }
+
     private suspend fun simularPartidaInterna(partida: PartidaEntity) {
         val escalacaoCasa = gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFora = gerarEscalacaoIA(partida.timeForaId)
@@ -1062,11 +1115,26 @@ class GameRepository @Inject constructor(
     }
 
     private suspend fun persistirResultado(resultado: ResultadoPartida): Map<Int, Float> {
+        // Calcula público e receita para partidas em casa
+        val timeCasa = timeRepository.buscarPorId(resultado.timeCasaId)
+        val (torcedores, receita) = if (timeCasa != null) {
+            MotorFinanceiro.calcularPublico(timeCasa, adversarioNivel = 5)
+        } else {
+            Pair(0, 0L)
+        }
+
         partidaDao.registrarResultado(
             resultado.partidaId,
             resultado.golsCasa,
-            resultado.golsFora
+            resultado.golsFora,
+            torcedores,
+            receita
         )
+
+        // Credita a receita de bilheteria diretamente no saldo do clube mandante
+        if (receita > 0) {
+            timeRepository.creditarSaldo(resultado.timeCasaId, receita)
+        }
 
         partidaDao.inserirEventos(resultado.eventos.map { ev ->
             EventoPartidaEntity(

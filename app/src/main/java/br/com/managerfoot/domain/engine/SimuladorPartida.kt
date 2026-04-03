@@ -24,6 +24,14 @@ object CalculadoraForca {
         val titulares = escalacao.titulares
         if (titulares.isEmpty()) return 0.0
 
+        // Bônus de estilo aplicados aos atributos dos jogadores:
+        //   OFENSIVO   → tecnica e passe +10% nos setores de ataque/meio (mais criação, mais gols esperados)
+        //   DEFENSIVO  → defesa e fisico +10% nos setores de goleiro/defesa (menos gols sofridos)
+        //   CONTRA_ATAQUE → bônus apenas via fatorEstilo quando enfrenta time OFENSIVO
+        val estilo = escalacao.time.estiloJogo
+        val boostAtq = if (estilo == EstiloJogo.OFENSIVO)   1.10 else 1.0
+        val boostDef = if (estilo == EstiloJogo.DEFENSIVO)  1.10 else 1.0
+
         // Valor de cada jogador leva em conta forca efetiva + atributos específicos do setor
         // fisico contribui como resistência/imposição física em todos os setores
         fun valorJogador(jne: JogadorNaEscalacao): Double {
@@ -31,13 +39,13 @@ object CalculadoraForca {
             val fis = jne.jogador.fisico.toDouble()
             return when (jne.posicaoUsada.setor) {
                 // Goleiro: defesa crítica (35%) + passe/saída (10%) + fisico p/ duelos (10%)
-                Setor.GOLEIRO -> fe * 0.45 + jne.jogador.defesa  * 0.35 + jne.jogador.passe * 0.10 + fis * 0.10
+                Setor.GOLEIRO -> fe * 0.45 + jne.jogador.defesa * boostDef * 0.35 + jne.jogador.passe * 0.10 + fis * boostDef * 0.10
                 // Zagueiros/Laterais: defesa (22%) + fisico para marcação (15%) + técnica (13%) + passe (10%)
-                Setor.DEFESA  -> fe * 0.40 + jne.jogador.defesa  * 0.22 + fis * 0.15 + jne.jogador.tecnica * 0.13 + jne.jogador.passe * 0.10
+                Setor.DEFESA  -> fe * 0.40 + jne.jogador.defesa * boostDef * 0.22 + fis * boostDef * 0.15 + jne.jogador.tecnica * 0.13 + jne.jogador.passe * 0.10
                 // Meias: técnica (18%) + passe (18%) + fisico/stamina (10%) + marcação (14%)
-                Setor.MEIO    -> fe * 0.40 + jne.jogador.tecnica * 0.18 + jne.jogador.passe * 0.18 + jne.jogador.defesa * 0.14 + fis * 0.10
+                Setor.MEIO    -> fe * 0.40 + jne.jogador.tecnica * boostAtq * 0.18 + jne.jogador.passe * boostAtq * 0.18 + jne.jogador.defesa * boostDef * 0.14 + fis * boostDef * 0.10
                 // Atacantes: finalizacao via técnica (15%) + passe (8%) + fisico p/ duelos (8%)
-                Setor.ATAQUE  -> fe * 0.62 + jne.jogador.tecnica * 0.15 + jne.jogador.passe * 0.08 + fis * 0.08 + jne.jogador.defesa * 0.07
+                Setor.ATAQUE  -> fe * 0.62 + jne.jogador.tecnica * boostAtq * 0.15 + jne.jogador.passe * boostAtq * 0.08 + fis * 0.08 + jne.jogador.defesa * 0.07
             }
         }
 
@@ -84,14 +92,8 @@ object CalculadoraForca {
         }
     fun fatorEstilo(atacante: EstiloJogo, defensor: EstiloJogo): Double =
         when {
-            // CONTRA_ATAQUE explora os espaços deixados pelo time OFENSIVO (transições devastadoras)
-            atacante == EstiloJogo.CONTRA_ATAQUE && defensor == EstiloJogo.OFENSIVO -> 1.14
-            // OFENSIVO deixa espaços às costas para o adversário atacar em transição
-            atacante == EstiloJogo.OFENSIVO && defensor == EstiloJogo.CONTRA_ATAQUE -> 0.92
-            // Bloco DEFENSIVO compacto sufoca o time OFENSIVO — poucas chances criadas
-            atacante == EstiloJogo.OFENSIVO && defensor == EstiloJogo.DEFENSIVO     -> 0.88
-            // DEFENSIVO absorve a pressão e sai com eficiência contra time aberto
-            atacante == EstiloJogo.DEFENSIVO && defensor == EstiloJogo.OFENSIVO     -> 1.10
+            // CONTRA_ATAQUE explora as linhas abertas do time OFENSIVO em transições rápidas
+            atacante == EstiloJogo.CONTRA_ATAQUE && defensor == EstiloJogo.OFENSIVO -> 1.10
             else -> 1.0
         }
 }
@@ -162,7 +164,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         ))
 
         // Penalizações na expectativa de gols:
-        //   expulsão ou lesão sem reserva → reduz ~13% por jogador a menos
+        //   expulsão         → adversário marca 15% mais (time com menos jogadores sofre)
+        //   lesão sem reserva → reduz ~13% a produção ofensiva do time afetado
         var penalCasa = 1.0
         var penalFora = 1.0
 
@@ -183,10 +186,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             eventos.add(inc)
             when (inc.tipo) {
                 TipoEvento.CARTAO_VERMELHO -> {
-                    // Expulsão: jogador sai sem reposição
+                    // Expulsão: jogador sai sem reposição; adversário ganha +15% de chance de gol
                     titsAtivos.removeIf { it.jogador.id == inc.jogadorId }
                     exitMinutes[inc.jogadorId] = inc.minuto
-                    if (ehCasaInc) penalCasa *= 0.87 else penalFora *= 0.87
+                    if (ehCasaInc) penalFora *= 1.15 else penalCasa *= 1.15
                 }
                 TipoEvento.LESAO -> {
                     val lesionado = titsAtivos.find { it.jogador.id == inc.jogadorId }

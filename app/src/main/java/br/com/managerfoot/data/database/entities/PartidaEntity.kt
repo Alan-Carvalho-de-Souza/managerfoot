@@ -33,7 +33,9 @@ data class PartidaEntity(
     val jogada: Boolean = false,
     val fase: String? = null,           // "Primeira Fase", "Segunda Fase", "Oitavas", "Quartas", "Semi", "Final"
     val confrontoId: Int? = null,       // agrupa jogo de ida + volta (Copa)
-    val ordemGlobal: Int = 0            // posição no calendário multi-competição (usado por buscarProximaPartida)
+    val ordemGlobal: Int = 0,           // posição no calendário multi-competição (usado por buscarProximaPartida)
+    val torcedores: Int? = null,        // público presente na partida
+    val receitaPartida: Long? = null    // receita de bilheteria desta partida (centavos)
 )
 
 // Escalação salva pelo jogador para uma determinada partida

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.presentation.ui.components.TeamBadge
+import br.com.managerfoot.presentation.ui.components.formatarSaldo
 import br.com.managerfoot.presentation.viewmodel.CalendarioViewModel
 
 // ─────────────────────────────────────────────
@@ -229,6 +230,30 @@ private fun CalendarioCard(
                         fontWeight = if (isJogadorFora) FontWeight.Bold else FontWeight.Normal,
                         textAlign = TextAlign.Center
                     )
+                }
+            }
+            // Público e receita (apenas partidas jogadas em casa pelo jogador)
+            if (partida.jogada && isJogadorCasa && partida.torcedores != null && partida.torcedores > 0) {
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(thickness = 0.5.dp)
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "\uD83D\uDC65 ${"%,d".format(partida.torcedores)} torcedores",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (partida.receitaPartida != null) {
+                        Text(
+                            text = "Bilheteria: ${formatarSaldo(partida.receitaPartida)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

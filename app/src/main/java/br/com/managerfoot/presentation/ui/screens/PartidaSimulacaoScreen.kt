@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.managerfoot.data.database.entities.EstiloJogo
+import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.data.database.entities.TipoEvento
 import br.com.managerfoot.domain.model.Escalacao
 import br.com.managerfoot.domain.model.EventoSimulado
@@ -598,6 +599,17 @@ fun PartidaSimulacaoScreen(
                     Text("45'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("90'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                // Público presente
+                if (resultado.torcedores > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "\uD83D\uDC65 ${"%,d".format(resultado.torcedores)} torcedores",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
 
@@ -663,11 +675,11 @@ fun PartidaSimulacaoScreen(
                 val dadosAdv = dadosPenaltisAdversario
                 if (dadosAdv != null) {
                     val gk = titularesAtuais.firstOrNull {
-                        it.posicaoUsada.setor == br.com.managerfoot.data.database.entities.Setor.GOLEIRO
+                        it.posicaoUsada.setor == Setor.GOLEIRO
                     }
                     PenaltiInterativoPainel(
                         cobradorElegiveis  = titularesAtuais.filter {
-                            it.posicaoUsada.setor != br.com.managerfoot.data.database.entities.Setor.GOLEIRO
+                            it.posicaoUsada.setor != Setor.GOLEIRO
                         }.toList(),
                         gkJogadorDefesa    = gk?.jogador?.defesa ?: 70,
                         dadosAdversario    = dadosAdv,
@@ -1473,6 +1485,20 @@ private fun SubstituicoesTab(
 ) {
     val podeFazerMais = substituicoes.size < 6
 
+    val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+    val titularesOrdenados = remember(titulares) {
+        titulares.sortedWith(compareBy(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+    val reservasOrdenadas = remember(reservas) {
+        reservas.sortedWith(compareBy(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+
     if (titularSelecionado == null) {
         // Fase 1: Escolher quem sai
         Column(Modifier.fillMaxSize()) {
@@ -1484,7 +1510,7 @@ private fun SubstituicoesTab(
                         else MaterialTheme.colorScheme.error
             )
             LazyColumn {
-                items(titulares) { jne ->
+                items(titularesOrdenados) { jne ->
                     ListItem(
                         headlineContent = { Text(jne.jogador.nome) },
                         supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
@@ -1528,7 +1554,7 @@ private fun SubstituicoesTab(
                 style = MaterialTheme.typography.labelLarge
             )
             LazyColumn {
-                items(reservas) { jne ->
+                items(reservasOrdenadas) { jne ->
                     ListItem(
                         headlineContent = { Text(jne.jogador.nome) },
                         supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
@@ -1554,7 +1580,11 @@ private fun TrocarPosicoesTab(
     onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit
 ) {
     var selecionado by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
-    if (selecionado == null) {
+    // Captura o valor atual como val imutável para evitar NPE em recomposições
+    // refinadas de lambdas internas (ex.: supportingContent de ListItem) que
+    // ocorrem antes que o escopo externo possa reavaliar o if-null.
+    val sel = selecionado
+    if (sel == null) {
         Column(Modifier.fillMaxSize()) {
             Text(
                 "Selecione o jogador para mover de posição:",
@@ -1592,7 +1622,7 @@ private fun TrocarPosicoesTab(
                 Column {
                     Text("Trocar posição de:", style = MaterialTheme.typography.labelSmall)
                     Text(
-                        "${selecionado!!.jogador.nome} (${selecionado!!.posicaoUsada.abreviacao})",
+                        "${sel.jogador.nome} (${sel.posicaoUsada.abreviacao})",
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1604,16 +1634,16 @@ private fun TrocarPosicoesTab(
                 style = MaterialTheme.typography.labelLarge
             )
             LazyColumn {
-                items(titulares.filter { it.jogador.id != selecionado!!.jogador.id }) { jne ->
+                items(titulares.filter { it.jogador.id != sel.jogador.id }) { jne ->
                     ListItem(
                         headlineContent = { Text(jne.jogador.nome) },
                         supportingContent = {
-                            Text("${selecionado!!.posicaoUsada.abreviacao} ↔ ${jne.posicaoUsada.abreviacao}")
+                            Text("${sel.posicaoUsada.abreviacao} ↔ ${jne.posicaoUsada.abreviacao}")
                         },
                         trailingContent = {
                             Button(
                                 onClick = {
-                                    onTrocarPosicoes(selecionado!!, jne)
+                                    onTrocarPosicoes(sel, jne)
                                     selecionado = null
                                 },
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)

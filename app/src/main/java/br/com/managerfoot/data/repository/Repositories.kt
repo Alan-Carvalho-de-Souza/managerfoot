@@ -103,6 +103,15 @@ class JogadorRepository @Inject constructor(
     fun observeLivres(): Flow<List<Jogador>> =
         jogadorDao.observeLivres().map { lista -> lista.map { it.toDomain() } }
 
+    fun observeTodasTransferencias(): Flow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> =
+        financaDao.observeTodasTransferencias()
+
+    fun observeVendasDoTime(timeId: Int): Flow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> =
+        financaDao.observeVendasDoTime(timeId)
+
+    fun observeComprasDoTime(timeId: Int): Flow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> =
+        financaDao.observeComprasDoTime(timeId)
+
     suspend fun buscarDisponiveis(timeId: Int): List<Jogador> =
         jogadorDao.buscarDisponiveisPorTime(timeId).map { it.toDomain() }
 

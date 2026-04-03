@@ -823,12 +823,15 @@ private fun AtributoRow(label: String, valor: Int) {
 @Composable
 fun MercadoScreen(
     timeId: Int,
+    onVoltar: () -> Unit = {},
+    onIrParaClubes: () -> Unit = {},
     vm: MercadoViewModel = hiltViewModel()
 ) {
     val livres    by vm.jogadoresLivres.collectAsState()
     val elenco    by vm.elencoAtual.collectAsState()
     val saldo     by vm.saldo.collectAsState()
     val mensagem  by vm.mensagem.collectAsState()
+    val transferencias by vm.transferencias.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -843,21 +846,31 @@ fun MercadoScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // Saldo disponível
+        // Cabeçalho com saldo e botão para Clubes
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Saldo disponível", style = MaterialTheme.typography.labelMedium)
-            Text(formatarSaldo(saldo), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Column {
+                Text("Saldo disponível", style = MaterialTheme.typography.labelMedium)
+                Text(formatarSaldo(saldo), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+            Button(
+                onClick = onIrParaClubes,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("Ver Clubes", style = MaterialTheme.typography.labelMedium)
+            }
         }
 
         TabRow(selectedTabIndex = abaAtiva) {
             Tab(selected = abaAtiva == 0, onClick = { abaAtiva = 0 }, text = { Text("Mercado livre") })
             Tab(selected = abaAtiva == 1, onClick = { abaAtiva = 1 }, text = { Text("Meu elenco") })
+            Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Transferências") })
         }
 
         when (abaAtiva) {
@@ -904,6 +917,53 @@ fun MercadoScreen(
                         HorizontalDivider(thickness = 0.5.dp)
                     }
                 }
+            }
+            2 -> {
+                if (transferencias.isEmpty()) {
+                    EmptyState("Nenhuma transferência registrada")
+                } else {
+                    LazyColumn {
+                        item { SecaoHeader("${transferencias.size} transferências") }
+                        items(transferencias) { t ->
+                            TransferenciaRow(t)
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransferenciaRow(t: br.com.managerfoot.data.dao.TransferenciaDetalhe) {
+    val tipoLabel = when (t.tipo) {
+        br.com.managerfoot.data.database.entities.TipoTransferencia.COMPRA          -> "Contratação"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.VENDA           -> "Venda"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.FIM_CONTRATO    -> "Livre"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.EMPRESTIMO_SAIDA -> "Empréstimo"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.EMPRESTIMO_RETORNO -> "Retorno"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.PROMOVIDO_BASE  -> "Base"
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(t.jogadorNome, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            val descricao = buildString {
+                append(t.origemNome ?: "—")
+                append(" → ")
+                append(t.destinoNome ?: "Livre")
+            }
+            Text(descricao, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(tipoLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            if (t.valor > 0) {
+                Text(formatarSaldo(t.valor), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }

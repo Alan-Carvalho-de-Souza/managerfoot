@@ -40,6 +40,9 @@ sealed class Rota(val caminho: String) {
     object Mercado         : Rota("mercado/{timeId}") {
         fun comTimeId(id: Int) = "mercado/$id"
     }
+    object Clubes          : Rota("clubes/{timeId}") {
+        fun comTimeId(id: Int) = "clubes/$id"
+    }
     object Financas        : Rota("financas/{timeId}") {
         fun comTimeId(id: Int) = "financas/$id"
     }
@@ -136,7 +139,8 @@ fun ManagerFootNavGraph() {
                 onIrParaRankingGeral = { navController.navigate(Rota.RankingGeral.caminho) },
                 onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) },
                 onIrParaEstadio      = { navController.navigate(Rota.Estadio.com(timeId)) },
-                onIrParaJuniores     = { navController.navigate(Rota.Juniores.comTimeId(timeId)) }
+                onIrParaJuniores     = { navController.navigate(Rota.Juniores.comTimeId(timeId)) },
+                onIrParaClubes       = { navController.navigate(Rota.Clubes.comTimeId(timeId)) }
             )
         }
 
@@ -231,8 +235,25 @@ fun ManagerFootNavGraph() {
         composable(
             route = Rota.Mercado.caminho,
             arguments = listOf(navArgument("timeId") { type = NavType.IntType })
-        ) {
-            PlaceholderScreen("Mercado de transferências — em breve")
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            MercadoScreen(
+                timeId = timeId,
+                onVoltar = { navController.popBackStack() },
+                onIrParaClubes = { navController.navigate(Rota.Clubes.comTimeId(timeId)) }
+            )
+        }
+
+        // Clubes
+        composable(
+            route = Rota.Clubes.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            ClubesScreen(
+                timeId = timeId,
+                onVoltar = { navController.popBackStack() }
+            )
         }
 
         // Finanças

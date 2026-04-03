@@ -38,6 +38,7 @@ fun DashboardScreen(
     onIrParaEstatisticasTime: () -> Unit = {},
     onIrParaEstadio: () -> Unit = {},
     onIrParaJuniores: () -> Unit = {},
+    onIrParaClubes: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
@@ -267,6 +268,7 @@ fun DashboardScreen(
                 onIrParaFinancas         = onIrParaFinancas,
                 onIrParaEstadio          = onIrParaEstadio,
                 onIrParaJuniores         = onIrParaJuniores,
+                onIrParaClubes           = onIrParaClubes,
                 onAvancarMes             = { vm.fecharMes() }
             )
         }
@@ -323,6 +325,7 @@ private fun MenuAba(
     onIrParaFinancas: () -> Unit,
     onIrParaEstadio: () -> Unit,
     onIrParaJuniores: () -> Unit,
+    onIrParaClubes: () -> Unit,
     onAvancarMes: () -> Unit
 ) {
     LazyColumn(
@@ -337,6 +340,7 @@ private fun MenuAba(
     ) {
         item { OutlinedButton(onClick = onIrParaArtilheiros,      modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") } }
         item { OutlinedButton(onClick = onIrParaCalendario,       modifier = Modifier.fillMaxWidth()) { Text("Calendário") } }
+        item { OutlinedButton(onClick = onIrParaClubes,           modifier = Modifier.fillMaxWidth()) { Text("Clubes") } }
         item { OutlinedButton(onClick = onIrParaCopaChaveamento,  modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") } }
         item { OutlinedButton(onClick = onIrParaEstadio,          modifier = Modifier.fillMaxWidth()) { Text("Estádio") } }
         item { OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") } }
