@@ -388,7 +388,7 @@ fun PartidaSimulacaoScreen(
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
                     reservasDisponiveis.remove(entra)
-                    reservasDisponiveis.add(sai)
+                    // sai NÃO é devolvido às reservas: jogador substituído não pode voltar
                 }
             },
             onContinuar = {
@@ -436,7 +436,7 @@ fun PartidaSimulacaoScreen(
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
                     reservasDisponiveis.remove(entra)
-                    reservasDisponiveis.add(sai)
+                    // sai NÃO é devolvido às reservas: jogador substituído não pode voltar
                 }
             },
             onContinuar = { intervaloDeferred.complete(Unit) },

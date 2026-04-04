@@ -122,4 +122,8 @@ interface JogadorDao {
     /** Promove um jogador da base para o elenco principal. */
     @Query("UPDATE jogadores SET categoriaBase = 0 WHERE id = :jogadorId")
     suspend fun promoverJunior(jogadorId: Int)
+
+    /** Conta jogadores (sênior + base) de um time — usado para verificar o limite de elenco. */
+    @Query("SELECT COUNT(*) FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
+    suspend fun contarJogadoresPorTime(timeId: Int): Int
 }

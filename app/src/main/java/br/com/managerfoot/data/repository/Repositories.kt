@@ -149,6 +149,39 @@ class JogadorRepository @Inject constructor(
     }
 
     /**
+     * Registra a venda de um jogador do time do usuário para um time da IA (ou
+     * para o mercado livre se [oferta].timeCompradorId <= 0).
+     * Diferente de [realizarTransferencia], usa [TipoTransferencia.VENDA] e
+     * garante que o [timeCompradorId] inválido nunca seja gravado no banco
+     * (evitando violação de FK em jogadores.timeId).
+     */
+    suspend fun realizarVenda(
+        oferta: OfertaTransferencia,
+        temporadaId: Int,
+        mes: Int
+    ) {
+        // compradorId <= 0 significa "sem comprador" → jogador vai para o mercado livre (timeId = null)
+        val novoTimeId = if (oferta.timeCompradorId > 0) oferta.timeCompradorId else null
+
+        // Transferir jogador e limpar sua escalação
+        jogadorDao.transferirJogador(oferta.jogadorId, novoTimeId)
+        jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
+
+        // Registrar como VENDA para o time de origem
+        financaDao.inserirTransferencia(
+            TransferenciaEntity(
+                jogadorId = oferta.jogadorId,
+                timeOrigemId = oferta.timeVendedorId,
+                timeDestinoId = novoTimeId,
+                valor = oferta.valor,
+                temporadaId = temporadaId,
+                mes = mes,
+                tipo = TipoTransferencia.VENDA
+            )
+        )
+    }
+
+    /**
      * Processa o fim de temporada de todos os jogadores:
      * - Incrementa um ano na idade
      * - Jogadores sem clube (timeId=null) e não aposentados recebem pequena regressão
@@ -368,6 +401,9 @@ class JogadorRepository @Inject constructor(
         jogadorDao.observeJuniores(timeId).map { lista -> lista.map { it.toDomain() } }
 
     suspend fun promoverJunior(jogadorId: Int) = jogadorDao.promoverJunior(jogadorId)
+
+    /** Retorna o total de jogadores (sênior + base) de um time — para verificar limite de 35. */
+    suspend fun contarJogadores(timeId: Int): Int = jogadorDao.contarJogadoresPorTime(timeId)
 
     suspend fun atualizarEscalacao(jogadorId: Int, status: Int, posicao: Posicao? = null) {
         if (posicao != null) jogadorDao.atualizarEscalacaoComPosicao(jogadorId, status, posicao)

@@ -716,6 +716,11 @@ class MercadoViewModel @Inject constructor(
             _mensagem.value = "Saldo insuficiente para contratar ${jogador.nomeAbreviado}"
             return@launch
         }
+        val qtdElenco = jogadorRepository.contarJogadores(timeId)
+        if (qtdElenco >= 35) {
+            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
+            return@launch
+        }
         jogadorRepository.realizarTransferencia(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
@@ -733,19 +738,34 @@ class MercadoViewModel @Inject constructor(
 
     fun venderJogador(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
-        jogadorRepository.realizarTransferencia(
+
+        // Selecionar um time da IA com saldo suficiente como comprador.
+        // Exclui o próprio time do jogador e prefere times com mais reputação.
+        val comprador = timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.id != timeId && it.saldo >= jogador.valorMercado }
+            .randomOrNull()
+
+        if (comprador == null) {
+            _mensagem.value = "Nenhum clube interessado em ${jogador.nomeAbreviado} no momento. Jogador permanece no elenco."
+            return@launch
+        }
+
+        timeRepository.creditarSaldo(timeId, jogador.valorMercado)
+        timeRepository.debitarSaldo(comprador.id, jogador.valorMercado)
+
+        jogadorRepository.realizarVenda(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
-                timeCompradorId = -1,
+                timeCompradorId = comprador.id,
                 timeVendedorId = timeId,
                 valor = jogador.valorMercado,
-                salarioProposto = 0L,
-                contratoAnos = 0
+                salarioProposto = jogador.salario,
+                contratoAnos = 3
             ),
             temporadaId = save.temporadaId,
             mes = save.mesAtual
         )
-        _mensagem.value = "${jogador.nomeAbreviado} vendido por ${formatarValor(jogador.valorMercado)}"
+        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(jogador.valorMercado)}"
     }
 
     fun limparMensagem() { _mensagem.value = null }
@@ -823,6 +843,11 @@ class ClubesViewModel @Inject constructor(
         val time = timeRepository.buscarPorId(timeJogadorId) ?: return@launch
         if (time.saldo < jogador.valorMercado) {
             _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(jogador.valorMercado)}"
+            return@launch
+        }
+        val qtdElenco = jogadorRepository.contarJogadores(timeJogadorId)
+        if (qtdElenco >= 35) {
+            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
             return@launch
         }
         timeRepository.debitarSaldo(timeJogadorId, jogador.valorMercado)
@@ -1509,7 +1534,10 @@ class JunioresViewModel @Inject constructor(
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
 
+    private var timeIdAtual: Int = -1
+
     fun carregar(timeId: Int) = viewModelScope.launch {
+        timeIdAtual = timeId
         jogadorRepository.observeJuniores(timeId).collect { _juniores.value = it }
     }
 
@@ -1518,6 +1546,13 @@ class JunioresViewModel @Inject constructor(
     }
 
     fun promoverJunior(jogadorId: Int, nomeAbrev: String) = viewModelScope.launch {
+        if (timeIdAtual > 0) {
+            val qtdElenco = jogadorRepository.contarJogadores(timeIdAtual)
+            if (qtdElenco >= 35) {
+                _mensagem.value = "Elenco cheio (35/35). Não é possível promover $nomeAbrev."
+                return@launch
+            }
+        }
         jogadorRepository.promoverJunior(jogadorId)
         _mensagem.value = "$nomeAbrev promovido ao elenco principal!"
     }

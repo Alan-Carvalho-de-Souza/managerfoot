@@ -62,6 +62,7 @@ object IATimeRival {
         mercado: List<Jogador>,
         orcamento: Long
     ): List<OfertaTransferencia> {
+        if (elencoAtual.size >= 35) return emptyList()
         val forcaMedia = elencoAtual.map { it.forca }.average().toInt()
         val carencias = detectarCarencias(elencoAtual, time.taticaFormacao)
         val ofertas = mutableListOf<OfertaTransferencia>()

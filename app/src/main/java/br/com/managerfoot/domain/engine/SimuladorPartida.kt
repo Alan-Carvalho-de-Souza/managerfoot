@@ -138,6 +138,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val fCasa = if (fCasaRaw > 0.0) fCasaRaw else 50.0
         val fFora = if (fForaRaw > 0.0) fForaRaw else 50.0
 
+        android.util.Log.d("ENGINE", "${"%.1f".format(fCasa)} x ${"%.1f".format(fFora)} | ratio=${"%.2f".format(fCasa / fFora)} | ${casa.time.nome} x ${fora.time.nome}")
+
         // Squads ativos mutáveis — serão alterados por lesões e expulsões
         val titsCasa = casa.titulares.toMutableList()
         val titsFora = fora.titulares.toMutableList()
@@ -241,11 +243,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         if (fora.time.id != timeJogadorId)
             aplicarSubstituicoesTaticas(titsFora, resFora, fora.time.id, entryMinutes, exitMinutes, eventos)
 
-        // Dominância: time com força maior cria mais oportunidades de gol.
-        // dominance ∈ [-1, +1]; o time mais forte ganha até +55% de chances extra.
-        val dominance = ((fCasa - fFora) / total).coerceIn(-1.0, 1.0)
-        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 0.55
-        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 0.55
+        // Dominância: eleva as forças ao quadrado antes de calcular dominance para
+        // amplificar geometricamente diferenças reais (ratio 1.5x → comporta-se como ~1.7x).
+        // dominance ∈ [-1, +1]; o time mais forte ganha até +200% de chances extra.
+        val fCasa2 = fCasa * fCasa
+        val fFora2 = fFora * fFora
+        val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
+        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 2.00
+        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 2.00
 
         // Média de gols esperados — total esperado é MEDIA_GOLS_JOGO (sem multiplicador extra)
         // Com times iguais: probCasa=probFora=0.5 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
@@ -667,9 +672,11 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     entryMinutes, exitMinutes, eventos, minInicioSubs, minFim)
         }
 
-        val dominance = ((fCasa - fFora) / total).coerceIn(-1.0, 1.0)
-        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 0.55
-        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 0.55
+        val fCasa2 = fCasa * fCasa
+        val fFora2 = fFora * fFora
+        val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
+        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 2.00
+        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 2.00
 
         val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa
         val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora
