@@ -169,7 +169,7 @@ fun TimeHeaderCard(
             ) {
                 KpiItem(label = "Saldo", value = formatarSaldo(time.saldo))
                 Box(Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline))
-                KpiItem(label = "Reputação", value = time.reputacao.toString())
+                KpiItem(label = "Reputação", value = "%.1f".format(time.reputacao))
                 Box(Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline))
                 KpiItem(label = "Posição", value = if (posicao > 0) "${posicao}º" else "—")
             }
@@ -194,6 +194,32 @@ private fun KpiItem(label: String, value: String) {
     }
 }
 
+// ─── Badge de fadiga colorido ───────────────────────────────
+@Composable
+fun FadigaBadge(fadiga: Float, modifier: Modifier = Modifier) {
+    val pct = (fadiga * 100).toInt()
+    val (bg, fg) = when {
+        fadiga >= 0.80f -> Color(0xFF2E7D32) to Color.White   // verde
+        fadiga >= 0.60f -> Color(0xFFF9A825) to Color.Black   // amarelo
+        fadiga >= 0.40f -> Color(0xFFE65100) to Color.White   // laranja
+        else            -> Color(0xFFC62828) to Color.White   // vermelho
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(bg)
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "$pct%",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = fg
+        )
+    }
+}
+
 // ─── Linha de jogador no elenco ─────────────────────────────
 @Composable
 fun JogadorRow(
@@ -210,7 +236,10 @@ fun JogadorRow(
     ) {
         // Badge de força
         ForcaBadge(jogador.forca)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(8.dp))
+        // Badge de fadiga
+        FadigaBadge(jogador.fadiga)
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = jogador.nome,

@@ -60,7 +60,20 @@ data class JogadorEntity(
     // Acumulador fracionário de evolução durante a temporada.
     // Cada partida adiciona uma fração baseada na nota e na idade.
     // Ao cruzar ±1.0, os atributos são incrementados/decrementados e o valor é reduzido.
-    val progressoEvolucao: Float = 0f
+    val progressoEvolucao: Float = 0f,
+
+    // Fadiga física do jogador (0.0–1.0, onde 1.0 = 100% descansado).
+    // Decresce a cada partida jogada (conforme a idade) e por treinamento (-0.05).
+    // Recupera +0.10 por jogo que o jogador NÃO participar.
+    val fadiga: Float = 1.0f,
+
+    // Indica se o jogador já foi treinado no ciclo atual (entre dois jogos).
+    // Resetado para false após cada partida disputada.
+    val treinouNestaCiclo: Boolean = false,
+
+    // Contador de partidas que o jogador ainda não pode disputar por lesão.
+    // Decrementado após cada jogo; quando chega a 0, lesionado volta a false.
+    val partidasSemJogar: Int = 0
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

@@ -19,6 +19,9 @@ interface JogadorDao {
     @Query("SELECT * FROM jogadores WHERE timeId IS NULL AND aposentado = 0 AND categoriaBase = 0 ORDER BY forca DESC")
     fun observeLivres(): Flow<List<JogadorEntity>>
 
+    @Query("SELECT * FROM jogadores WHERE aposentado = 0 AND categoriaBase = 0 ORDER BY forca DESC")
+    fun observeTodosJogadoresAtivos(): Flow<List<JogadorEntity>>
+
     @Query("SELECT * FROM jogadores WHERE id = :id")
     suspend fun buscarPorId(id: Int): JogadorEntity?
 
@@ -61,6 +64,10 @@ interface JogadorDao {
 
     @Query("UPDATE jogadores SET lesionado = :lesionado WHERE id = :jogadorId")
     suspend fun atualizarLesao(jogadorId: Int, lesionado: Boolean)
+
+    /** Aplica lesão programada: marca lesionado e define quantas partidas o jogador ficará de fora. */
+    @Query("UPDATE jogadores SET lesionado = 1, partidasSemJogar = :partidas WHERE id = :jogadorId")
+    suspend fun aplicarLesao(jogadorId: Int, partidas: Int)
 
     @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND contratoAnos > 0")
     suspend fun decrementarContratos()
@@ -123,7 +130,19 @@ interface JogadorDao {
     @Query("UPDATE jogadores SET categoriaBase = 0 WHERE id = :jogadorId")
     suspend fun promoverJunior(jogadorId: Int)
 
+    /** Dispensa um jogador da base: remove do clube e sai da categoria base (vai para mercado livre). */
+    @Query("UPDATE jogadores SET timeId = NULL, categoriaBase = 0 WHERE id = :jogadorId")
+    suspend fun dispensarJuniorDb(jogadorId: Int)
+
     /** Conta jogadores (sênior + base) de um time — usado para verificar o limite de elenco. */
     @Query("SELECT COUNT(*) FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
     suspend fun contarJogadoresPorTime(timeId: Int): Int
+
+    /** Retorna todos os jogadores sênior ativos (sem base) de um time, incluindo lesionados/suspensos. */
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND aposentado = 0 AND categoriaBase = 0")
+    suspend fun buscarSenioresDoTime(timeId: Int): List<JogadorEntity>
+
+    /** Retorna todos os jogadores ativos (sênior + base) de um time. */
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
+    suspend fun buscarElencoCompletoDoTime(timeId: Int): List<JogadorEntity>
 }

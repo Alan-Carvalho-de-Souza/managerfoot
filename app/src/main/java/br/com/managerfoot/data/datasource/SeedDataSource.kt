@@ -56,7 +56,7 @@ class SeedDataSource @Inject constructor(
                 precoIngresso = o.getLong("preco_ingresso"),
                 taticaFormacao = o.getString("tatica"),
                 estiloJogo    = EstiloJogo.valueOf(o.getString("estilo")),
-                reputacao     = o.getInt("reputacao"),
+                reputacao     = o.getInt("reputacao").toFloat(),
                 escudoRes     = o.optString("escudo_res", "")
             )
         }

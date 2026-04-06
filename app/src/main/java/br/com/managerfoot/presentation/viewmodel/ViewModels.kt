@@ -210,6 +210,11 @@ class DashboardViewModel @Inject constructor(
     val saveState = gameDataStore.saveState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** true quando o jogo foi inicializado mas o patrocinador ainda não foi escolhido */
+    val precisaEscolherPatrocinador: StateFlow<Boolean> = gameDataStore.saveState
+        .map { save -> save.jogoInicializado && save.patrocinadorValorAnual == 0L }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     private val _timeJogador = MutableStateFlow<Time?>(null)
     val timeJogador: StateFlow<Time?> = _timeJogador.asStateFlow()
 
@@ -380,7 +385,7 @@ class DashboardViewModel @Inject constructor(
 
     // Chamado quando o jogador fecha a tela de simulação
     fun fecharSimulacao() = viewModelScope.launch {
-        val save = gameDataStore.saveState.first()
+        var save = gameDataStore.saveState.first()
         // Atualiza últimos resultados só agora, após a animação ter sido exibida
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
             save.timeIdJogador, listOf(save.campeonatoId, save.copaId).filter { it > 0 }
@@ -391,6 +396,24 @@ class DashboardViewModel @Inject constructor(
         _penaltisResultado.value = null
         _dadosPenaltisAdversario.value = null
         _penaltisInterativoConcluido.value = false
+
+        // ── Fechamento salarial automático ──────────────────────────────────
+        // Deriva o mês vigente a partir do ordemGlobal da próxima partida (ou
+        // do último resultado se a temporada acabou).  Se o mês derivado for
+        // maior que o mesAtual persistido, processa o fechamento mensal para
+        // cada mês que passou (salários, patrocínio, bilheteria, IA contratações).
+        val ordemRef = (_proximaPartida.value ?: _ultimosResultados.value.firstOrNull())?.ordemGlobal ?: 0
+        val mesDerived = if (ordemRef > 0)
+            (1 + (ordemRef.coerceAtLeast(1) - 1) * 11 / 379).coerceIn(1, 12)
+        else save.mesAtual
+
+        while (save.mesAtual < mesDerived) {
+            val patrocinioMensal     = save.patrocinadorValorAnual / 12L
+            val patrocinioJaCreditado = save.patrocinadorPreCreditado
+            gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, save.mesAtual, patrocinioMensal, patrocinioJaCreditado)
+            gameDataStore.avancarMes()  // também zera patrocinadorPreCreditado
+            save = gameDataStore.saveState.first()
+        }
     }
 
     // Chamado quando o jogador conclui a disputa interativa de pênaltis
@@ -426,12 +449,6 @@ class DashboardViewModel @Inject constructor(
             )
             _penaltisResultado.value = penaltis
         } catch (_: Exception) { }
-    }
-
-    fun fecharMes() = viewModelScope.launch {
-        val save = gameDataStore.saveState.first()
-        gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, save.mesAtual)
-        gameDataStore.avancarMes()
     }
 
     fun encerrarTemporada() = viewModelScope.launch {
@@ -526,10 +543,11 @@ class EscalacaoViewModel @Inject constructor(
                         val pos = if (jne.posicaoUsada != jne.jogador.posicao) jne.posicaoUsada else null
                         jogadorRepository.atualizarEscalacao(jne.jogador.id, 1, pos)
                     }
-                    // Carrega reservas que o usuário possa ter salvo anteriormente
-                    val reservasSalvas = jogadorRepository.buscarReservasSalvas(timeId)
-                    val reservas = reservasSalvas.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
-                    _escalacao.value = gerada.copy(reservas = reservas)
+                    // Persiste as reservas geradas automaticamente
+                    gerada.reservas.forEach { jne ->
+                        jogadorRepository.atualizarEscalacao(jne.jogador.id, 2, null)
+                    }
+                    _escalacao.value = gerada
                 }
             } else {
                 // Atualiza os atributos dos jogadores na escalação sempre que o elenco
@@ -601,6 +619,45 @@ class EscalacaoViewModel @Inject constructor(
         viewModelScope.launch {
             jogadorRepository.atualizarEscalacao(a.jogador.id, 1, b.posicaoUsada)
             jogadorRepository.atualizarEscalacao(b.jogador.id, 1, a.posicaoUsada)
+        }
+    }
+
+    /**
+     * Troca um titular por um reserva:
+     * - O reserva entra como titular na posição do titular sainte.
+     * - O titular sainte passa a ser reserva (na sua posição natural).
+     */
+    fun trocarTitularComReserva(titular: JogadorNaEscalacao, reserva: JogadorNaEscalacao) {
+        val atual = _escalacao.value ?: return
+        val novosTitulares = atual.titulares
+            .filter { it.jogador.id != titular.jogador.id } +
+            JogadorNaEscalacao(reserva.jogador, titular.posicaoUsada)
+        val novasReservas = atual.reservas
+            .filter { it.jogador.id != reserva.jogador.id } +
+            JogadorNaEscalacao(titular.jogador, titular.jogador.posicao)
+        _escalacao.value = atual.copy(titulares = novosTitulares, reservas = novasReservas)
+        viewModelScope.launch {
+            jogadorRepository.atualizarEscalacao(reserva.jogador.id, 1, titular.posicaoUsada)
+            jogadorRepository.atualizarEscalacao(titular.jogador.id, 2, null)
+        }
+    }
+
+    /**
+     * Substitui um titular por um jogador do elenco não escalado:
+     * - O novo jogador entra como titular na posição do titular sainte.
+     * - O titular sainte é removido da escalação (volta ao elenco).
+     */
+    fun substituirTitularPorElenco(titular: JogadorNaEscalacao, novoJogador: Jogador) {
+        val atual = _escalacao.value ?: return
+        if (atual.titulares.size >= 11 && atual.titulares.none { it.jogador.id == titular.jogador.id }) return
+        val novosTitulares = atual.titulares
+            .filter { it.jogador.id != titular.jogador.id } +
+            JogadorNaEscalacao(novoJogador, titular.posicaoUsada)
+        val novasReservas = atual.reservas.filter { it.jogador.id != novoJogador.id }
+        _escalacao.value = atual.copy(titulares = novosTitulares, reservas = novasReservas)
+        viewModelScope.launch {
+            jogadorRepository.atualizarEscalacao(novoJogador.id, 1, titular.posicaoUsada)
+            jogadorRepository.atualizarEscalacao(titular.jogador.id, 0, null)
         }
     }
 
@@ -721,6 +778,7 @@ class MercadoViewModel @Inject constructor(
             _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
             return@launch
         }
+        timeRepository.debitarSaldo(timeId, jogador.valorMercado)
         jogadorRepository.realizarTransferencia(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
@@ -786,6 +844,7 @@ class MercadoViewModel @Inject constructor(
 @HiltViewModel
 class ClubesViewModel @Inject constructor(
     private val gameDataStore: GameDataStore,
+    private val gameRepository: GameRepository,
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository
 ) : ViewModel() {
@@ -866,6 +925,10 @@ class ClubesViewModel @Inject constructor(
             temporadaId = save.temporadaId,
             mes = save.mesAtual
         )
+        // Se o time vendedor ficou com elenco abaixo de 18, recompõe automaticamente
+        if (jogador.timeId != null) {
+            gameRepository.recompletarElencoEmergenciaIA(jogador.timeId, save.temporadaId, save.mesAtual)
+        }
         _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(jogador.valorMercado)}!"
     }
 
@@ -1439,6 +1502,9 @@ class FinancasViewModel @Inject constructor(
     private val _compras = MutableStateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>>(emptyList())
     val compras: StateFlow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> = _compras.asStateFlow()
 
+    private val _saldoAtual = MutableStateFlow(0L)
+    val saldoAtual: StateFlow<Long> = _saldoAtual.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
         // Carrega elenco de forma reativa
         launch {
@@ -1477,6 +1543,11 @@ class FinancasViewModel @Inject constructor(
             jogadorRepository.observeComprasDoTime(timeId)
                 .collect { lista -> _compras.value = lista }
         }
+        // Observa saldo em caixa do time de forma reativa
+        launch {
+            gameRepository.observarSaldoTime(timeId)
+                .collect { saldo -> _saldoAtual.value = saldo }
+        }
     }
 }
 
@@ -1486,7 +1557,9 @@ class FinancasViewModel @Inject constructor(
 @HiltViewModel
 class EstadioViewModel @Inject constructor(
     private val estadioRepository: br.com.managerfoot.data.repository.EstadioRepository,
-    private val timeRepository: TimeRepository
+    private val timeRepository: TimeRepository,
+    private val gameDataStore: GameDataStore,
+    private val gameRepository: GameRepository
 ) : ViewModel() {
 
     private val _estadio = MutableStateFlow<br.com.managerfoot.data.database.entities.EstadioEntity?>(null)
@@ -1504,8 +1577,15 @@ class EstadioViewModel @Inject constructor(
     }
 
     fun upgradeSetor(timeId: Int, setor: Int) = viewModelScope.launch {
-        val ok = estadioRepository.upgradeSetor(timeId, setor)
-        if (ok) {
+        val custo = estadioRepository.upgradeSetor(timeId, setor)
+        if (custo != null) {
+            val save = gameDataStore.saveState.first()
+            gameRepository.registrarUpgradeEstadio(
+                timeId      = timeId,
+                temporadaId = save.temporadaId,
+                mes         = save.mesAtual,
+                custo       = custo
+            )
             _estadio.value = estadioRepository.buscarOuCriar(timeId)
             _time.value = timeRepository.buscarPorId(timeId)
             _mensagem.value = "Upgrade realizado com sucesso!"
@@ -1522,7 +1602,8 @@ class EstadioViewModel @Inject constructor(
 // ══════════════════════════════════════════════════════
 @HiltViewModel
 class JunioresViewModel @Inject constructor(
-    private val jogadorRepository: br.com.managerfoot.data.repository.JogadorRepository
+    private val jogadorRepository: br.com.managerfoot.data.repository.JogadorRepository,
+    private val gameDataStore: GameDataStore
 ) : ViewModel() {
 
     private val _juniores = MutableStateFlow<List<br.com.managerfoot.domain.model.Jogador>>(emptyList())
@@ -1555,6 +1636,327 @@ class JunioresViewModel @Inject constructor(
         }
         jogadorRepository.promoverJunior(jogadorId)
         _mensagem.value = "$nomeAbrev promovido ao elenco principal!"
+    }
+
+    fun dispensarJunior(jogadorId: Int, nomeAbrev: String) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        jogadorRepository.dispensarJunior(jogadorId, save.temporadaId, save.mesAtual)
+        _mensagem.value = "$nomeAbrev dispensado para o mercado livre."
+    }
+
+    fun limparMensagem() { _mensagem.value = null }
+}
+
+// ══════════════════════════════════════════════════════
+//  RodadaViewModel
+// ══════════════════════════════════════════════════════
+@HiltViewModel
+class RodadaViewModel @Inject constructor(
+    private val partidaDao: PartidaDao
+) : ViewModel() {
+
+    private val _partidas = MutableStateFlow<List<CalendarioPartidaDto>>(emptyList())
+    val partidas: StateFlow<List<CalendarioPartidaDto>> = _partidas.asStateFlow()
+
+    private val _divisaoSelecionada = MutableStateFlow(1)
+    val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
+
+    private val _rodadaSelecionada = MutableStateFlow(1)
+    val rodadaSelecionada: StateFlow<Int> = _rodadaSelecionada.asStateFlow()
+
+    private val _maxRodada = MutableStateFlow(38)
+    val maxRodada: StateFlow<Int> = _maxRodada.asStateFlow()
+
+    private var campeonatoAId = -1
+    private var campeonatoBId = -1
+    private var campeonatoCId = -1
+    private var campeonatoDId = -1
+
+    private var coletarJob: Job? = null
+
+    fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int) = viewModelScope.launch {
+        campeonatoAId = campAId
+        campeonatoBId = campBId
+        campeonatoCId = campCId
+        campeonatoDId = campDId
+        atualizarMaxEColetar()
+    }
+
+    fun selecionarDivisao(divisao: Int) = viewModelScope.launch {
+        if (_divisaoSelecionada.value == divisao) return@launch
+        _divisaoSelecionada.value = divisao
+        _rodadaSelecionada.value = 1
+        atualizarMaxEColetar()
+    }
+
+    fun selecionarRodada(rodada: Int) = viewModelScope.launch {
+        if (_rodadaSelecionada.value == rodada) return@launch
+        _rodadaSelecionada.value = rodada
+        coletar(campIdAtual(), rodada)
+    }
+
+    private suspend fun atualizarMaxEColetar() {
+        val campId = campIdAtual()
+        if (campId <= 0) { _partidas.value = emptyList(); _maxRodada.value = 38; return }
+        val max = partidaDao.maxRodada(campId).coerceAtLeast(1)
+        _maxRodada.value = max
+        val rodada = _rodadaSelecionada.value.coerceIn(1, max)
+        _rodadaSelecionada.value = rodada
+        coletar(campId, rodada)
+    }
+
+    private fun coletar(campId: Int, rodada: Int) {
+        if (campId <= 0) { _partidas.value = emptyList(); return }
+        coletarJob?.cancel()
+        coletarJob = viewModelScope.launch {
+            partidaDao.observeRodada(campId, rodada).collect { _partidas.value = it }
+        }
+    }
+
+    private fun campIdAtual() = when (_divisaoSelecionada.value) {
+        1 -> campeonatoAId
+        2 -> campeonatoBId
+        3 -> campeonatoCId
+        else -> campeonatoDId
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  JogadoresViewModel
+//  Tab 0 — Elenco com progressão individual
+//  Tab 1 — Pesquisa global com filtros (posição, força, idade)
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class JogadoresViewModel @Inject constructor(
+    private val jogadorRepository: JogadorRepository,
+    private val gameRepository: GameRepository,
+    private val timeRepository: TimeRepository,
+    private val gameDataStore: GameDataStore
+) : ViewModel() {
+
+    private var timeId = -1
+
+    private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
+    val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
+
+    private val _todosList      = MutableStateFlow<List<Jogador>>(emptyList())
+    private val _posicaoFiltro  = MutableStateFlow<Posicao?>(null)
+    private val _forcaMinFiltro = MutableStateFlow(0)
+    private val _idadeMaxFiltro = MutableStateFlow(40)
+
+    val posicaoFiltro:  StateFlow<Posicao?> = _posicaoFiltro.asStateFlow()
+    val forcaMinFiltro: StateFlow<Int>      = _forcaMinFiltro.asStateFlow()
+    val idadeMaxFiltro: StateFlow<Int>      = _idadeMaxFiltro.asStateFlow()
+
+    private val _saldo = MutableStateFlow(0L)
+    val saldo: StateFlow<Long> = _saldo.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    val resultadoPesquisa: StateFlow<List<Jogador>> = combine(
+        _todosList, _posicaoFiltro, _forcaMinFiltro, _idadeMaxFiltro
+    ) { todos, posicao, forcaMin, idadeMax ->
+        todos.filter { j ->
+            (posicao == null || j.posicao == posicao) &&
+            j.forca >= forcaMin &&
+            j.idade <= idadeMax
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun carregar(tiId: Int) {
+        if (timeId == tiId) return
+        timeId = tiId
+        viewModelScope.launch {
+            launch { jogadorRepository.observeElenco(timeId).collect { _elenco.value = it } }
+            launch { jogadorRepository.observeTodosJogadoresAtivos().collect { _todosList.value = it } }
+            launch { timeRepository.observeTodos().collect { times -> _saldo.value = times.find { it.id == timeId }?.saldo ?: 0L } }
+        }
+    }
+
+    fun filtrarPosicao(posicao: Posicao?) { _posicaoFiltro.value = posicao }
+    fun filtrarForcaMin(min: Int)         { _forcaMinFiltro.value = min }
+    fun filtrarIdadeMax(max: Int)         { _idadeMaxFiltro.value = max }
+    fun limparFiltros()                   { _posicaoFiltro.value = null; _forcaMinFiltro.value = 0; _idadeMaxFiltro.value = 40 }
+    fun limparMensagem()                  { _mensagem.value = null }
+
+    fun fazerOferta(jogador: Jogador) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        val time = timeRepository.buscarPorId(timeId) ?: return@launch
+        if (time.saldo < jogador.valorMercado) {
+            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(jogador.valorMercado)}"
+            return@launch
+        }
+        val qtdElenco = jogadorRepository.contarJogadores(timeId)
+        if (qtdElenco >= 35) {
+            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
+            return@launch
+        }
+        timeRepository.debitarSaldo(timeId, jogador.valorMercado)
+        jogador.timeId?.let { vendedorId -> timeRepository.creditarSaldo(vendedorId, jogador.valorMercado) }
+        jogadorRepository.realizarTransferencia(
+            oferta = OfertaTransferencia(
+                jogadorId       = jogador.id,
+                timeCompradorId = timeId,
+                timeVendedorId  = jogador.timeId,
+                valor           = jogador.valorMercado,
+                salarioProposto = jogador.salario,
+                contratoAnos    = 3
+            ),
+            temporadaId = save.temporadaId,
+            mes         = save.mesAtual
+        )
+        // Se o time vendedor ficou com elenco abaixo de 18, recompõe automaticamente
+        if (jogador.timeId != null) {
+            gameRepository.recompletarElencoEmergenciaIA(jogador.timeId, save.temporadaId, save.mesAtual)
+        }
+        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(jogador.valorMercado)}!"
+    }
+
+    fun venderJogador(jogador: Jogador) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        val comprador = timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.id != timeId && it.saldo >= jogador.valorMercado }
+            .randomOrNull()
+        if (comprador == null) {
+            _mensagem.value = "Nenhum clube interessado em ${jogador.nomeAbreviado} no momento."
+            return@launch
+        }
+        timeRepository.creditarSaldo(timeId, jogador.valorMercado)
+        timeRepository.debitarSaldo(comprador.id, jogador.valorMercado)
+        jogadorRepository.realizarVenda(
+            oferta = OfertaTransferencia(
+                jogadorId       = jogador.id,
+                timeCompradorId = comprador.id,
+                timeVendedorId  = timeId,
+                valor           = jogador.valorMercado,
+                salarioProposto = jogador.salario,
+                contratoAnos    = 3
+            ),
+            temporadaId = save.temporadaId,
+            mes         = save.mesAtual
+        )
+        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(jogador.valorMercado)}!"
+    }
+
+    private fun formatarValor(centavos: Long): String {
+        val reais = centavos / 100.0
+        return when {
+            reais >= 1_000_000 -> "R$ %.1f M".format(reais / 1_000_000)
+            reais >= 1_000     -> "R$ %.0f mil".format(reais / 1_000)
+            else               -> "R$ %.0f".format(reais)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PatrocinioViewModel
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class PatrocinioViewModel @Inject constructor(
+    private val gameDataStore: GameDataStore,
+    private val timeRepository: TimeRepository,
+    private val gameRepository: GameRepository
+) : ViewModel() {
+
+    private val _ofertas = MutableStateFlow<List<MotorPatrocinio.OfertaPatrocinio>>(emptyList())
+    val ofertas: StateFlow<List<MotorPatrocinio.OfertaPatrocinio>> = _ofertas.asStateFlow()
+
+    private val _patrocinadorAtualTipo = MutableStateFlow(0)
+    val patrocinadorAtualTipo: StateFlow<Int> = _patrocinadorAtualTipo.asStateFlow()
+
+    private val _patrocinadorAtualValorAnual = MutableStateFlow(0L)
+    val patrocinadorAtualValorAnual: StateFlow<Long> = _patrocinadorAtualValorAnual.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    fun carregar() = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        val time = timeRepository.buscarPorId(save.timeIdJogador) ?: return@launch
+        _patrocinadorAtualTipo.value = save.patrocinadorTipo
+        _patrocinadorAtualValorAnual.value = save.patrocinadorValorAnual
+        _ofertas.value = MotorPatrocinio.gerarOfertas(time.reputacao.toInt(), save.temporadaId)
+    }
+
+    fun escolherPatrocinador(tipo: Int, valorAnual: Long) = viewModelScope.launch {
+        val save        = gameDataStore.saveState.first()
+        val valorMensal = valorAnual / 12L
+        gameDataStore.salvarPatrocinador(tipo, valorAnual)
+        // Credita imediatamente a primeira parcela no saldo do clube
+        gameRepository.creditarPatrocinioImediato(save.timeIdJogador, valorMensal)
+        // Marca o adiantamento para que fecharMes não duplique o crédito ao processar este mês
+        gameDataStore.marcarPatrocinioPreCreditado(valorMensal)
+        // Insere o lançamento na tabela financas → aparece imediatamente em Receitas
+        gameRepository.registrarPatrocinioMes(save.timeIdJogador, save.temporadaId, save.mesAtual, valorMensal)
+        _patrocinadorAtualTipo.value = tipo
+        _patrocinadorAtualValorAnual.value = valorAnual
+        _mensagem.value = "Contrato de patrocínio fechado! ${formatarValorPatrocinio(valorMensal)}/mês creditados."
+    }
+
+    private fun formatarValorPatrocinio(centavos: Long): String {
+        val reais = centavos / 100.0
+        return when {
+            reais >= 1_000_000 -> "R$ %.1f M".format(reais / 1_000_000)
+            reais >= 1_000     -> "R$ %.0f mil".format(reais / 1_000)
+            else               -> "R$ %.0f".format(reais)
+        }
+    }
+
+    fun limparMensagem() { _mensagem.value = null }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TreinamentoViewModel
+//  Gerencia sessões de treinamento do elenco sênior + base.
+//  Cada treinamento reduz fadiga em 5% e acumula progresso
+//  de evolução nos atributos principais da posição.
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class TreinamentoViewModel @Inject constructor(
+    private val jogadorRepository: JogadorRepository,
+    private val gameDataStore: GameDataStore
+) : ViewModel() {
+
+    private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
+    val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
+
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    fun carregar(timeId: Int) = viewModelScope.launch {
+        jogadorRepository.observeElenco(timeId).collect { lista ->
+            val juniores = jogadorRepository.buscarElencoCompleto(timeId)
+                .filter { it.categoriaBase }
+            _elenco.value = (lista.filterNot { it.categoriaBase } + juniores)
+                .sortedWith(compareBy({ it.categoriaBase }, { it.posicao.name }))
+        }
+    }
+
+    fun treinar(jogadorId: Int) = viewModelScope.launch {
+        val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
+        if (jogador.treinouNestaCiclo) return@launch
+        jogadorRepository.treinarJogador(jogadorId)
+        val novaFadiga = ((jogador.fadiga - 0.05f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} treinou. Fadiga: $novaFadiga%"
+    }
+
+    fun treinarTudo(timeId: Int) = viewModelScope.launch {
+        val pendentes = _elenco.value.count { !it.treinouNestaCiclo && !it.aposentado }
+        if (pendentes == 0) {
+            _mensagem.value = "Todos os jogadores já treinaram neste ciclo."
+            return@launch
+        }
+        jogadorRepository.treinarTimeCompleto(timeId)
+        _mensagem.value = "$pendentes jogador(es) treinado(s)."
+    }
+
+    fun descansar(jogadorId: Int) = viewModelScope.launch {
+        val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
+        if (jogador.treinouNestaCiclo) return@launch
+        jogadorRepository.descansarJogador(jogadorId)
+        val novaFadiga = ((jogador.fadiga + 0.10f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} descansou. Fadiga: $novaFadiga%"
     }
 
     fun limparMensagem() { _mensagem.value = null }

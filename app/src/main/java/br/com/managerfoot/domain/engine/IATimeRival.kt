@@ -16,9 +16,11 @@ import kotlin.random.Random
 object IATimeRival {
 
     // Gera uma escalação automática: titulares + reservas
+    // Prioriza jogadores com maior forcaEfetiva(), que já incorpora penalidade de fadiga.
+    // Isso faz com que a IA naturalmente evite escalar jogadores excessivamente cansados.
     fun gerarEscalacao(time: Time, elenco: List<Jogador>): Escalacao {
-        val disponiveis = elenco.filter { !it.lesionado && !it.suspenso }
-            .sortedByDescending { it.forca }
+        val disponiveis = elenco.filter { !it.lesionado && !it.suspenso && !it.categoriaBase }
+            .sortedByDescending { it.forcaEfetiva() }
 
         val formacao = time.taticaFormacao   // ex: "4-4-2"
         val slots = parseFormacao(formacao)  // [1(GL), 4, 4, 2] por setor
@@ -48,7 +50,7 @@ object IATimeRival {
 
         // Completar com qualquer jogador disponível se faltar titular
         val restantes = disponiveis.filter { it.id !in usados }
-        val reservas = restantes.take(7).map {
+        val reservas = restantes.take(11).map {
             JogadorNaEscalacao(it, it.posicao)
         }
 
@@ -94,7 +96,7 @@ object IATimeRival {
     }
 
     // Detecta quais posições estão carentes no elenco
-    private fun detectarCarencias(elenco: List<Jogador>, formacao: String): List<Posicao> {
+    fun detectarCarencias(elenco: List<Jogador>, formacao: String): List<Posicao> {
         val slots = parseFormacao(formacao)
         val carencias = mutableListOf<Posicao>()
 
@@ -138,12 +140,12 @@ object IATimeRival {
 object MotorFinanceiro {
 
     // Fator de ocupação baseado na reputação do clube
-    private fun fatorReputacao(reputacao: Int): Double = when {
-        reputacao >= 90 -> 0.95
-        reputacao >= 70 -> 0.80
-        reputacao >= 50 -> 0.65
-        reputacao >= 30 -> 0.50
-        else            -> 0.35
+    private fun fatorReputacao(reputacao: Float): Double = when {
+        reputacao >= 90f -> 0.95
+        reputacao >= 70f -> 0.80
+        reputacao >= 50f -> 0.65
+        reputacao >= 30f -> 0.50
+        else             -> 0.35
     }
 
     // Fator de rivalidade baseado no nível do adversário
@@ -186,11 +188,11 @@ object MotorFinanceiro {
     // Patrocínio mensal baseado na reputação do clube
     fun calcularPatrocinioMensal(time: Time): Long {
         val base = when {
-            time.reputacao >= 90 -> 50_000_000_00L  // R$ 5.000.000
-            time.reputacao >= 70 -> 20_000_000_00L
-            time.reputacao >= 50 -> 8_000_000_00L
-            time.reputacao >= 30 -> 3_000_000_00L
-            else -> 1_000_000_00L
+            time.reputacao >= 90f -> 50_000_000_00L  // R$ 5.000.000
+            time.reputacao >= 70f -> 20_000_000_00L
+            time.reputacao >= 50f -> 8_000_000_00L
+            time.reputacao >= 30f -> 3_000_000_00L
+            else                  -> 1_000_000_00L
         }
         return base + (time.divisao - 1) * -500_000_00L // divisões menores = menos patrocínio
     }
@@ -253,5 +255,69 @@ object MotorFinanceiro {
         derrotasUltimas5 >= 4 -> MoraleEstado.REVOLTADO
         derrotasUltimas5 >= 3 -> MoraleEstado.INSATISFEITO
         else -> MoraleEstado.NORMAL
+    }
+}
+
+// ─────────────────────────────────────────────
+//  MotorPatrocinio
+//  Gera as ofertas de patrocínio disponíveis
+//  para o clube do jogador com base na reputação.
+//  São 3 tiers; tiers maiores exigem reputação
+//  mínima e oferecem valores mais altos.
+// ─────────────────────────────────────────────
+object MotorPatrocinio {
+
+    enum class Tier(
+        val tipo: Int,
+        val label: String,
+        val descricao: String,
+        val fatorValor: Double,
+        val reputacaoMinima: Int
+    ) {
+        REGIONAL (1, "Patrocinador Regional",  "empresa local",    0.30, 0),
+        NACIONAL (2, "Patrocinador Nacional",  "empresa nacional", 0.60, 25),
+        PREMIUM  (3, "Patrocinador Premium",   "multinacional",    1.00, 50)
+    }
+
+    private val nomesPorTier = mapOf(
+        Tier.REGIONAL to listOf("Banco Regional", "Cerveja Local BR",  "Supermercados Unidos"),
+        Tier.NACIONAL to listOf("Construtora Nacional", "Banco Nacional BR", "Telecom Plus"),
+        Tier.PREMIUM  to listOf("Multinacional Corp",  "FinTech Global",    "Energia Máxima")
+    )
+
+    /** Valor base anual para a reputação dada (de R$1M a R$100M). */
+    private fun valorBase(reputacao: Int): Long {
+        val rep = reputacao.coerceIn(1, 100)
+        val minimo = 1_000_000_00L    // R$ 1.000.000,00
+        val maximo = 100_000_000_00L  // R$ 100.000.000,00
+        return minimo + ((rep - 1).toLong() * (maximo - minimo) / 99L)
+    }
+
+    data class OfertaPatrocinio(
+        val tipo: Int,
+        val tier: Tier,
+        val nomeEmpresa: String,
+        val valorAnual: Long,
+        val disponivel: Boolean
+    )
+
+    /**
+     * Gera as 3 ofertas de patrocínio para a temporada.
+     * O [temporadaId] é usado para variar os nomes de empresa a cada temporada.
+     */
+    fun gerarOfertas(reputacao: Int, temporadaId: Int): List<OfertaPatrocinio> {
+        val base = valorBase(reputacao)
+        return Tier.values().map { tier ->
+            val empresas = nomesPorTier[tier] ?: listOf("Patrocinador")
+            val empresa  = empresas[temporadaId % empresas.size]
+            val valor    = (base * tier.fatorValor).toLong()
+            OfertaPatrocinio(
+                tipo         = tier.tipo,
+                tier         = tier,
+                nomeEmpresa  = empresa,
+                valorAnual   = valor,
+                disponivel   = reputacao >= tier.reputacaoMinima
+            )
+        }
     }
 }

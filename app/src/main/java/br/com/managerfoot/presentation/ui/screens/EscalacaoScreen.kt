@@ -161,39 +161,49 @@ fun EscalacaoScreen(
             }
         }
 
+        // Banner de troca ativo em todas as abas
+        if (titularParaTroca != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Trocar: ${titularParaTroca!!.jogador.nomeAbreviado} (${titularParaTroca!!.posicaoUsada.abreviacao})",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { titularParaTroca = null }) { Text("Cancelar") }
+            }
+        }
+
         when (abaAtiva) {
             0 -> { // Titulares
                 if (escalacao == null) {
                     EmptyState("Carregando escalação...")
                 } else {
+                    val setorOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+                    val titularesOrdenados = escalacao!!.titulares.sortedWith(
+                        compareBy({ setorOrder[it.posicaoUsada.setor] ?: 2 }, { it.posicaoUsada.ordinal })
+                    )
                     Column(Modifier.fillMaxSize()) {
-                        if (titularParaTroca != null) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Trocar posição com: ${titularParaTroca!!.jogador.nomeAbreviado} (${titularParaTroca!!.posicaoUsada.abreviacao})",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                TextButton(onClick = { titularParaTroca = null }) { Text("Cancelar") }
-                            }
-                        }
                         LazyColumn {
-                            items(escalacao!!.titulares) { jne ->
+                            items(titularesOrdenados, key = { it.jogador.id }) { jne ->
                                 val eSelecionado = titularParaTroca?.jogador?.id == jne.jogador.id
                                 JogadorRow(
                                     jogador = jne.jogador,
                                     onClick = { if (titularParaTroca == null) vm.selecionarJogador(jne.jogador) },
                                     trailing = {
-                                        Column(horizontalAlignment = Alignment.End) {
+                                        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 130.dp)) {
                                             Text(jne.posicaoUsada.abreviacao, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                            if (jne.posicaoUsada != jne.jogador.posicao) {
+                                        val ehImproviso = jne.posicaoUsada != jne.jogador.posicao &&
+                                            jne.posicaoUsada != jne.jogador.posicaoSecundaria &&
+                                            jne.posicaoUsada.setor != jne.jogador.posicao.setor
+                                        if (ehImproviso) {
                                                 Text("*Improvisado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                             }
                                             Spacer(Modifier.height(2.dp))
@@ -236,6 +246,7 @@ fun EscalacaoScreen(
                                 )
                                 HorizontalDivider(thickness = 0.5.dp)
                             }
+                            if (modoPreJogo) item { Spacer(Modifier.height(80.dp)) }
                         }
                     }
                 }
@@ -244,21 +255,45 @@ fun EscalacaoScreen(
                 if (escalacao?.reservas.isNullOrEmpty()) {
                     EmptyState("Sem reservas escalados")
                 } else {
+                    val reservasOrdenadas = escalacao!!.reservas
+                        .sortedWith(compareBy({ it.jogador.posicao.ordinal }, { -it.jogador.forca }))
                     LazyColumn {
-                        items(escalacao!!.reservas) { jne ->
+                        items(reservasOrdenadas) { jne ->
                             JogadorRow(
                                 jogador = jne.jogador,
                                 trailing = {
-                                    IconButton(onClick = { vm.moverParaTitular(jne.jogador, jne.posicaoUsada) }, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "Tornar titular", modifier = Modifier.size(16.dp))
-                                    }
-                                    IconButton(onClick = { vm.removerDaEscalacao(jne.jogador) }, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remover do banco", modifier = Modifier.size(16.dp))
+                                    if (titularParaTroca != null) {
+                                        Button(
+                                            onClick = {
+                                                vm.trocarTitularComReserva(titularParaTroca!!, jne)
+                                                titularParaTroca = null
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) { Text("↔ Trocar", style = MaterialTheme.typography.labelSmall) }
+                                    } else {
+                                        Box(Modifier.widthIn(max = 80.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    jne.posicaoUsada.abreviacao,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                IconButton(onClick = { vm.moverParaTitular(jne.jogador, jne.posicaoUsada) }, modifier = Modifier.size(24.dp)) {
+                                                    Icon(Icons.Default.Add, contentDescription = "Tornar titular", modifier = Modifier.size(16.dp))
+                                                }
+                                                IconButton(onClick = { vm.removerDaEscalacao(jne.jogador) }, modifier = Modifier.size(24.dp)) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Remover do banco", modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             )
                             HorizontalDivider(thickness = 0.5.dp)
                         }
+                        if (modoPreJogo) item { Spacer(Modifier.height(80.dp)) }
                     }
                 }
             }
@@ -289,23 +324,40 @@ fun EscalacaoScreen(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.secondary
                                     )
-                                    else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        if (!titularesCheios) {
-                                            OutlinedButton(
-                                                onClick = { vm.moverParaTitular(jogador, jogador.posicao) },
+                                    else -> Column(
+                                        horizontalAlignment = Alignment.End,
+                                        modifier = Modifier.widthIn(max = 110.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        if (titularParaTroca != null) {
+                                            Button(
+                                                onClick = {
+                                                    vm.substituirTitularPorElenco(titularParaTroca!!, jogador)
+                                                    titularParaTroca = null
+                                                },
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(28.dp)
+                                                modifier = Modifier.fillMaxWidth().height(28.dp)
                                             ) {
-                                                Text("Titular", style = MaterialTheme.typography.labelSmall)
+                                                Text("→ Escalar", style = MaterialTheme.typography.labelSmall)
                                             }
-                                        }
-                                        if (!reservasCheias) {
-                                            OutlinedButton(
-                                                onClick = { vm.adicionarComoReserva(jogador) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(28.dp)
-                                            ) {
-                                                Text("Reserva", style = MaterialTheme.typography.labelSmall)
+                                        } else {
+                                            if (!titularesCheios) {
+                                                OutlinedButton(
+                                                    onClick = { vm.moverParaTitular(jogador, jogador.posicao) },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.fillMaxWidth().height(28.dp)
+                                                ) {
+                                                    Text("Titular", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            }
+                                            if (!reservasCheias) {
+                                                OutlinedButton(
+                                                    onClick = { vm.adicionarComoReserva(jogador) },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.fillMaxWidth().height(28.dp)
+                                                ) {
+                                                    Text("Reserva", style = MaterialTheme.typography.labelSmall)
+                                                }
                                             }
                                         }
                                     }
@@ -314,14 +366,13 @@ fun EscalacaoScreen(
                         )
                         HorizontalDivider(thickness = 0.5.dp)
                     }
+                    if (modoPreJogo) item { Spacer(Modifier.height(80.dp)) }
                 }
             }
             3 -> { // Tática
                 TaticaTab(escalacao = escalacao, vm = vm, modoPreJogo = modoPreJogo)
             }
         }
-        // Espaço para o botão flutuante não cobrir o conteúdo
-        if (modoPreJogo) Spacer(Modifier.height(80.dp))
     }
 
     // Botão flutuante "Iniciar Partida" no modo pré-jogo
@@ -489,16 +540,19 @@ internal fun GramadoTatico(
 
     val chipW = 52.dp
     val chipH = 48.dp
+    // Altura dinâmica: cada linha precisa de ao menos 68dp para não sobrepor chips.
+    // Mínimo de 300dp para formações com 4 linhas ou menos.
+    val numLinhas = linhas.size
+    val fieldHeight = (numLinhas * 68).dp.coerceAtLeast(300.dp)
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(300.dp)
+            .height(fieldHeight)
             .clip(RoundedCornerShape(10.dp))
     ) {
         val w = maxWidth
         val h = maxHeight
-        val numLinhas = linhas.size
 
         // Fundo do gramado
         Box(Modifier.fillMaxSize().background(Color(0xFF2D8653)))
@@ -643,9 +697,10 @@ private fun JogadorDetalheDialog(
 
                 // ── Progressão / Desenvolvimento ────────────────────
                 val statusDesenv = when {
-                    jogador.idade in 16..24 -> Triple("Crescimento", Color(0xFF2E7D32), "↑ 5%/2% por temporada")
-                    jogador.idade in 25..32 -> Triple("Estabilização", Color(0xFF1565C0), "↑ 3%/1% por temporada")
-                    else                    -> Triple("Declínio", Color(0xFFC62828), "↓ 2% por temporada")
+                    jogador.categoriaBase    -> Triple("Base", Color(0xFF6A1B9A), "Talento em desenvolvimento")
+                    jogador.idade in 16..24  -> Triple("Crescimento", Color(0xFF2E7D32), "Jovem em ascensão")
+                    jogador.idade in 25..32  -> Triple("Estabilização", Color(0xFF1565C0), "Auge da carreira")
+                    else                     -> Triple("Declínio", Color(0xFFC62828), "Veterano em fim de carreira")
                 }
                 Text(
                     "Desenvolvimento",
@@ -682,6 +737,35 @@ private fun JogadorDetalheDialog(
                         )
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                // Barra de momentum da temporada: mostra o progressoEvolucao real (-1..+1)
+                val prog = jogador.progressoEvolucao.coerceIn(-1f, 1f)
+                val progNormalizado = (prog + 1f) / 2f  // mapeia -1..+1 para 0..1
+                val progColor = when {
+                    prog >= 0.5f  -> Color(0xFF2E7D32)
+                    prog >= 0.1f  -> Color(0xFF558B2F)
+                    prog >= -0.1f -> MaterialTheme.colorScheme.onSurfaceVariant
+                    prog >= -0.5f -> Color(0xFFE65100)
+                    else          -> Color(0xFFC62828)
+                }
+                val progLabel = when {
+                    prog >  0.05f -> "Evoluindo ${"%.2f".format(prog)}/+1.0"
+                    prog < -0.05f -> "Regredindo ${"%.2f".format(prog)}/-1.0"
+                    else          -> "Estável"
+                }
+                Text(
+                    progLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = progColor,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(2.dp))
+                LinearProgressIndicator(
+                    progress = { progNormalizado },
+                    modifier = Modifier.fillMaxWidth().height(5.dp),
+                    color = progColor,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
                 Spacer(Modifier.height(4.dp))
                 // Nota média e partidas da temporada
                 Row(
@@ -944,6 +1028,12 @@ private fun TransferenciaRow(t: br.com.managerfoot.data.dao.TransferenciaDetalhe
         br.com.managerfoot.data.database.entities.TipoTransferencia.EMPRESTIMO_SAIDA -> "Empréstimo"
         br.com.managerfoot.data.database.entities.TipoTransferencia.EMPRESTIMO_RETORNO -> "Retorno"
         br.com.managerfoot.data.database.entities.TipoTransferencia.PROMOVIDO_BASE  -> "Base"
+        br.com.managerfoot.data.database.entities.TipoTransferencia.DISPENSADO_BASE -> "Dispensado"
+    }
+    val tipoColor = when (t.tipo) {
+        br.com.managerfoot.data.database.entities.TipoTransferencia.VENDA  -> MaterialTheme.colorScheme.tertiary
+        br.com.managerfoot.data.database.entities.TipoTransferencia.COMPRA -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
         Modifier
@@ -954,16 +1044,20 @@ private fun TransferenciaRow(t: br.com.managerfoot.data.dao.TransferenciaDetalhe
         Column(Modifier.weight(1f)) {
             Text(t.jogadorNome, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             val descricao = buildString {
-                append(t.origemNome ?: "—")
+                append(t.origemNome ?: "Mercado livre")
                 append(" → ")
-                append(t.destinoNome ?: "Livre")
+                append(t.destinoNome ?: "Mercado livre")
             }
             Text(descricao, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Temp. ${t.temporadaId} · Mês ${t.mes}", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline)
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(tipoLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(tipoLabel, style = MaterialTheme.typography.labelSmall,
+                color = tipoColor, fontWeight = FontWeight.SemiBold)
             if (t.valor > 0) {
-                Text(formatarSaldo(t.valor), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Text(formatarSaldo(t.valor), style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold)
             }
         }
     }

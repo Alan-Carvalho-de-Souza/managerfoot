@@ -11,6 +11,7 @@ import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.domain.engine.*
 import br.com.managerfoot.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -365,9 +366,24 @@ class GameRepository @Inject constructor(
             timeJogadorId = ctx.timeJogadorId
         )
 
+        // Injeta SUBSTITUICAO_ENTRA/SAI para as substituições manuais do jogador que
+        // ainda não foram registradas nos eventos acumulados.
+        // Isso garante que os subs recebam nota na partida e evoluam como os titulares.
+        val jogadoresJaTrackeados = ctx.eventosAcumulados
+            .filter { it.tipo == TipoEvento.SUBSTITUICAO_ENTRA || it.tipo == TipoEvento.PARTICIPOU }
+            .map { it.jogadorId }.toSet()
+        val subEventsJogador = substituicoes
+            .filter { it.entrouId !in jogadoresJaTrackeados }
+            .flatMap { sub ->
+                listOf(
+                    EventoSimulado(sub.minuto, TipoEvento.SUBSTITUICAO_SAI,   sub.saiId,    ctx.timeJogadorId, ""),
+                    EventoSimulado(sub.minuto, TipoEvento.SUBSTITUICAO_ENTRA, sub.entrouId, ctx.timeJogadorId, "")
+                )
+            }
+
         // Acumula eventos: mantém os anteriores a minInicio, substitui os restantes
         val eventosAnteriores = ctx.eventosAcumulados.filter { it.minuto < minInicio }
-        val novosAcumulados   = (eventosAnteriores + eventosPeriodo).sortedBy { it.minuto }
+        val novosAcumulados   = (eventosAnteriores + subEventsJogador + eventosPeriodo).sortedBy { it.minuto }
 
         val ctxAtualizado = ctx.copy(
             estadoMetade1     = estadoFinal,
@@ -505,6 +521,22 @@ class GameRepository @Inject constructor(
     fun observarFinancasMensais(timeId: Int): Flow<List<br.com.managerfoot.data.database.entities.FinancaEntity>> =
         financaDao.observeFinancasMensais(timeId)
 
+    fun observarSaldoTime(timeId: Int): Flow<Long> =
+        timeRepository.observePorId(timeId).map { it?.saldo ?: 0L }
+
+    suspend fun registrarUpgradeEstadio(timeId: Int, temporadaId: Int, mes: Int, custo: Long) {
+        val saldoAtual = timeRepository.buscarPorId(timeId)?.saldo ?: 0L
+        financaDao.inserir(
+            FinancaEntity(
+                timeId = timeId,
+                temporadaId = temporadaId,
+                mes = mes,
+                despesaAmpliacaoEstadio = custo,
+                saldoFinal = saldoAtual
+            )
+        )
+    }
+
     suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int): List<PartidaEntity> =
         partidaDao.buscarUltimosResultados(timeId, campeonatoId)
 
@@ -579,6 +611,19 @@ class GameRepository @Inject constructor(
         registrarHallDaFama(campeonatoBId, 2)
         registrarHallDaFama(campeonatoCId, 3)
         registrarHallDaFama(campeonatoDId, 4)
+
+        // ── Bônus de reputação por título de divisão ──────────────
+        suspend fun aplicarBonusTitulo(campId: Int, bonusPercent: Double) {
+            if (campId <= 0) return
+            val campeaoEntry = classificacaoDao.buscarTop2(campId).firstOrNull() ?: return
+            val campeaoTime = timeRepository.buscarPorId(campeaoEntry.timeId) ?: return
+            val bonus = (campeaoTime.reputacao * bonusPercent).toFloat().coerceAtLeast(0.1f)
+            timeRepository.atualizarReputacao(campeaoTime.id, campeaoTime.reputacao + bonus)
+        }
+        aplicarBonusTitulo(campeonatoAId, 0.05) // Série A +5%
+        aplicarBonusTitulo(campeonatoBId, 0.03) // Série B +3%
+        aplicarBonusTitulo(campeonatoCId, 0.02) // Série C +2%
+        aplicarBonusTitulo(campeonatoDId, 0.01) // Série D +1%
 
         // ── Desfechos (promoções / rebaixamentos) ─────────────────
         suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
@@ -790,6 +835,12 @@ class GameRepository @Inject constructor(
                     )
                 }
                 campeonatoDao.encerrar(copaId)
+                // Copa do Brasil: +4% de reputação para o campeão
+                val campeaoCopa = timeRepository.buscarPorId(campeaoId)
+                if (campeaoCopa != null) {
+                    val bonus = (campeaoCopa.reputacao * 0.04f).coerceAtLeast(0.1f)
+                    timeRepository.atualizarReputacao(campeaoId, campeaoCopa.reputacao + bonus)
+                }
                 return true
             }
 
@@ -888,29 +939,40 @@ class GameRepository @Inject constructor(
         }
     }
 
-    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int) {
+    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int, patrocinioMensal: Long = 0L, patrocinioJaCreditado: Long = 0L) {
         val time = timeRepository.buscarPorId(timeId) ?: return
         val elenco = jogadorRepository.buscarDisponiveis(timeId)
 
         val fechamento = MotorFinanceiro.processarFechamentoMensal(
             time = time,
             elenco = elenco,
-            partidasEmCasa = 2
+            partidasEmCasa = 0  // bilheteria real já creditada por partida individual
         )
 
+        // Usa o valor de patrocínio escolhido pelo usuário (mensal = anual / 12)
+        // Se zero, cai no valor automático calculado pelo motor (para times IA)
+        val receitaPatrocinioFinal = if (patrocinioMensal > 0L) patrocinioMensal else fechamento.receitaPatrocinio
+
+        // Recalcula o lucro/prejuízo do mês com o patrocínio correto
+        val lucroReal = fechamento.receitaBilheteria + receitaPatrocinioFinal -
+            fechamento.despesaSalarios - fechamento.despesaInfraestrutura
+
         // Tenta inserir o registro financeiro
-        // Ignora erro de FK caso a temporada ainda não exista no banco
+        // Se já existir um registro para este mês (ex: patrocínio adiantado), reutiliza o id
+        // para que o REPLACE atualize a linha existente em vez de criar uma nova
+        val existente = try { financaDao.buscarPorMes(timeId, temporadaId, mes) } catch (_: Exception) { null }
         try {
             financaDao.inserir(
                 FinancaEntity(
-                    timeId = timeId,
-                    temporadaId = temporadaId,
-                    mes = mes,
+                    id                = existente?.id ?: 0,
+                    timeId            = timeId,
+                    temporadaId       = temporadaId,
+                    mes               = mes,
                     receitaBilheteria = fechamento.receitaBilheteria,
-                    receitaPatrocinio = fechamento.receitaPatrocinio,
-                    despesaSalarios = fechamento.despesaSalarios,
+                    receitaPatrocinio = receitaPatrocinioFinal,
+                    despesaSalarios   = fechamento.despesaSalarios,
                     despesaInfraestrutura = fechamento.despesaInfraestrutura,
-                    saldoFinal = fechamento.saldoFinal
+                    saldoFinal        = lucroReal
                 )
             )
         } catch (e: Exception) {
@@ -918,10 +980,272 @@ class GameRepository @Inject constructor(
             // mas continua atualizando o saldo do clube normalmente
         }
 
-        if (fechamento.lucroOuPrejuizo >= 0) {
-            timeRepository.creditarSaldo(timeId, fechamento.lucroOuPrejuizo)
+        // Desconta o valor já adiantado ao saldo quando o patrocínio foi escolhido
+        // evitando dupla contagem: o registro exibe o valor cheio, o ajuste só cobre o delta
+        val saldoAjuste = lucroReal - patrocinioJaCreditado
+        if (saldoAjuste >= 0) {
+            timeRepository.creditarSaldo(timeId, saldoAjuste)
         } else {
-            timeRepository.debitarSaldo(timeId, -fechamento.lucroOuPrejuizo)
+            timeRepository.debitarSaldo(timeId, -saldoAjuste)
+        }
+
+        // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
+        executarContratacoesLivresIA(timeId, temporadaId, mes)
+        // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
+        executarReforcoMensalIA(timeId, temporadaId, mes)
+        // IA faz reforços emergenciais quando o time está com desempenho ruim nos campeonatos
+        executarReforcoDesempenhoIA(timeId, temporadaId, mes)
+    }
+
+    /** Credita imediatamente o patrocínio mensal ao saldo do clube quando o contrato é fechado. */
+    suspend fun creditarPatrocinioImediato(timeId: Int, valorMensal: Long) {
+        if (valorMensal > 0L) timeRepository.creditarSaldo(timeId, valorMensal)
+    }
+
+    /**
+     * Insere (ou atualiza) o lançamento de patrocínio do mês corrente na tabela financas,
+     * garantindo que a aba Receitas mostre o valor imediatamente após o contrato ser fechado.
+     */
+    suspend fun registrarPatrocinioMes(timeId: Int, temporadaId: Int, mes: Int, valorMensal: Long) {
+        if (valorMensal <= 0L) return
+        val existente = try { financaDao.buscarPorMes(timeId, temporadaId, mes) } catch (_: Exception) { null }
+        try {
+            financaDao.inserir(
+                FinancaEntity(
+                    id                = existente?.id ?: 0,
+                    timeId            = timeId,
+                    temporadaId       = temporadaId,
+                    mes               = mes,
+                    receitaPatrocinio = valorMensal,
+                    // demais campos mantidos ou zerados; fecharMes sobrescreverá depois
+                    receitaBilheteria    = existente?.receitaBilheteria    ?: 0L,
+                    despesaSalarios      = existente?.despesaSalarios      ?: 0L,
+                    despesaInfraestrutura = existente?.despesaInfraestrutura ?: 0L,
+                    saldoFinal           = valorMensal
+                )
+            )
+        } catch (_: Exception) { }
+    }
+
+    /**
+     * Chamado imediatamente após o jogador contratar um atleta de um time da IA.
+     * Se o time vendedor ficou com menos de 18 jogadores, recompõe o elenco até 22
+     * usando jogadores livres, priorizando as carências posicionais do esquema tático.
+     */
+    suspend fun recompletarElencoEmergenciaIA(timeVendedorId: Int?, temporadaId: Int, mes: Int) {
+        val vendedorId = timeVendedorId ?: return
+        val time = timeRepository.buscarPorId(vendedorId) ?: return
+        val totalElenco = jogadorRepository.contarJogadores(vendedorId)
+        if (totalElenco >= 18) return
+        val faltam = (22 - totalElenco).coerceAtLeast(0)
+        if (faltam <= 0) return
+
+        val elencoAtual = jogadorRepository.buscarDisponiveis(vendedorId)
+        val livres = jogadorRepository.buscarMercado(limite = 60).filter { it.timeId == null }
+        if (livres.isEmpty()) return
+
+        val carencias = IATimeRival.detectarCarencias(elencoAtual, time.taticaFormacao)
+        val usados = mutableSetOf<Int>()
+        var contratados = 0
+
+        // Primeira passagem: preenche as carências posicionais da formação
+        for (posicao in carencias) {
+            if (contratados >= faltam) break
+            val alvo = livres
+                .filter { it.id !in usados }
+                .filter { it.posicao == posicao || it.posicaoSecundaria == posicao }
+                .maxByOrNull { it.forca } ?: continue
+            jogadorRepository.realizarTransferencia(
+                OfertaTransferencia(
+                    jogadorId       = alvo.id,
+                    timeCompradorId = vendedorId,
+                    timeVendedorId  = null,
+                    valor           = 0L,
+                    salarioProposto = alvo.salario,
+                    contratoAnos    = 2
+                ), temporadaId, mes
+            )
+            usados.add(alvo.id)
+            contratados++
+        }
+
+        // Segunda passagem: completa com os melhores disponíveis restantes
+        for (alvo in livres.filter { it.id !in usados }.sortedByDescending { it.forca }) {
+            if (contratados >= faltam) break
+            jogadorRepository.realizarTransferencia(
+                OfertaTransferencia(
+                    jogadorId       = alvo.id,
+                    timeCompradorId = vendedorId,
+                    timeVendedorId  = null,
+                    valor           = 0L,
+                    salarioProposto = alvo.salario,
+                    contratoAnos    = 2
+                ), temporadaId, mes
+            )
+            usados.add(alvo.id)
+            contratados++
+        }
+    }
+
+    /**
+     * Para cada time da IA (exceto o do jogador), verifica se há jogadores livres
+     * disponíveis para contratar e executa até 2 contratações por mês.
+     */
+    private suspend fun executarContratacoesLivresIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val todos = timeRepository.buscarTodosOrdenadosPorReputacao()
+        val mercadoLivre = jogadorRepository.buscarMercado(limite = 40)
+        if (mercadoLivre.isEmpty()) return
+
+        for (time in todos) {
+            if (time.id == playerTimeId) continue
+            val elenco = jogadorRepository.buscarDisponiveis(time.id)
+            if (elenco.size >= 20) continue   // IA só contrata se abaixo de 20 jogadores
+
+            val ofertas = IATimeRival.decidirContratacoes(
+                time         = time,
+                elencoAtual  = elenco,
+                mercado      = mercadoLivre.filter { it.timeId == null },  // só livres, sem custo
+                orcamento    = time.saldo
+            )
+
+            for (oferta in ofertas.take(2)) {
+                // Livre = valor 0; não debitar saldo da IA por passe livre
+                val ofertaLivre = oferta.copy(valor = 0L, timeVendedorId = null)
+                jogadorRepository.realizarTransferencia(ofertaLivre, temporadaId, mes)
+                // Atualiza salário do jogador no banco (apenas timeId já foi atualizado em realizarTransferencia)
+            }
+        }
+    }
+
+    /**
+     * Avaliação mensal de reforço da IA: cada time identifica a posição mais fraca
+     * no titular, busca um jogador livre melhor naquela posição e, se o valor de
+     * mercado caber em até 30% do saldo, realiza a contratação pagando pelo passe.
+     */
+    private suspend fun executarReforcoMensalIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val todos  = timeRepository.buscarTodosOrdenadosPorReputacao()
+        val livres = jogadorRepository.buscarMercado(limite = 60).filter { it.timeId == null }
+        if (livres.isEmpty()) return
+
+        for (time in todos) {
+            if (time.id == playerTimeId) continue
+            val elencoAtual = jogadorRepository.buscarDisponiveis(time.id)
+            if (elencoAtual.isEmpty()) continue
+
+            val escalacao = IATimeRival.gerarEscalacao(time, elencoAtual)
+            val maisFrago = escalacao.titulares.minByOrNull { it.jogador.forca } ?: continue
+            val posNecessaria = maisFrago.posicaoUsada
+
+            val orcamentoReforco = (time.saldo * 0.30).toLong()
+            if (orcamentoReforco <= 0L) continue
+
+            val candidato = livres
+                .filter { it.posicao == posNecessaria || it.posicaoSecundaria == posNecessaria }
+                .filter { it.forca > maisFrago.jogador.forca }
+                .filter { it.valorMercado <= orcamentoReforco }
+                .maxByOrNull { it.forca } ?: continue
+
+            timeRepository.debitarSaldo(time.id, candidato.valorMercado)
+            jogadorRepository.realizarTransferencia(
+                OfertaTransferencia(
+                    jogadorId       = candidato.id,
+                    timeCompradorId = time.id,
+                    timeVendedorId  = null,
+                    valor           = candidato.valorMercado,
+                    salarioProposto = candidato.salario,
+                    contratoAnos    = 2
+                ), temporadaId, mes
+            )
+        }
+    }
+
+    /**
+     * Reforço emergencial de desempenho: para cada liga ativa (não Copa), identifica os
+     * times da IA com aproveitamento ruim (< 40% dos pontos disputados, mínimo 5 jogos)
+     * e assina 1–3 jogadores livres do mercado visando as posições mais carentes.
+     *
+     * Escala de contratações:
+     *   aproveitamento < 0.20 → 3 jogadores
+     *   aproveitamento < 0.30 → 2 jogadores
+     *   aproveitamento < 0.40 → 1 jogador
+     *
+     * As contratações são registradas via [realizarTransferencia] e aparecem
+     * automaticamente na aba "Transferências" do Mercado de Transferências.
+     */
+    private suspend fun executarReforcoDesempenhoIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val tiposCopa = setOf(
+            TipoCampeonato.COPA_NACIONAL,
+            TipoCampeonato.CONTINENTAL
+        )
+        val ligas = campeonatoDao.buscarAtivos().filter { it.tipo !in tiposCopa }
+        if (ligas.isEmpty()) return
+
+        val livres = jogadorRepository.buscarMercado(limite = 80).filter { it.timeId == null }
+        if (livres.isEmpty()) return
+        val livresDisponiveis = livres.toMutableList()
+
+        for (liga in ligas) {
+            val tabela = classificacaoDao.buscarTabelaOrdenada(liga.id)
+            val totalTimes = tabela.size
+
+            tabela.forEachIndexed { idx, classi ->
+                if (classi.timeId == playerTimeId) return@forEachIndexed
+                if (classi.jogos < 5) return@forEachIndexed          // muito cedo para agir
+                if (classi.aproveitamento >= 0.40f) return@forEachIndexed  // desempenho aceitável
+
+                val qtd = when {
+                    classi.aproveitamento < 0.20f -> 3
+                    classi.aproveitamento < 0.30f -> 2
+                    else                          -> 1
+                }
+
+                val elenco = jogadorRepository.buscarDisponiveis(classi.timeId)
+                if (elenco.size >= 30) return@forEachIndexed   // elenco grande demais, não precisa
+
+                val time = timeRepository.buscarPorId(classi.timeId) ?: return@forEachIndexed
+                val carencias = IATimeRival.detectarCarencias(elenco, time.taticaFormacao)
+                val posicoesPrioritarias = if (carencias.isNotEmpty()) carencias else listOf(Posicao.ZAGUEIRO, Posicao.VOLANTE, Posicao.CENTROAVANTE)
+
+                var contratados = 0
+                for (posicao in posicoesPrioritarias) {
+                    if (contratados >= qtd) break
+                    val candidato = livresDisponiveis
+                        .filter { it.posicao == posicao || it.posicaoSecundaria == posicao }
+                        .maxByOrNull { it.forca } ?: continue
+
+                    livresDisponiveis.remove(candidato)
+                    jogadorRepository.realizarTransferencia(
+                        OfertaTransferencia(
+                            jogadorId       = candidato.id,
+                            timeCompradorId = classi.timeId,
+                            timeVendedorId  = null,
+                            valor           = 0L,
+                            salarioProposto = candidato.salario,
+                            contratoAnos    = 2
+                        ), temporadaId, mes
+                    )
+                    contratados++
+                }
+
+                // Complementa com outros perfis se ainda não atingiu a cota
+                if (contratados < qtd) {
+                    for (candidato in livresDisponiveis.sortedByDescending { it.forca }) {
+                        if (contratados >= qtd) break
+                        livresDisponiveis.remove(candidato)
+                        jogadorRepository.realizarTransferencia(
+                            OfertaTransferencia(
+                                jogadorId       = candidato.id,
+                                timeCompradorId = classi.timeId,
+                                timeVendedorId  = null,
+                                valor           = 0L,
+                                salarioProposto = candidato.salario,
+                                contratoAnos    = 2
+                            ), temporadaId, mes
+                        )
+                        contratados++
+                    }
+                }
+            }
         }
     }
 
@@ -1163,9 +1487,21 @@ class GameRepository @Inject constructor(
             atualizarRankingAposPartida(resultado)
         }
 
-        resultado.eventos
-            .filter { it.tipo == TipoEvento.LESAO }
-            .forEach { _ -> }
+        // Atualiza reputação: +1 para o vencedor, -1 para o perdedor (sem alteração em empate)
+        val timeFora = timeRepository.buscarPorId(resultado.timeForaId)
+        if (timeCasa != null && timeFora != null) {
+            when {
+                resultado.golsCasa > resultado.golsFora -> {
+                    timeRepository.atualizarReputacao(resultado.timeCasaId, timeCasa.reputacao + 0.1f)
+                    timeRepository.atualizarReputacao(resultado.timeForaId, timeFora.reputacao - 0.1f)
+                }
+                resultado.golsFora > resultado.golsCasa -> {
+                    timeRepository.atualizarReputacao(resultado.timeForaId, timeFora.reputacao + 0.1f)
+                    timeRepository.atualizarReputacao(resultado.timeCasaId, timeCasa.reputacao - 0.1f)
+                }
+                // empate: sem alteração
+            }
+        }
 
         // Calcula e persiste a nota de cada jogador participante;
         // aplica também a evolução/regressão incremental baseada na performance
@@ -1173,6 +1509,30 @@ class GameRepository @Inject constructor(
         notas.forEach { (jogadorId, nota) ->
             jogadorRepository.atualizarNotaEEvolucao(jogadorId, nota)
         }
+
+        // Atualiza fadiga: participantes perdem energia, quem ficou no banco recupera.
+        // Também decrementa o contador de ausência de jogadores lesionados de jogos anteriores.
+        val participantesIds = resultado.eventos
+            .filter { it.tipo == TipoEvento.PARTICIPOU || it.tipo == TipoEvento.SUBSTITUICAO_ENTRA }
+            .map { it.jogadorId }.toSet()
+        jogadorRepository.atualizarFadigaAposPartida(
+            participantes = participantesIds,
+            timeIds       = setOf(resultado.timeCasaId, resultado.timeForaId)
+        )
+
+        // Aplica lesões ocorridas nesta partida (após o decremento, para não consumir imediatamente).
+        // Grau 1 (leve) = 2–3 jogos | Grau 2 (moderada) = 4–5 | Grau 3 (grave) = 6–8
+        resultado.eventos
+            .filter { it.tipo == TipoEvento.LESAO }
+            .forEach { ev ->
+                val partidas = when (ev.grauLesao) {
+                    3    -> (6..8).random()
+                    2    -> (4..5).random()
+                    else -> (2..3).random()  // grau 1 ou desconhecido
+                }
+                jogadorRepository.aplicarLesao(ev.jogadorId, partidas)
+            }
+
         return notas
     }
 
@@ -1203,9 +1563,13 @@ class GameRepository @Inject constructor(
                     TipoEvento.CARTAO_AMARELO        -> nota -= 0.3f
                     TipoEvento.CARTAO_VERMELHO       -> nota -= 1.5f
                     TipoEvento.LESAO                 -> nota -= 0.5f
+                    TipoEvento.DEFESA_GOLEIRO        -> nota += 1.0f
                     else -> Unit
                 }
             }
+            // Penalidade do goleiro por gols sofridos
+            if (jogadorId == resultado.gkCasaId) nota -= resultado.golsFora * 0.7f
+            if (jogadorId == resultado.gkForaId) nota -= resultado.golsCasa * 0.7f
             if ((ehCasa && vitoriosaCasa) || (!ehCasa && vitoriosafora)) nota += 0.3f
             nota.coerceIn(1.0f, 10.0f)
         }

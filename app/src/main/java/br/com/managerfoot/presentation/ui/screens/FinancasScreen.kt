@@ -39,6 +39,7 @@ fun FinancasScreen(
     val transferencias by vm.transferencias.collectAsState()
     val despesasMensais by vm.despesasMensais.collectAsState()
     val compras by vm.compras.collectAsState()
+    val saldoAtual by vm.saldoAtual.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -47,7 +48,7 @@ fun FinancasScreen(
     val anoLabel = anoAtual.toString()
 
     var tabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Salários", "Receitas", "Despesas")
+    val tabs = listOf("Salários", "Receitas", "Despesas", "Saldo em Caixa")
 
     Scaffold(
         topBar = {
@@ -144,8 +145,9 @@ fun FinancasScreen(
 
             when (tabIndex) {
                 0 -> SalariosTab(elenco)
-                1 -> ReceitasTab(receitasPartidas, transferencias)
+                1 -> ReceitasTab(receitasPartidas, transferencias, despesasMensais)
                 2 -> DespesasTab(despesasMensais, compras)
+                3 -> SaldoCaixaTab(saldoAtual, receitasPartidas, transferencias, despesasMensais, compras)
             }
         }
     }
@@ -168,10 +170,13 @@ private fun SalariosTab(elenco: List<Jogador>) {
 @Composable
 private fun ReceitasTab(
     partidas: List<CalendarioPartidaDto>,
-    vendas: List<TransferenciaDetalhe>
+    vendas: List<TransferenciaDetalhe>,
+    historico: List<FinancaEntity>
 ) {
     val totalBilheteria = partidas.sumOf { it.receitaPartida ?: 0L }
     val totalVendas = vendas.sumOf { it.valor }
+    val patrocinios = historico.filter { it.receitaPatrocinio > 0 }
+    val totalPatrocinio = patrocinios.sumOf { it.receitaPatrocinio }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -194,13 +199,17 @@ private fun ReceitasTab(
                         Text(formatarSaldo(totalBilheteria), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Patrocínio total", style = MaterialTheme.typography.bodySmall)
+                        Text(formatarSaldo(totalPatrocinio), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Vendas de jogadores", style = MaterialTheme.typography.bodySmall)
                         Text(formatarSaldo(totalVendas), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Total", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Text(formatarSaldo(totalBilheteria + totalVendas), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(formatarSaldo(totalBilheteria + totalPatrocinio + totalVendas), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -214,6 +223,14 @@ private fun ReceitasTab(
             }
         }
 
+        if (patrocinios.isNotEmpty()) {
+            item { SecaoHeader("Patrocínio mensal") }
+            items(patrocinios) { financa ->
+                PatrocinioMensalRow(financa)
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+        }
+
         if (vendas.isNotEmpty()) {
             item { SecaoHeader("Vendas de jogadores") }
             items(vendas) { venda ->
@@ -222,7 +239,7 @@ private fun ReceitasTab(
             }
         }
 
-        if (partidas.isEmpty() && vendas.isEmpty()) {
+        if (partidas.isEmpty() && vendas.isEmpty() && patrocinios.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
@@ -261,6 +278,36 @@ private fun PartidaReceitaRow(partida: CalendarioPartidaDto) {
         }
         Text(
             formatarSaldo(partida.receitaPartida ?: 0L),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun PatrocinioMensalRow(financa: FinancaEntity) {
+    val mesNome = NOMES_MESES_FIN.getOrElse(financa.mes) { "Mês ${financa.mes}" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Patrocínio",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                mesNome,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            formatarSaldo(financa.receitaPatrocinio),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary
@@ -334,10 +381,12 @@ private fun DespesasTab(
     historico: List<FinancaEntity>,
     compras: List<TransferenciaDetalhe>
 ) {
-    val totalSalarios    = historico.sumOf { it.despesaSalarios }
-    val totalInfra       = historico.sumOf { it.despesaInfraestrutura }
+    val fechamentos      = historico.filter { it.despesaSalarios > 0 }
+    val upgrades         = historico.filter { it.despesaAmpliacaoEstadio > 0 }
+    val totalSalarios    = fechamentos.sumOf { it.despesaSalarios }
+    val totalAmpliacoes  = upgrades.sumOf { it.despesaAmpliacaoEstadio }
     val totalCompras     = compras.sumOf { it.valor }
-    val totalGeral       = totalSalarios + totalInfra + totalCompras
+    val totalGeral       = totalSalarios + totalAmpliacoes + totalCompras
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -362,9 +411,9 @@ private fun DespesasTab(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    DespesaResumoRow("Salários pagos",       totalSalarios)
-                    DespesaResumoRow("Manutenção do estádio", totalInfra)
-                    DespesaResumoRow("Contratações",          totalCompras)
+                    DespesaResumoRow("Salários pagos",          totalSalarios)
+                    DespesaResumoRow("Reformas no estádio",     totalAmpliacoes)
+                    DespesaResumoRow("Contratações",             totalCompras)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(
@@ -384,10 +433,19 @@ private fun DespesasTab(
         }
 
         // Histórico mensal de salários + infraestrutura
-        if (historico.isNotEmpty()) {
+        if (fechamentos.isNotEmpty()) {
             item { SecaoHeader("Folha Salarial por Mês") }
-            items(historico) { financa ->
+            items(fechamentos) { financa ->
                 FechamentoMensalRow(financa)
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+        }
+
+        // Reformas no estádio
+        if (upgrades.isNotEmpty()) {
+            item { SecaoHeader("Reformas no Estádio") }
+            items(upgrades) { financa ->
+                AmpliacaoEstadioRow(financa)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -448,14 +506,39 @@ private fun FechamentoMensalRow(financa: FinancaEntity) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
+        }
+        Text(
+            "${formatarSaldo(financa.despesaSalarios)}/mês",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
+@Composable
+private fun AmpliacaoEstadioRow(financa: FinancaEntity) {
+    val mesNome = NOMES_MESES_FIN.getOrElse(financa.mes) { "Mês ${financa.mes}" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                "Infra: ${formatarSaldo(financa.despesaInfraestrutura)}",
+                "Reforma no estádio",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                mesNome,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Text(
-            "${formatarSaldo(financa.despesaSalarios)}/mês",
+            formatarSaldo(financa.despesaAmpliacaoEstadio),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.error
@@ -492,3 +575,184 @@ private fun CompraRow(compra: TransferenciaDetalhe) {
     }
 }
 
+// ─────────────────────────────────────────────
+//  Aba Saldo em Caixa
+// ─────────────────────────────────────────────
+@Composable
+private fun SaldoCaixaTab(
+    saldoAtual: Long,
+    partidas: List<CalendarioPartidaDto>,
+    vendas: List<TransferenciaDetalhe>,
+    historico: List<FinancaEntity>,
+    compras: List<TransferenciaDetalhe>
+) {
+    val totalBilheteria  = partidas.sumOf { it.receitaPartida ?: 0L }
+    val totalPatrocinio  = historico.sumOf { it.receitaPatrocinio }
+    val totalVendas      = vendas.sumOf { it.valor }
+    val totalEntradas    = totalBilheteria + totalPatrocinio + totalVendas
+
+    val totalSalarios    = historico.sumOf { it.despesaSalarios }
+    val totalAmpliacoes  = historico.sumOf { it.despesaAmpliacaoEstadio }
+    val totalCompras     = compras.sumOf { it.valor }
+    val totalSaidas      = totalSalarios + totalAmpliacoes + totalCompras
+
+    val resultado        = totalEntradas - totalSaidas
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
+        // Saldo atual em destaque
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (saldoAtual >= 0)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        "Saldo em Caixa",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        formatarSaldo(saldoAtual),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (saldoAtual >= 0)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        // Balanço resumido
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "Balanço da Temporada",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    // Entradas
+                    SaldoResumoSubtitulo("Entradas")
+                    SaldoResumoLinha("Bilheteria",       totalBilheteria, positivo = true)
+                    SaldoResumoLinha("Patrocínio",       totalPatrocinio, positivo = true)
+                    SaldoResumoLinha("Vendas de jogadores", totalVendas,  positivo = true)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Subtotal entradas",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            formatarSaldo(totalEntradas),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Saídas
+                    SaldoResumoSubtitulo("Saídas")
+                    SaldoResumoLinha("Salários pagos",       totalSalarios,   positivo = false)
+                    SaldoResumoLinha("Reformas no estádio",  totalAmpliacoes, positivo = false)
+                    SaldoResumoLinha("Contratações",         totalCompras,    positivo = false)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Subtotal saídas",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            formatarSaldo(totalSaidas),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Resultado líquido
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Resultado líquido",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            formatarSaldo(resultado),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (resultado >= 0)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaldoResumoSubtitulo(texto: String) {
+    Text(
+        texto,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun SaldoResumoLinha(label: String, valor: Long, positivo: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(
+            formatarSaldo(valor),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (positivo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        )
+    }
+}

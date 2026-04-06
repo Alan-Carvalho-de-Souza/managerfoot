@@ -45,7 +45,7 @@ fun EstadioScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(time?.let { "${it.estadioCapacidade.formatarCapacidade()} lugares" } ?: "Estádio") },
+                title = { Text(time?.estadioNome?.ifBlank { null } ?: "Estádio") },
                 navigationIcon = {
                     IconButton(onClick = onVoltar) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
@@ -80,6 +80,13 @@ fun EstadioScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Column(Modifier.padding(16.dp)) {
+                            Text(
+                                time?.estadioNome?.ifBlank { null } ?: "Estádio",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 "Capacidade Total",
                                 style = MaterialTheme.typography.labelMedium,

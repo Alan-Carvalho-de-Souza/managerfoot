@@ -43,7 +43,7 @@ interface TimeDao {
     suspend fun ampliarEstadio(timeId: Int, novaCapacidade: Int)
 
     @Query("UPDATE times SET reputacao = :rep WHERE id = :timeId")
-    suspend fun atualizarReputacao(timeId: Int, rep: Int)
+    suspend fun atualizarReputacao(timeId: Int, rep: Float)
 
     @Delete
     suspend fun deletar(time: TimeEntity)

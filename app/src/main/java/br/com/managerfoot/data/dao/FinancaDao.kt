@@ -30,6 +30,9 @@ data class TransferenciaDetalhe(
 @Dao
 interface FinancaDao {
 
+    @Query("SELECT * FROM financas WHERE timeId = :timeId AND temporadaId = :temporadaId AND mes = :mes LIMIT 1")
+    suspend fun buscarPorMes(timeId: Int, temporadaId: Int, mes: Int): FinancaEntity?
+
     @Query("SELECT * FROM financas WHERE timeId = :timeId AND temporadaId = :temporadaId ORDER BY mes")
     fun observeExtratoAnual(timeId: Int, temporadaId: Int): Flow<List<FinancaEntity>>
 

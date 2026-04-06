@@ -15,11 +15,12 @@ data class Time(
     val nivel: Int,
     val divisao: Int,
     val saldo: Long,
+    val estadioNome: String = "",
     val estadioCapacidade: Int,
     val precoIngresso: Long,
     val taticaFormacao: String,
     val estiloJogo: EstiloJogo,
-    val reputacao: Int,
+    val reputacao: Float,
     val controladoPorJogador: Boolean,
     val escudoRes: String = ""
 )
@@ -49,13 +50,20 @@ data class Jogador(
     val posicaoEscalado: Posicao? = null, // posição salva na escalação manual
     val notaMedia: Float = 6.0f,         // média das notas na temporada (1.0–10.0)
     val partidasTemporada: Int = 0,      // partidas jogadas na temporada atual
-    val aposentado: Boolean = false      // true = encerrou carreira
+    val aposentado: Boolean = false,     // true = encerrou carreira
+    val progressoEvolucao: Float = 0f,  // acumulador -1..1: positivo=crescendo, negativo=decaindo
+    val categoriaBase: Boolean = false, // true = jogador da base de juniores
+    val fadiga: Float = 1.0f,           // 0.0–1.0: energia física disponível
+    val treinouNestaCiclo: Boolean = false, // true = já treinou entre os dois últimos jogos
+    val partidasSemJogar: Int = 0       // jogos restantes de afastamento por lesão
 ) {
-    // Força efetiva: penaliza improvisos e considera morale
+    // Força efetiva: penaliza improvisos, considera morale e fadiga
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {
+        val linhaDefensiva = setOf(Posicao.ZAGUEIRO, Posicao.LATERAL_DIREITO, Posicao.LATERAL_ESQUERDO)
         val penaltyImproviso = when {
             posicao == posicaoUsada -> 0
             posicaoSecundaria == posicaoUsada -> 5
+            posicao in linhaDefensiva && posicaoUsada in linhaDefensiva -> 0
             posicao.setor == posicaoUsada.setor -> 10
             else -> 20
         }
@@ -66,7 +74,14 @@ data class Jogador(
             MoraleEstado.INSATISFEITO -> -5
             MoraleEstado.REVOLTADO    -> -10
         }
-        return (forca - penaltyImproviso + bonusMorale).coerceIn(1, 99)
+        // Fadiga penaliza performance: acima de 80% sem efeito, abaixo disso progressivamente pior
+        val penaltyFadiga = when {
+            fadiga >= 0.80f ->  0
+            fadiga >= 0.60f -> -5
+            fadiga >= 0.40f -> -12
+            else            -> -20
+        }
+        return (forca - penaltyImproviso + bonusMorale + penaltyFadiga).coerceIn(1, 99)
     }
 }
 
@@ -78,7 +93,7 @@ data class Escalacao(
     val formacaoEfetiva: String get() = calcularFormacao(titulares)
 
     private fun calcularFormacao(jogadores: List<JogadorNaEscalacao>): String {
-        val sem = jogadores.drop(1) // remove goleiro
+        val sem = jogadores.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
         val def = sem.count { it.posicaoUsada.setor == Setor.DEFESA }
         val meio = sem.count { it.posicaoUsada.setor == Setor.MEIO }
         val atq = sem.count { it.posicaoUsada.setor == Setor.ATAQUE }
@@ -128,7 +143,9 @@ data class ResultadoPartida(
     val golsAgregadoFora: Int = 0,
     val notasJogadores: Map<Int, Float> = emptyMap(),  // jogadorId → nota da partida (1–10)
     val torcedores: Int = 0,          // público presente na partida
-    val receitaPartida: Long = 0L     // receita de bilheteria (centavos)
+    val receitaPartida: Long = 0L,    // receita de bilheteria (centavos)
+    val gkCasaId: Int = -1,           // id do goleiro da casa
+    val gkForaId: Int = -1            // id do goleiro do visitante
 )
 
 data class EventoSimulado(
@@ -136,7 +153,8 @@ data class EventoSimulado(
     val tipo: TipoEvento,
     val jogadorId: Int,
     val timeId: Int,
-    val descricao: String
+    val descricao: String,
+    val grauLesao: Int = 0  // 0=sem lesão | 1=leve(2-3j) | 2=moderada(4-5j) | 3=grave(6-8j)
 )
 
 data class EstatisticasTime(
@@ -145,7 +163,9 @@ data class EstatisticasTime(
     val posse: Int,         // percentual 0-100
     val faltas: Int,
     val cartaoAmarelo: Int,
-    val cartaoVermelho: Int
+    val cartaoVermelho: Int,
+    val defesasGoleiro: Int = 0,   // defesas realizadas pelo goleiro
+    val passesErrados: Int = 0     // passes errados estimados
 )
 
 /**

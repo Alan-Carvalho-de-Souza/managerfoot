@@ -44,10 +44,14 @@ fun JunioresScreen(
 
     selecionado?.let { jogador ->
         JuniorDetalheDialog(
-            jogador  = jogador,
-            onFechar = { vm.selecionarJogador(null) },
+            jogador    = jogador,
+            onFechar   = { vm.selecionarJogador(null) },
             onPromover = {
                 vm.promoverJunior(jogador.id, jogador.nomeAbreviado)
+                vm.selecionarJogador(null)
+            },
+            onDispensar = {
+                vm.dispensarJunior(jogador.id, jogador.nomeAbreviado)
                 vm.selecionarJogador(null)
             }
         )
@@ -118,9 +122,11 @@ fun JunioresScreen(
 private fun JuniorDetalheDialog(
     jogador: Jogador,
     onFechar: () -> Unit,
-    onPromover: () -> Unit
+    onPromover: () -> Unit,
+    onDispensar: () -> Unit
 ) {
     var confirmarPromocao by remember { mutableStateOf(false) }
+    var confirmarDispensa by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onFechar,
@@ -219,18 +225,57 @@ private fun JuniorDetalheDialog(
                         }
                     }
                 }
+
+                if (confirmarDispensa) {
+                    Spacer(Modifier.height(12.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                "Dispensar ${jogador.nomeAbreviado}? Ele irá para o mercado livre.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { confirmarDispensa = false },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Cancelar") }
+                                Button(
+                                    onClick = onDispensar,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) { Text("Dispensar") }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
-            if (!confirmarPromocao) {
+            if (!confirmarPromocao && !confirmarDispensa) {
                 Button(onClick = { confirmarPromocao = true }) {
                     Text("Promover ao Elenco")
                 }
             }
         },
         dismissButton = {
-            if (!confirmarPromocao) {
-                TextButton(onClick = onFechar) { Text("Fechar") }
+            if (!confirmarPromocao && !confirmarDispensa) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = { confirmarDispensa = true },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) { Text("Dispensar") }
+                    TextButton(onClick = onFechar) { Text("Fechar") }
+                }
             }
         }
     )

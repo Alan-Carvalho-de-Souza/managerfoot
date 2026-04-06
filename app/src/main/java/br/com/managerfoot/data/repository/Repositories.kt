@@ -26,6 +26,9 @@ class TimeRepository @Inject constructor(
     fun observeTimeDoJogador(): Flow<Time?> =
         timeDao.observePorId(-1).map { it?.toDomain() } // id resolvido abaixo
 
+    fun observePorId(id: Int): Flow<Time?> =
+        timeDao.observePorId(id).map { it?.toDomain() }
+
     suspend fun buscarTimeDoJogador(): Time? =
         timeDao.buscarTimeDoJogador()?.toDomain()
 
@@ -51,8 +54,8 @@ class TimeRepository @Inject constructor(
     suspend fun ampliarEstadio(timeId: Int, novaCapacidade: Int) =
         timeDao.ampliarEstadio(timeId, novaCapacidade)
 
-    suspend fun atualizarReputacao(timeId: Int, rep: Int) =
-        timeDao.atualizarReputacao(timeId, rep.coerceIn(0, 100))
+    suspend fun atualizarReputacao(timeId: Int, rep: Float) =
+        timeDao.atualizarReputacao(timeId, rep.coerceIn(0f, 100f))
 
     // Mapeamento Entity -> Domain
     private fun TimeEntity.toDomain() = Time(
@@ -63,6 +66,7 @@ class TimeRepository @Inject constructor(
         nivel = nivel,
         divisao = divisao,
         saldo = saldo,
+        estadioNome = estadioNome,
         estadioCapacidade = estadioCapacidade,
         precoIngresso = precoIngresso,
         taticaFormacao = taticaFormacao,
@@ -103,6 +107,9 @@ class JogadorRepository @Inject constructor(
     fun observeLivres(): Flow<List<Jogador>> =
         jogadorDao.observeLivres().map { lista -> lista.map { it.toDomain() } }
 
+    fun observeTodosJogadoresAtivos(): Flow<List<Jogador>> =
+        jogadorDao.observeTodosJogadoresAtivos().map { lista -> lista.map { it.toDomain() } }
+
     fun observeTodasTransferencias(): Flow<List<br.com.managerfoot.data.dao.TransferenciaDetalhe>> =
         financaDao.observeTodasTransferencias()
 
@@ -134,6 +141,8 @@ class JogadorRepository @Inject constructor(
         jogadorDao.transferirJogador(oferta.jogadorId, oferta.timeCompradorId)
 
         // Registrar transação financeira
+        // COMPRA se houver clube vendedor OU se houver valor pago pelo passe;
+        // FIM_CONTRATO apenas para contratações gratuitas sem clube de origem.
         financaDao.inserirTransferencia(
             TransferenciaEntity(
                 jogadorId = oferta.jogadorId,
@@ -142,8 +151,10 @@ class JogadorRepository @Inject constructor(
                 valor = oferta.valor,
                 temporadaId = temporadaId,
                 mes = mes,
-                tipo = if (oferta.timeVendedorId == null) TipoTransferencia.FIM_CONTRATO
-                       else TipoTransferencia.COMPRA
+                tipo = if (oferta.timeVendedorId != null || oferta.valor > 0L)
+                           TipoTransferencia.COMPRA
+                       else
+                           TipoTransferencia.FIM_CONTRATO
             )
         )
     }
@@ -185,8 +196,15 @@ class JogadorRepository @Inject constructor(
      * Processa o fim de temporada de todos os jogadores:
      * - Incrementa um ano na idade
      * - Jogadores sem clube (timeId=null) e não aposentados recebem pequena regressão
-     *   por inatividade (não jogaram partidas para acumular evolução natural)
-     * - Juniores (categoriaBase=true) recebem pequena evolução automática de treinamento
+     *   por inatividade nos atributos principais
+     * - Juniores (categoriaBase=true) que jogaram na temporada: apenas reset (evolução já ocorreu
+     *   incrementalmente via [atualizarNotaEEvolucao]). Juniores sem nenhuma partida recebem
+     *   bônus automático de treinamento (+1 nos atributos principais).
+     * - Jogadores ativos com partidas na temporada: apenas reset (evolução já ocorreu durante a temporada).
+     * - Jogadores ativos SEM partidas na temporada: evolução/declínio passivo por idade:
+     *     • Jovens (16–24): +1 nos atributos principais (treino, menor que jogando)
+     *     • Adultos (25–32): neutro (sem estímulo, sem perda)
+     *     • Veteranos (33+): -1 nos atributos principais (declínio natural, igual ao ritmo em campo)
      * - Reseta notaMedia, partidasTemporada e progressoEvolucao para a nova temporada
      *
      * A evolução/regressão dos jogadores ativos durante a temporada já ocorreu
@@ -199,25 +217,33 @@ class JogadorRepository @Inject constructor(
             when {
                 j.aposentado -> j.copy(idade = novaIdade)
 
-                // Juniores: evolução natural de treinamento (sem partidas sênior)
+                // Juniores: se jogaram na temporada, evolução já ocorreu via atualizarNotaEEvolucao;
+                // caso contrário, aplica bônus de treinamento (+1 nos atributos principais)
                 j.categoriaBase -> {
-                    val principais = atributosPrincipais(j.posicao)
-                    fun crescer(attr: Int, nome: String) =
-                        if (nome in principais) (attr + 1).coerceIn(1, 99)
-                        else attr
-                    val t = crescer(j.tecnica,     "tecnica")
-                    val p = crescer(j.passe,        "passe")
-                    val v = crescer(j.velocidade,   "velocidade")
-                    val f = crescer(j.finalizacao,  "finalizacao")
-                    val d = crescer(j.defesa,       "defesa")
-                    val fi= crescer(j.fisico,       "fisico")
-                    val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
-                    j.copy(
-                        idade = novaIdade, forca = novaForca,
-                        tecnica = t, passe = p, velocidade = v,
-                        finalizacao = f, defesa = d, fisico = fi,
-                        notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
-                    )
+                    if (j.partidasTemporada > 0) {
+                        j.copy(
+                            idade = novaIdade,
+                            notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                        )
+                    } else {
+                        val principais = atributosPrincipais(j.posicao)
+                        fun crescer(attr: Int, nome: String) =
+                            if (nome in principais) (attr + 1).coerceIn(1, 99)
+                            else attr
+                        val t = crescer(j.tecnica,     "tecnica")
+                        val p = crescer(j.passe,        "passe")
+                        val v = crescer(j.velocidade,   "velocidade")
+                        val f = crescer(j.finalizacao,  "finalizacao")
+                        val d = crescer(j.defesa,       "defesa")
+                        val fi= crescer(j.fisico,       "fisico")
+                        val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
+                        j.copy(
+                            idade = novaIdade, forca = novaForca,
+                            tecnica = t, passe = p, velocidade = v,
+                            finalizacao = f, defesa = d, fisico = fi,
+                            notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                        )
+                    }
                 }
 
                 // Jogadores sem clube: regressão por inatividade
@@ -235,14 +261,66 @@ class JogadorRepository @Inject constructor(
                     )
                 }
 
-                // Jogadores ativos: apenas incrementa idade e reseta estatísticas sazonais.
-                // A evolução/regressão de atributos já aconteceu durante a temporada.
-                else -> j.copy(
-                    idade = novaIdade,
-                    notaMedia = 6.0f,
-                    partidasTemporada = 0,
-                    progressoEvolucao = 0f
-                )
+                // Jogadores ativos com clube:
+                // - Se jogaram na temporada: apenas reset (evolução já ocorreu incrementalmente).
+                // - Se não jogaram: evolução/declínio passivo por faixa etária.
+                //   Jovens evoluem menos que jogando (treino sem jogo); veteranos declinam igual.
+                else -> {
+                    if (j.partidasTemporada > 0) {
+                        // Evolução já processada partida a partida — apenas reinicia contadores
+                        j.copy(
+                            idade = novaIdade,
+                            notaMedia = 6.0f,
+                            partidasTemporada = 0,
+                            progressoEvolucao = 0f
+                        )
+                    } else {
+                        val principais = atributosPrincipais(j.posicao)
+                        when {
+                            // Jovem sem jogar: +1 nos atributos principais (treino passivo)
+                            j.idade in 16..24 -> {
+                                fun crescer(attr: Int, nome: String) =
+                                    if (nome in principais) (attr + 1).coerceIn(1, 99) else attr
+                                val t  = crescer(j.tecnica,     "tecnica")
+                                val p  = crescer(j.passe,        "passe")
+                                val v  = crescer(j.velocidade,   "velocidade")
+                                val f  = crescer(j.finalizacao,  "finalizacao")
+                                val d  = crescer(j.defesa,       "defesa")
+                                val fi = crescer(j.fisico,       "fisico")
+                                val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
+                                j.copy(
+                                    idade = novaIdade, forca = novaForca,
+                                    tecnica = t, passe = p, velocidade = v,
+                                    finalizacao = f, defesa = d, fisico = fi,
+                                    notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                                )
+                            }
+                            // Adulto sem jogar: neutro — sem evolução nem declínio
+                            j.idade in 25..32 -> j.copy(
+                                idade = novaIdade,
+                                notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                            )
+                            // Veterano sem jogar: -1 nos atributos principais (declínio natural)
+                            else -> {
+                                fun regredir(attr: Int, nome: String) =
+                                    if (nome in principais) (attr - 1).coerceIn(1, 99) else attr
+                                val t  = regredir(j.tecnica,     "tecnica")
+                                val p  = regredir(j.passe,        "passe")
+                                val v  = regredir(j.velocidade,   "velocidade")
+                                val f  = regredir(j.finalizacao,  "finalizacao")
+                                val d  = regredir(j.defesa,       "defesa")
+                                val fi = regredir(j.fisico,       "fisico")
+                                val novaForca = ((t + p + v + f + d + fi) / 6).coerceIn(1, 99)
+                                j.copy(
+                                    idade = novaIdade, forca = novaForca,
+                                    tecnica = t, passe = p, velocidade = v,
+                                    finalizacao = f, defesa = d, fisico = fi,
+                                    notaMedia = 6.0f, partidasTemporada = 0, progressoEvolucao = 0f
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
         jogadorDao.atualizarTodos(atualizados)
@@ -267,20 +345,28 @@ class JogadorRepository @Inject constructor(
      *
      * O acumulador [progressoEvolucao] cresce ou diminui a cada partida conforme
      * a nota do jogador e sua faixa etária:
+     * - Juniores (categoriaBase): maior taxa de desenvolvimento, refletindo o potencial de crescimento
+     *   acelerado em jovens talentos. Evoluem e regridem apenas nos atributos principais da posição.
      * - Jovens (16–24): nota alta → acumula positivo → ao cruzar +1.0, atributos
-     *   principais ganham +1; nota baixa → acumula negativo → todos os atributos perdem -1.
+     *   principais ganham +1; nota baixa → acumula negativo → atributos principais perdem -1.
      * - Adultos (25–32): mesma lógica, porém com taxas menores.
      * - Veteranos (33+): sempre acumulam negativo (declínio progressivo independente
      *   da nota, mas boas atuações desaceleram a queda).
      *
+     * Tanto evolução quanto regressão afetam apenas os atributos principais da posição,
+     * garantindo simetria: o jogador cresce e decai na sua especialidade.
+     *
      * Ao final de uma temporada completa (~38 partidas):
+     * - Junior com nota média ≈ 10 → +6 a +7 pts nos atributos principais → +3 a +4 força
      * - Jovem com nota média ≈ 10 → +4 a +5 pts nos atributos principais → +2 a +3 força
      * - Adulto com nota média ≈ 10 → +2 a +3 pts nos atributos principais → +1 a +2 força
      * - Veterano com nota média ≈ 6  → -1 a -2 força (declínio natural)
+     *
+     * Aplica-se igualmente a jogadores de times controlados pela IA.
      */
     suspend fun atualizarNotaEEvolucao(jogadorId: Int, notaPartida: Float) {
         val j = jogadorDao.buscarPorId(jogadorId) ?: return
-        if (j.aposentado || j.categoriaBase) return
+        if (j.aposentado) return
 
         // Atualiza nota média (média corrida)
         val qtd = j.partidasTemporada
@@ -291,6 +377,7 @@ class JogadorRepository @Inject constructor(
         // notaFactor in [-1, +1]: 10 → +1.0 | 5.5 → 0.0 | 1 → -1.0
         val notaFactor = ((notaPartida - 5.5f) / 4.5f).coerceIn(-1.0f, 1.0f)
         val deltaPartida: Float = when {
+            j.categoriaBase   -> notaFactor * 0.18f  // juniores: maior taxa de desenvolvimento
             j.idade in 16..24 -> notaFactor * 0.13f
             j.idade in 25..32 -> notaFactor * 0.08f
             // Veterano: declina sempre; nota muito boa desacelera a queda
@@ -317,14 +404,14 @@ class JogadorRepository @Inject constructor(
             prog -= 1.0f
         }
 
-        // Regressão: decrementa todos os atributos (declínio é universal)
+        // Regressão: decrementa apenas os atributos principais (simétrico à evolução)
         while (prog <= -1.0f) {
-            tecnica     = (tecnica     - 1).coerceIn(1, 99)
-            passe       = (passe       - 1).coerceIn(1, 99)
-            velocidade  = (velocidade  - 1).coerceIn(1, 99)
-            finalizacao = (finalizacao - 1).coerceIn(1, 99)
-            defesa      = (defesa      - 1).coerceIn(1, 99)
-            fisico      = (fisico      - 1).coerceIn(1, 99)
+            if ("tecnica"     in principais) tecnica     = (tecnica     - 1).coerceIn(1, 99)
+            if ("passe"       in principais) passe       = (passe       - 1).coerceIn(1, 99)
+            if ("velocidade"  in principais) velocidade  = (velocidade  - 1).coerceIn(1, 99)
+            if ("finalizacao" in principais) finalizacao = (finalizacao - 1).coerceIn(1, 99)
+            if ("defesa"      in principais) defesa      = (defesa      - 1).coerceIn(1, 99)
+            if ("fisico"      in principais) fisico      = (fisico      - 1).coerceIn(1, 99)
             prog += 1.0f
         }
 
@@ -371,12 +458,10 @@ class JogadorRepository @Inject constructor(
         val fisico      = attr("fisico")
         val forca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
         val idade = rng.nextInt(16, 20)
-        val primeiro = NOMES_JUNIOR_PRIMEIRO[rng.nextInt(NOMES_JUNIOR_PRIMEIRO.size)]
-        val sobre    = NOMES_JUNIOR_SOBRENOME[rng.nextInt(NOMES_JUNIOR_SOBRENOME.size)]
         return JogadorEntity(
             timeId            = timeId,
-            nome              = "$primeiro $sobre",
-            nomeAbreviado     = "$primeiro ${sobre.first()}.",
+            nome              = aposentado.nome,          // herda o nome do jogador aposentado
+            nomeAbreviado     = aposentado.nomeAbreviado, // herda o nome abreviado
             idade             = idade,
             posicao           = aposentado.posicao,
             posicaoSecundaria = aposentado.posicaoSecundaria,
@@ -402,6 +487,27 @@ class JogadorRepository @Inject constructor(
 
     suspend fun promoverJunior(jogadorId: Int) = jogadorDao.promoverJunior(jogadorId)
 
+    /**
+     * Dispensa um jogador da base de juniores, enviando-o para mercado livre.
+     * Registra a movimentação no histórico de transferências.
+     */
+    suspend fun dispensarJunior(jogadorId: Int, temporadaId: Int, mes: Int) {
+        val entity = jogadorDao.buscarPorId(jogadorId) ?: return
+        val timeOrigemId = entity.timeId
+        jogadorDao.dispensarJuniorDb(jogadorId)
+        financaDao.inserirTransferencia(
+            TransferenciaEntity(
+                jogadorId    = jogadorId,
+                timeOrigemId = timeOrigemId,
+                timeDestinoId = null,
+                valor        = 0L,
+                temporadaId  = temporadaId,
+                mes          = mes,
+                tipo         = TipoTransferencia.DISPENSADO_BASE
+            )
+        )
+    }
+
     /** Retorna o total de jogadores (sênior + base) de um time — para verificar limite de 35. */
     suspend fun contarJogadores(timeId: Int): Int = jogadorDao.contarJogadoresPorTime(timeId)
 
@@ -409,6 +515,122 @@ class JogadorRepository @Inject constructor(
         if (posicao != null) jogadorDao.atualizarEscalacaoComPosicao(jogadorId, status, posicao)
         else jogadorDao.atualizarEscalacaoSemPosicao(jogadorId, status)
     }
+
+    /**
+     * Atualiza a fadiga dos jogadores sênior de ambos os times após uma partida.
+     * Jogadores que participaram perdem fadiga conforme a idade:
+     *   - ≤ 25 anos: -4% · 26–30 anos: -6% · 31+: -8%
+     * Jogadores que não participaram recuperam +10%.
+     * Aplica-se a todos os times envolvidos (times do jogador e da IA).
+     */
+    suspend fun atualizarFadigaAposPartida(participantes: Set<Int>, timeIds: Set<Int>) {
+        for (timeId in timeIds) {
+            val seniores = jogadorDao.buscarSenioresDoTime(timeId)
+            val atualizados = seniores.map { j ->
+                val delta = if (j.id in participantes) {
+                    when {
+                        j.idade <= 25 -> -0.04f
+                        j.idade <= 30 -> -0.06f
+                        else          -> -0.08f
+                    }
+                } else {
+                    +0.10f
+                }
+                // Decrementa contador de ausência por lesão (players lesionados de jogos anteriores)
+                val novoPartidas = if (j.lesionado && j.partidasSemJogar > 0) j.partidasSemJogar - 1 else j.partidasSemJogar
+                val novoLesionado = j.lesionado && novoPartidas > 0
+                j.copy(
+                    fadiga = (j.fadiga + delta).coerceIn(0f, 1f),
+                    treinouNestaCiclo = false,  // libera novo treinamento para o próximo ciclo
+                    partidasSemJogar = novoPartidas,
+                    lesionado = novoLesionado
+                )
+            }
+            jogadorDao.atualizarTodos(atualizados)
+        }
+    }
+
+    /** Aplica lesão programada ao jogador: marca como lesionado por [partidas] jogos. */
+    suspend fun aplicarLesao(jogadorId: Int, partidas: Int) {
+        jogadorDao.aplicarLesao(jogadorId, partidas)
+    }
+
+    /**
+     * Executa uma sessão de treinamento para o jogador.
+     * - Reduz fadiga em 5%
+     * - Adiciona progresso de evolução nos atributos principais:
+     *     • Juniores (categoriaBase): +0.25 (desenvolvimento acelerado)
+     *     • Jovens (16–24): +0.10 · Adultos (25–32): +0.06 · Veteranos (33+): +0.02
+     * - Se o acumulador cruzar +1.0, os atributos principais ganham +1.
+     */
+    suspend fun treinarJogador(jogadorId: Int) {
+        val j = jogadorDao.buscarPorId(jogadorId) ?: return
+        if (j.aposentado) return
+        if (j.treinouNestaCiclo) return  // já treinou neste ciclo (entre dois jogos)
+
+        val novaFadiga = (j.fadiga - 0.05f).coerceIn(0f, 1f)
+
+        val deltaProgress: Float = when {
+            j.categoriaBase   -> 0.25f
+            j.idade in 16..24 -> 0.10f
+            j.idade in 25..32 -> 0.06f
+            else              -> 0.02f
+        }
+
+        val principais = atributosPrincipais(j.posicao)
+        var prog = j.progressoEvolucao + deltaProgress
+        var tecnica     = j.tecnica
+        var passe       = j.passe
+        var velocidade  = j.velocidade
+        var finalizacao = j.finalizacao
+        var defesa      = j.defesa
+        var fisico      = j.fisico
+
+        while (prog >= 1.0f) {
+            if ("tecnica"     in principais) tecnica     = (tecnica     + 1).coerceIn(1, 99)
+            if ("passe"       in principais) passe       = (passe       + 1).coerceIn(1, 99)
+            if ("velocidade"  in principais) velocidade  = (velocidade  + 1).coerceIn(1, 99)
+            if ("finalizacao" in principais) finalizacao = (finalizacao + 1).coerceIn(1, 99)
+            if ("defesa"      in principais) defesa      = (defesa      + 1).coerceIn(1, 99)
+            if ("fisico"      in principais) fisico      = (fisico      + 1).coerceIn(1, 99)
+            prog -= 1.0f
+        }
+
+        val novaForca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
+
+        jogadorDao.atualizar(j.copy(
+            fadiga            = novaFadiga,
+            progressoEvolucao = prog,
+            tecnica = tecnica, passe = passe, velocidade = velocidade,
+            finalizacao = finalizacao, defesa = defesa, fisico = fisico,
+            forca = novaForca,
+            treinouNestaCiclo = true
+        ))
+    }
+
+    /** Treina todos os jogadores do elenco que ainda não treinaram neste ciclo. */
+    suspend fun treinarTimeCompleto(timeId: Int) {
+        val elenco = jogadorDao.buscarElencoCompletoDoTime(timeId)
+        elenco.filter { !it.aposentado && !it.treinouNestaCiclo }
+              .forEach { treinarJogador(it.id) }
+    }
+
+    /**
+     * Coloca um jogador para descansar no ciclo atual (ao invés de treinar):
+     * - Recupera +10% de fadiga (até máx 100%)
+     * - Marca treinouNestaCiclo = true (consome a ação do ciclo)
+     * - Não acumula progresso de evolução
+     */
+    suspend fun descansarJogador(jogadorId: Int) {
+        val j = jogadorDao.buscarPorId(jogadorId) ?: return
+        if (j.aposentado) return
+        if (j.treinouNestaCiclo) return
+        val novaFadiga = (j.fadiga + 0.10f).coerceIn(0f, 1f)
+        jogadorDao.atualizar(j.copy(fadiga = novaFadiga, treinouNestaCiclo = true))
+    }
+
+    suspend fun buscarElencoCompleto(timeId: Int): List<Jogador> =
+        jogadorDao.buscarElencoCompletoDoTime(timeId).map { it.toDomain() }
 
     suspend fun buscarTitularesSalvos(timeId: Int): List<Jogador> =
         jogadorDao.buscarTitularesSalvos(timeId).map { it.toDomain() }
@@ -453,7 +675,12 @@ class JogadorRepository @Inject constructor(
         posicaoEscalado = posicaoEscalado,
         notaMedia = notaMedia,
         partidasTemporada = partidasTemporada,
-        aposentado = aposentado
+        aposentado = aposentado,
+        progressoEvolucao = progressoEvolucao,
+        categoriaBase = categoriaBase,
+        fadiga = fadiga,
+        treinouNestaCiclo = treinouNestaCiclo,
+        partidasSemJogar = partidasSemJogar
     )
 }
 
@@ -477,28 +704,29 @@ class EstadioRepository @Inject constructor(
     /**
      * Faz o upgrade de um setor (0=arquibancada, 1=cadeira, 2=camarote).
      * Debita o custo do saldo do time e atualiza estadioCapacidade no TimeEntity.
-     * Retorna false se o saldo for insuficiente ou o setor já estiver no nível máximo.
+     * Retorna o custo do upgrade em caso de sucesso, ou null se o saldo for insuficiente
+     * ou o setor já estiver no nível máximo.
      */
-    suspend fun upgradeSetor(timeId: Int, setor: Int): Boolean {
+    suspend fun upgradeSetor(timeId: Int, setor: Int): Long? {
         val estadio = buscarOuCriar(timeId)
         val nivelAtual = when (setor) {
             0 -> estadio.nivelArquibancada
             1 -> estadio.nivelCadeira
             2 -> estadio.nivelCamarote
-            else -> return false
+            else -> return null
         }
-        if (nivelAtual >= 10) return false
+        if (nivelAtual >= 10) return null
 
         val custoArray = when (setor) {
             0 -> EstadioEntity.CUSTO_ARQUIBANCADA
             1 -> EstadioEntity.CUSTO_CADEIRA
             2 -> EstadioEntity.CUSTO_CAMAROTE
-            else -> return false
+            else -> return null
         }
         val custo = custoArray[nivelAtual]
 
         val saldoAtual = timeDao.buscarPorId(timeId)?.saldo ?: 0L
-        if (saldoAtual < custo) return false
+        if (saldoAtual < custo) return null
 
         // Debita custo
         timeDao.debitarSaldo(timeId, custo)
@@ -515,6 +743,6 @@ class EstadioRepository @Inject constructor(
         // Sincroniza estadioCapacidade no TimeEntity
         timeDao.ampliarEstadio(timeId, atualizado.capacidadeTotal)
 
-        return true
+        return custo
     }
 }

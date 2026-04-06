@@ -31,6 +31,7 @@ import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.domain.model.InfoSubstituicao
 import br.com.managerfoot.domain.model.ResultadoPartida
 import br.com.managerfoot.domain.model.ResultadoPenaltis
+import br.com.managerfoot.domain.model.EstatisticasTime
 import br.com.managerfoot.presentation.ui.components.TeamBadge
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.platform.LocalConfiguration
@@ -73,6 +74,7 @@ fun PartidaSimulacaoScreen(
     nomeTimeFora: String,
     escudoTimeCasa: String = "",
     escudoTimeFora: String = "",
+    nomeEstadio: String = "",
     escalacaoJogador: Escalacao? = null,
     isTimeCasaOJogador: Boolean = true,
     penaltisResultado: ResultadoPenaltis? = null,
@@ -141,7 +143,7 @@ fun PartidaSimulacaoScreen(
                 timeId = ev.timeId,
                 nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora,
                 jogadorId = ev.jogadorId,
-                pularExibicao = false
+                pularExibicao = ev.tipo == TipoEvento.DEFESA_GOLEIRO
             )
         }
     }
@@ -415,7 +417,11 @@ fun PartidaSimulacaoScreen(
             },
             rotuloBotao = "Continuar Partida",
             tituloHeader = "MEXER NO TIME",
-            subtituloHeader = "Partida pausada — jogo continua do minuto ${minutoAtual}'"
+            subtituloHeader = "Partida pausada — jogo continua do minuto ${minutoAtual}'",
+            estatisticasCasa = resultado.estatisticasCasa,
+            estatisticasFora = resultado.estatisticasFora,
+            nomeTimeCasaStats = nomeTimeCasa,
+            nomeTimeForaStats = nomeTimeFora
         )
         return
     }
@@ -449,7 +455,11 @@ fun PartidaSimulacaoScreen(
                     titularesAtuais[idxA] = titularesAtuais[idxA].copy(posicaoUsada = posB)
                     titularesAtuais[idxB] = titularesAtuais[idxB].copy(posicaoUsada = posA)
                 }
-            }
+            },
+            estatisticasCasa = resultado.estatisticasCasa,
+            estatisticasFora = resultado.estatisticasFora,
+            nomeTimeCasaStats = nomeTimeCasa,
+            nomeTimeForaStats = nomeTimeFora
         )
         return
     }
@@ -602,8 +612,9 @@ fun PartidaSimulacaoScreen(
                 // Público presente
                 if (resultado.torcedores > 0) {
                     Spacer(Modifier.height(4.dp))
+                    val estadioLabel = if (nomeEstadio.isNotBlank()) " · $nomeEstadio" else ""
                     Text(
-                        text = "\uD83D\uDC65 ${"%,d".format(resultado.torcedores)} torcedores",
+                        text = "\uD83D\uDC65 ${"%,d".format(resultado.torcedores)} torcedores$estadioLabel",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth(),
@@ -662,6 +673,12 @@ fun PartidaSimulacaoScreen(
         if (simulacaoEncerrada) {
             if (resultado.precisaPenaltis && penaltisInterativoConcluido) {
                 // Disputa interativa já concluída — notas + botão de retorno
+                EstatisticasPartidaCard(
+                    estatisticasCasa = resultado.estatisticasCasa,
+                    estatisticasFora = resultado.estatisticasFora,
+                    nomeTimeCasa = nomeTimeCasa,
+                    nomeTimeFora = nomeTimeFora
+                )
                 NotasDaPartidaCard(
                     resultado          = resultado,
                     escalacaoJogador   = escalacaoJogador,
@@ -707,6 +724,12 @@ fun PartidaSimulacaoScreen(
                     onConcluir    = onSimulacaoFinalizada
                 )
             } else {
+                EstatisticasPartidaCard(
+                    estatisticasCasa = resultado.estatisticasCasa,
+                    estatisticasFora = resultado.estatisticasFora,
+                    nomeTimeCasa = nomeTimeCasa,
+                    nomeTimeFora = nomeTimeFora
+                )
                 NotasDaPartidaCard(
                     resultado          = resultado,
                     escalacaoJogador   = escalacaoJogador,
@@ -726,6 +749,176 @@ fun PartidaSimulacaoScreen(
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Estatísticas — tab usada no IntervaloPainel e card ao final da partida
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun EstatisticasTab(
+    estatisticasCasa: EstatisticasTime,
+    estatisticasFora: EstatisticasTime,
+    nomeTimeCasa: String,
+    nomeTimeFora: String
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    nomeTimeCasa,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1565C0),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+                Spacer(Modifier.width(72.dp))
+                Text(
+                    nomeTimeFora,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFC62828),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+            HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
+        }
+        item { EstatisticaRow("Finalizações",       estatisticasCasa.chutes,          estatisticasFora.chutes) }
+        item { EstatisticaRow("No alvo",            estatisticasCasa.chutesNoGol,     estatisticasFora.chutesNoGol) }
+        item { EstatisticaRow("Defesas do goleiro", estatisticasCasa.defesasGoleiro,  estatisticasFora.defesasGoleiro) }
+        item { EstatisticaRow("Posse de bola",      estatisticasCasa.posse,           estatisticasFora.posse, sufixo = "%") }
+        item { EstatisticaRow("Passes errados",     estatisticasCasa.passesErrados,   estatisticasFora.passesErrados, invertido = true) }
+        item { EstatisticaRow("Faltas",             estatisticasCasa.faltas,          estatisticasFora.faltas,        invertido = true) }
+        item { EstatisticaRow("Cartões amarelos",   estatisticasCasa.cartaoAmarelo,   estatisticasFora.cartaoAmarelo, invertido = true) }
+        item { EstatisticaRow("Cartões vermelhos",  estatisticasCasa.cartaoVermelho,  estatisticasFora.cartaoVermelho, invertido = true) }
+    }
+}
+
+@Composable
+private fun EstatisticaRow(
+    label: String,
+    valorCasa: Int,
+    valorFora: Int,
+    sufixo: String = "",
+    invertido: Boolean = false  // true = menos é melhor (faltas, passes errados)
+) {
+    val total = valorCasa + valorFora
+    val fracCasa = if (total > 0) valorCasa.toFloat() / total else 0.5f
+    val fracFora = if (total > 0) valorFora.toFloat() / total else 0.5f
+    val colorNeutro = MaterialTheme.colorScheme.onSurface
+
+    fun colorFor(isHome: Boolean): Color {
+        if (total == 0) return Color.Gray
+        val isBetter = if (invertido) {
+            if (isHome) valorCasa < valorFora else valorFora < valorCasa
+        } else {
+            if (isHome) valorCasa > valorFora else valorFora > valorCasa
+        }
+        val isSame = valorCasa == valorFora
+        return if (isSame) colorNeutro
+               else if (isBetter) Color(0xFF2E7D32)
+               else Color(0xFFC62828)
+    }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${valorCasa}${sufixo}",
+                modifier = Modifier.width(44.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = colorFor(true)
+            )
+            Text(
+                label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "${valorFora}${sufixo}",
+                modifier = Modifier.width(44.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = colorFor(false),
+                textAlign = TextAlign.End
+            )
+        }
+        // Barra proporcional
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+        ) {
+            Row(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier
+                        .weight(fracCasa)
+                        .fillMaxHeight()
+                        .background(Color(0xFF1565C0))
+                )
+                Box(
+                    Modifier
+                        .weight(fracFora)
+                        .fillMaxHeight()
+                        .background(Color(0xFFC62828))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EstatisticasPartidaCard(
+    estatisticasCasa: EstatisticasTime,
+    estatisticasFora: EstatisticasTime,
+    nomeTimeCasa: String,
+    nomeTimeFora: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "Estatísticas da Partida",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(12.dp))
+            EstatisticasTab(
+                estatisticasCasa = estatisticasCasa,
+                estatisticasFora = estatisticasFora,
+                nomeTimeCasa = nomeTimeCasa,
+                nomeTimeFora = nomeTimeFora
+            )
+        }
+    }
+}
+
+
 // 
 //  Notas da Partida  card exibido ao encerrar a simulação
 // 
@@ -739,6 +932,12 @@ private fun NotasDaPartidaCard(
 
     val jogadoresDoTime = (escalacaoJogador.titulares + escalacaoJogador.reservas)
         .associate { it.jogador.id to it.jogador }
+
+    val substitutosQueEntraram = resultado.eventos
+        .filter { it.tipo == TipoEvento.SUBSTITUICAO_ENTRA }
+        .map { it.jogadorId }
+        .toSet()
+        .intersect(jogadoresDoTime.keys)
 
     val notasDoTime = resultado.notasJogadores
         .filter { (id, _) -> id in jogadoresDoTime }
@@ -776,6 +975,7 @@ private fun NotasDaPartidaCard(
             HorizontalDivider()
             notasDoTime.forEach { (jogadorId, nota) ->
                 val j = jogadoresDoTime[jogadorId] ?: return@forEach
+                val ehSub = jogadorId in substitutosQueEntraram
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -799,6 +999,15 @@ private fun NotasDaPartidaCard(
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
+                        if (ehSub) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "↑ Sub",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                     Text(
                         "%.1f".format(nota),
@@ -1390,7 +1599,11 @@ private fun IntervaloPainel(
     onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit = { _, _ -> },
     rotuloBotao: String = "Continuar para o 2º Tempo",
     tituloHeader: String = "INTERVALO",
-    subtituloHeader: String = "Faça sua intervenção antes do 2º tempo"
+    subtituloHeader: String = "Faça sua intervenção antes do 2º tempo",
+    estatisticasCasa: EstatisticasTime? = null,
+    estatisticasFora: EstatisticasTime? = null,
+    nomeTimeCasaStats: String = "",
+    nomeTimeForaStats: String = ""
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
     // Titular selecionado aguardando escolha do reserva
@@ -1434,6 +1647,8 @@ private fun IntervaloPainel(
             Tab(selected = abaAtiva == 0, onClick = { abaAtiva = 0; titularSelecionado = null }, text = { Text("Substituições") })
             Tab(selected = abaAtiva == 1, onClick = { abaAtiva = 1 }, text = { Text("Tática") })
             Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Posições") })
+            Tab(selected = abaAtiva == 3, onClick = { abaAtiva = 3 }, text = { Text("Banco") })
+            Tab(selected = abaAtiva == 4, onClick = { abaAtiva = 4 }, text = { Text("Stats") })
         }
 
         Box(Modifier.weight(1f)) {
@@ -1460,6 +1675,19 @@ private fun IntervaloPainel(
                     titulares = titulares,
                     onTrocarPosicoes = onTrocarPosicoes
                 )
+                3 -> BancoTab(reservas = reservas)
+                4 -> if (estatisticasCasa != null && estatisticasFora != null) {
+                    EstatisticasTab(
+                        estatisticasCasa = estatisticasCasa,
+                        estatisticasFora = estatisticasFora,
+                        nomeTimeCasa = nomeTimeCasaStats,
+                        nomeTimeFora = nomeTimeForaStats
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Estatísticas não disponíveis", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         }
 
@@ -1570,6 +1798,66 @@ private fun SubstituicoesTab(
                     HorizontalDivider(thickness = 0.5.dp)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BancoTab(reservas: List<JogadorNaEscalacao>) {
+    val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+    val reservasOrdenadas = remember(reservas) {
+        reservas.sortedWith(compareBy(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+
+    if (reservas.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Nenhum jogador disponível no banco",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
+
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Text(
+                "${reservasOrdenadas.size} jogador${if (reservasOrdenadas.size != 1) "es" else ""} no banco",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        items(reservasOrdenadas) { jne ->
+            ListItem(
+                headlineContent = { Text(jne.jogador.nome) },
+                supportingContent = {
+                    Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}")
+                },
+                trailingContent = {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            jne.posicaoUsada.abreviacao,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            )
+            HorizontalDivider(thickness = 0.5.dp)
         }
     }
 }

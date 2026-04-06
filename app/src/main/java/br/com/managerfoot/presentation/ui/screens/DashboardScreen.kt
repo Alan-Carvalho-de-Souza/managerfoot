@@ -38,7 +38,11 @@ fun DashboardScreen(
     onIrParaEstatisticasTime: () -> Unit = {},
     onIrParaEstadio: () -> Unit = {},
     onIrParaJuniores: () -> Unit = {},
+    onIrParaJogadores: () -> Unit = {},
+    onIrParaRodada: () -> Unit = {},
     onIrParaClubes: () -> Unit = {},
+    onIrParaPatrocinadores: () -> Unit = {},
+    onIrParaTreinamento: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
@@ -53,10 +57,16 @@ fun DashboardScreen(
     val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsStateWithLifecycle()
     val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsStateWithLifecycle()
     val posicaoNaTabela by vm.posicaoNaTabela.collectAsStateWithLifecycle()
+    val precisaEscolherPatrocinador by vm.precisaEscolherPatrocinador.collectAsStateWithLifecycle()
 
     var abaAtual by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
+
+    // Quando o jogo foi iniciado e o patrocinador ainda não foi escolhido, navega automaticamente
+    LaunchedEffect(precisaEscolherPatrocinador) {
+        if (precisaEscolherPatrocinador) onIrParaPatrocinadores()
+    }
 
     // Quando há resultado simulado, abre a tela de simulação em tempo real
     resultadoSimulado?.let { resultado ->
@@ -71,6 +81,7 @@ fun DashboardScreen(
             nomeTimeFora = nomeFora,
             escudoTimeCasa = timeCasaSim?.escudoRes ?: "",
             escudoTimeFora = timeForaSim?.escudoRes ?: "",
+            nomeEstadio = timeCasaSim?.estadioNome ?: "",
             escalacaoJogador = escalacaoSimulacao,
             isTimeCasaOJogador = isTimeCasaOJogador,
             penaltisResultado = penaltisResultado,
@@ -268,8 +279,11 @@ fun DashboardScreen(
                 onIrParaFinancas         = onIrParaFinancas,
                 onIrParaEstadio          = onIrParaEstadio,
                 onIrParaJuniores         = onIrParaJuniores,
+                onIrParaJogadores        = onIrParaJogadores,
+                onIrParaRodada           = onIrParaRodada,
                 onIrParaClubes           = onIrParaClubes,
-                onAvancarMes             = { vm.fecharMes() }
+                onIrParaPatrocinadores   = onIrParaPatrocinadores,
+                onIrParaTreinamento      = onIrParaTreinamento
             )
         }
     } // end Scaffold
@@ -325,8 +339,11 @@ private fun MenuAba(
     onIrParaFinancas: () -> Unit,
     onIrParaEstadio: () -> Unit,
     onIrParaJuniores: () -> Unit,
+    onIrParaJogadores: () -> Unit,
+    onIrParaRodada: () -> Unit,
     onIrParaClubes: () -> Unit,
-    onAvancarMes: () -> Unit
+    onIrParaPatrocinadores: () -> Unit,
+    onIrParaTreinamento: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -347,9 +364,13 @@ private fun MenuAba(
         item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }
         item { OutlinedButton(onClick = onIrParaHallDaFama,       modifier = Modifier.fillMaxWidth()) { Text("Hall da Fama") } }
         item { OutlinedButton(onClick = onIrParaConfronto,        modifier = Modifier.fillMaxWidth()) { Text("Histórico de Confrontos") } }
+        item { OutlinedButton(onClick = onIrParaJogadores,        modifier = Modifier.fillMaxWidth()) { Text("Jogadores") } }
         item { OutlinedButton(onClick = onIrParaJuniores,         modifier = Modifier.fillMaxWidth()) { Text("Juniores") } }
         item { OutlinedButton(onClick = onIrParaMercado,          modifier = Modifier.fillMaxWidth()) { Text("Mercado de Transferências") } }
+        item { OutlinedButton(onClick = onIrParaPatrocinadores,   modifier = Modifier.fillMaxWidth()) { Text("Patrocinadores") } }
         item { OutlinedButton(onClick = onIrParaRankingGeral,     modifier = Modifier.fillMaxWidth()) { Text("Ranking Geral") } }
+        item { OutlinedButton(onClick = onIrParaRodada,           modifier = Modifier.fillMaxWidth()) { Text("Rodadas") } }
         item { OutlinedButton(onClick = onIrParaTabela,           modifier = Modifier.fillMaxWidth()) { Text("Tabela de Classificação") } }
+        item { OutlinedButton(onClick = onIrParaTreinamento,      modifier = Modifier.fillMaxWidth()) { Text("Treinamento") } }
     }
 }

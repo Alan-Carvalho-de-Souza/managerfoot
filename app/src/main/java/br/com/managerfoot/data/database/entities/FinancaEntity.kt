@@ -34,16 +34,15 @@ data class ClassificacaoEntity(
 @Entity(
     tableName = "financas",
     foreignKeys = [
-        ForeignKey(TimeEntity::class,    ["id"], ["timeId"],    onDelete = ForeignKey.CASCADE),
-        ForeignKey(TemporadaEntity::class, ["id"], ["temporadaId"], onDelete = ForeignKey.CASCADE)
+        ForeignKey(TimeEntity::class, ["id"], ["timeId"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [Index("timeId"), Index("temporadaId")]
+    indices = [Index("timeId")]
 )
 data class FinancaEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
     val timeId: Int,
-    val temporadaId: Int,
+    val temporadaId: Int,               // referência à temporada (sem FK para evitar falhas de integridade)
     val mes: Int,                       // 1-12
     val receitaBilheteria: Long = 0,
     val receitaPatrocinio: Long = 0,
@@ -52,6 +51,7 @@ data class FinancaEntity(
     val despesaSalarios: Long = 0,
     val despesaTransferencias: Long = 0,
     val despesaInfraestrutura: Long = 0,
+    val despesaAmpliacaoEstadio: Long = 0, // custo de expansão do estádio
     val saldoFinal: Long = 0            // calculado no fechamento do mês
 )
 
@@ -83,5 +83,6 @@ enum class TipoTransferencia {
     EMPRESTIMO_SAIDA,
     EMPRESTIMO_RETORNO,
     FIM_CONTRATO,
-    PROMOVIDO_BASE
+    PROMOVIDO_BASE,
+    DISPENSADO_BASE
 }

@@ -232,8 +232,8 @@ private fun CalendarioCard(
                     )
                 }
             }
-            // Público e receita (apenas partidas jogadas em casa pelo jogador)
-            if (partida.jogada && isJogadorCasa && partida.torcedores != null && partida.torcedores > 0) {
+            // Público e receita (partidas jogadas pelo jogador: casa ou visitante)
+            if (partida.jogada && (isJogadorCasa || isJogadorFora) && partida.torcedores != null && partida.torcedores > 0) {
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
@@ -250,7 +250,8 @@ private fun CalendarioCard(
                         Text(
                             text = "Bilheteria: ${formatarSaldo(partida.receitaPartida)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (isJogadorCasa) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

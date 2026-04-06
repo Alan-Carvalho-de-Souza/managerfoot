@@ -88,5 +88,6 @@ enum class TipoEvento {
     LESAO,
     SUBSTITUICAO_ENTRA,
     SUBSTITUICAO_SAI,
-    PARTICIPOU   // marca que o jogador entrou em campo (titular); não aparece na UI
+    PARTICIPOU,       // marca que o jogador entrou em campo (titular); não aparece na UI
+    DEFESA_GOLEIRO    // defesa difícil realizada pelo goleiro; contabilizada na nota
 }

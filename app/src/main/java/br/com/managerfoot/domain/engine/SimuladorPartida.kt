@@ -84,12 +84,6 @@ object CalculadoraForca {
         capacidade >=   5_000 -> 1.01
         else                  -> 1.0
     }
-    fun fatorCansaco(jogosUltimos7Dias: Int): Double =
-        when {
-            jogosUltimos7Dias >= 3 -> 0.93
-            jogosUltimos7Dias == 2 -> 0.97
-            else -> 1.0
-        }
     fun fatorEstilo(atacante: EstiloJogo, defensor: EstiloJogo): Double =
         when {
             // CONTRA_ATAQUE explora as linhas abertas do time OFENSIVO em transições rápidas
@@ -118,8 +112,6 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         partidaId: Int,
         casa: Escalacao,
         fora: Escalacao,
-        jogosRecentesCasa: Int = 0,
-        jogosRecentesFora: Int = 0,
         // Quando informado, inibe as substituições táticas aleatórias para o time
         // do jogador — apenas subs forçadas (lesão/expulsão) ocorrem nesses casos.
         timeJogadorId: Int = -1
@@ -127,11 +119,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
 
         val fCasaRaw = CalculadoraForca.calcularForcaTime(casa) *
                 CalculadoraForca.fatorMandante(casa.time.estadioCapacidade) *
-                CalculadoraForca.fatorCansaco(jogosRecentesCasa) *
                 CalculadoraForca.fatorEstilo(casa.time.estiloJogo, fora.time.estiloJogo)
 
         val fForaRaw = CalculadoraForca.calcularForcaTime(fora) *
-                CalculadoraForca.fatorCansaco(jogosRecentesFora) *
                 CalculadoraForca.fatorEstilo(fora.time.estiloJogo, casa.time.estiloJogo)
 
         // Força mínima de 50 para evitar NaN quando o elenco está vazio
@@ -271,6 +261,26 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val posseCasa = (50 + ((probCasa - 0.5) * 40)).roundToInt().coerceIn(30, 70)
         val chutesCasa = golsCasa * rng.nextInt(3, 6) + rng.nextInt(2, 5)
         val chutesFora = golsFora * rng.nextInt(3, 6) + rng.nextInt(2, 5)
+        val chutesCasaNoGol = golsCasa + rng.nextInt(0, 3)
+        val chutesForaNoGol = golsFora + rng.nextInt(0, 3)
+        val defesasGoleiroCasa = (chutesForaNoGol - golsFora).coerceAtLeast(0)
+        val defesasGoleiroFora = (chutesCasaNoGol - golsCasa).coerceAtLeast(0)
+        val passesErradosCasa = ((100 - posseCasa) / 4 + rng.nextInt(5, 15)).coerceIn(5, 40)
+        val passesErradosFora = (posseCasa / 4 + rng.nextInt(5, 15)).coerceIn(5, 40)
+
+        // Goleiros identificados para eventos de defesa e nota
+        val gkCasa = escalacaoCasaFinal.titulares.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
+        val gkFora = escalacaoForaFinal.titulares.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
+        repeat(defesasGoleiroCasa) {
+            eventos.add(EventoSimulado(rng.nextInt(1, 90), TipoEvento.DEFESA_GOLEIRO,
+                gkCasa?.jogador?.id ?: -1, casa.time.id,
+                "Defesa ${gkCasa?.jogador?.nomeAbreviado ?: "GK"}"))
+        }
+        repeat(defesasGoleiroFora) {
+            eventos.add(EventoSimulado(rng.nextInt(1, 90), TipoEvento.DEFESA_GOLEIRO,
+                gkFora?.jogador?.id ?: -1, fora.time.id,
+                "Defesa ${gkFora?.jogador?.nomeAbreviado ?: "GK"}"))
+        }
 
         return ResultadoPartida(
             partidaId = partidaId,
@@ -279,21 +289,27 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             golsCasa = golsCasa,
             golsFora = golsFora,
             eventos = eventos,
+            gkCasaId = gkCasa?.jogador?.id ?: -1,
+            gkForaId = gkFora?.jogador?.id ?: -1,
             estatisticasCasa = EstatisticasTime(
                 chutes = chutesCasa,
-                chutesNoGol = golsCasa + rng.nextInt(0, 3),
+                chutesNoGol = chutesCasaNoGol,
                 posse = posseCasa,
                 faltas = rng.nextInt(8, 18),
                 cartaoAmarelo = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && casa.titulares.any { it.jogador.id == e.jogadorId } },
-                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && casa.titulares.any { it.jogador.id == e.jogadorId } }
+                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && casa.titulares.any { it.jogador.id == e.jogadorId } },
+                defesasGoleiro = defesasGoleiroCasa,
+                passesErrados = passesErradosCasa
             ),
             estatisticasFora = EstatisticasTime(
                 chutes = chutesFora,
-                chutesNoGol = golsFora + rng.nextInt(0, 3),
+                chutesNoGol = chutesForaNoGol,
                 posse = 100 - posseCasa,
                 faltas = rng.nextInt(8, 18),
                 cartaoAmarelo = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && fora.titulares.any { it.jogador.id == e.jogadorId } },
-                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && fora.titulares.any { it.jogador.id == e.jogadorId } }
+                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && fora.titulares.any { it.jogador.id == e.jogadorId } },
+                defesasGoleiro = defesasGoleiroFora,
+                passesErrados = passesErradosFora
             )
         )
     }
@@ -315,15 +331,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         if (candidatos.isEmpty()) return emptyList()
 
         // Peso de gol por setor:
-        //   ATAQUE: finalizacao é o fator dominante + velocidade + base fixa de 50
-        //           garante que qualquer atacante (min ~54) supere qualquer defensor (max 33)
-        //   MEIO:   finalizacao x2 + passe → goleadores e meias criativos pontuam bem
-        //   DEFESA: apenas finalizacao/3 → bom finalizador marca levemente mais que
-        //           colegas de setor, mas nunca ultrapassa atacantes ou meias goleadores
+        //   ATAQUE: finalizacao * 5 + velocidade = fator dominante; garante ~75% dos gols
+        //           num time 4-4-2 típico e ~85% num 4-3-3
+        //   MEIO:   apenas finalizacao (reduzido deliberadamente para reservar gols ao ataque)
+        //   DEFESA: finalizacao / 7 → contribuição rara, para evitar zeramento no ranking
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
-            Setor.ATAQUE -> jne.jogador.finalizacao * 3 + jne.jogador.velocidade + 50
-            Setor.MEIO   -> jne.jogador.finalizacao * 2 + jne.jogador.passe
-            Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
+            Setor.ATAQUE -> jne.jogador.finalizacao * 5 + jne.jogador.velocidade + 50
+            Setor.MEIO   -> jne.jogador.finalizacao
+            Setor.DEFESA -> (jne.jogador.finalizacao / 7).coerceAtLeast(1)
             else         -> 1
         }
 
@@ -443,18 +458,37 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     descricao = jne.jogador.nomeAbreviado
                 ))
             }
-            // Jogadores com alto fisico sofrem menos lesões; fisico=99 → ~1.5%, fisico=1 → ~4.5%
-            val probLesao = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            // Risco base por físico; multiplicado pela fadiga do jogador:
+            //   fadiga ≥ 80%: risco normal | 75–80%: +50% | 60–74%: +2× | <60%: +4×
+            val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            val multiplicadorFadiga = when {
+                jne.jogador.fadiga >= 0.80f -> 1.0
+                jne.jogador.fadiga >= 0.75f -> 1.5
+                jne.jogador.fadiga >= 0.60f -> 2.5
+                else                        -> 4.0
+            }
+            val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
                 lista.add(EventoSimulado(
                     minuto = rng.nextInt(10, 85),
                     tipo = TipoEvento.LESAO,
                     jogadorId = jne.jogador.id,
                     timeId = timeId,
-                    descricao = "${jne.jogador.nomeAbreviado} saiu lesionado"
+                    descricao = "${jne.jogador.nomeAbreviado} saiu lesionado",
+                    grauLesao = sortearGrauLesao()
                 ))
             }
             lista
+        }
+    }
+
+    // ── Sorteia grau da lesão: 1=leve(2-3j) 60%, 2=moderada(4-5j) 25%, 3=grave(6-8j) 15% ──
+    private fun sortearGrauLesao(): Int {
+        val r = rng.nextDouble()
+        return when {
+            r < 0.60 -> 1
+            r < 0.85 -> 2
+            else     -> 3
         }
     }
 
@@ -602,6 +636,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val fCasa = if (fCasaRaw > 0.0) fCasaRaw else 50.0
         val fFora = if (fForaRaw > 0.0) fForaRaw else 50.0
 
+        android.util.Log.d("ENGINE", "${"%.1f".format(fCasa)} x ${"%.1f".format(fFora)} | ratio=${"%.2f".format(fCasa / fFora)} | ${escalacaoCasa.time.nome} x ${escalacaoFora.time.nome} [periodo $minInicio-$minFim]")
+
         val titsCasa = estado.titsCasa.toMutableList()
         val titsFora = estado.titsFora.toMutableList()
         val resCasa  = estado.resCasa.toMutableList()
@@ -725,7 +761,15 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     descricao = jne.jogador.nomeAbreviado
                 ))
             }
-            val probLesao = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            // Risco base por físico; multiplicado pela fadiga (igual a gerarIncidentes)
+            val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
+            val multiplicadorFadiga = when {
+                jne.jogador.fadiga >= 0.80f -> 1.0
+                jne.jogador.fadiga >= 0.75f -> 1.5
+                jne.jogador.fadiga >= 0.60f -> 2.5
+                else                        -> 4.0
+            }
+            val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
                 val lesaoMin = efetMin.coerceAtLeast(10)
                 val lesaoMax = efetMax.coerceAtMost(85).coerceAtLeast(lesaoMin + 1)
@@ -734,7 +778,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     tipo      = TipoEvento.LESAO,
                     jogadorId = jne.jogador.id,
                     timeId    = timeId,
-                    descricao = "${jne.jogador.nomeAbreviado} saiu lesionado"
+                    descricao = "${jne.jogador.nomeAbreviado} saiu lesionado",
+                    grauLesao = sortearGrauLesao()
                 ))
             }
             lista

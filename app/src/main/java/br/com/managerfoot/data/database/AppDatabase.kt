@@ -26,7 +26,7 @@ import br.com.managerfoot.data.database.entities.*
         RankingGeralEntity::class,
         EstadioEntity::class,
     ],
-    version = 12,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

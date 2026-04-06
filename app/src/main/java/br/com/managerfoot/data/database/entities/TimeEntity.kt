@@ -21,7 +21,7 @@ data class TimeEntity(
     val estiloJogo: EstiloJogo,
     val escudoRes: String = "",         // nome do drawable resource
     val controladoPorJogador: Boolean = false,
-    val reputacao: Int = 50,            // 0-100, afeta contratações e patrocínio
+    val reputacao: Float = 50f,         // 0.0-100.0, afeta contratações e patrocínio
 )
 
 enum class EstiloJogo {

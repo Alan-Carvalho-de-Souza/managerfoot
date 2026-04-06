@@ -25,7 +25,10 @@ data class SaveState(
     val copaId: Int,                 // ID da Copa do Brasil ativa
     val anoAtual: Int,
     val mesAtual: Int,               // 1–12
-    val jogoInicializado: Boolean
+    val jogoInicializado: Boolean,
+    val patrocinadorValorAnual: Long, // 0 = patrocinador não escolhido na temporada
+    val patrocinadorTipo: Int,        // 0 = nenhum, 1-3 = tier escolhido
+    val patrocinadorPreCreditado: Long // valor já adiantado no saldo do mês corrente
 )
 
 @Singleton
@@ -44,6 +47,9 @@ class GameDataStore @Inject constructor(
         val KEY_ANO            = intPreferencesKey("ano_atual")
         val KEY_MES            = intPreferencesKey("mes_atual")
         val KEY_INICIALIZADO   = booleanPreferencesKey("jogo_inicializado")
+        val KEY_PATROCINADOR_VALOR        = longPreferencesKey("patrocinador_valor_anual")
+        val KEY_PATROCINADOR_TIPO         = intPreferencesKey("patrocinador_tipo")
+        val KEY_PATROCINADOR_PRE_CREDITADO = longPreferencesKey("patrocinador_pre_creditado")
     }
 
     val saveState: Flow<SaveState> = context.dataStore.data
@@ -60,7 +66,10 @@ class GameDataStore @Inject constructor(
                 copaId            = prefs[KEY_COPA_ID]          ?: -1,
                 anoAtual          = prefs[KEY_ANO]             ?: 2026,
                 mesAtual          = prefs[KEY_MES]             ?: 1,
-                jogoInicializado  = prefs[KEY_INICIALIZADO]    ?: false
+                jogoInicializado  = prefs[KEY_INICIALIZADO]    ?: false,
+                patrocinadorValorAnual    = prefs[KEY_PATROCINADOR_VALOR]         ?: 0L,
+                patrocinadorTipo          = prefs[KEY_PATROCINADOR_TIPO]          ?: 0,
+                patrocinadorPreCreditado  = prefs[KEY_PATROCINADOR_PRE_CREDITADO] ?: 0L
             )
         }
 
@@ -94,6 +103,14 @@ class GameDataStore @Inject constructor(
             } else {
                 prefs[KEY_MES] = mesAtual + 1
             }
+            // Reseta o adiantamento ao avançar para o próximo mês
+            prefs[KEY_PATROCINADOR_PRE_CREDITADO] = 0L
+        }
+    }
+
+    suspend fun marcarPatrocinioPreCreditado(valorMensal: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_PATROCINADOR_PRE_CREDITADO] = valorMensal
         }
     }
 
@@ -111,6 +128,17 @@ class GameDataStore @Inject constructor(
             prefs[KEY_TEMPORADA_ID]    = temporadaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
+            // Reseta patrocinador — usuário deve escolher um novo para cada temporada
+            prefs[KEY_PATROCINADOR_VALOR]         = 0L
+            prefs[KEY_PATROCINADOR_TIPO]          = 0
+            prefs[KEY_PATROCINADOR_PRE_CREDITADO] = 0L
+        }
+    }
+
+    suspend fun salvarPatrocinador(tipo: Int, valorAnual: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_PATROCINADOR_TIPO]  = tipo
+            prefs[KEY_PATROCINADOR_VALOR] = valorAnual
         }
     }
 

@@ -66,6 +66,17 @@ sealed class Rota(val caminho: String) {
     object Juniores         : Rota("juniores/{timeId}") {
         fun comTimeId(id: Int) = "juniores/$id"
     }
+    object Jogadores        : Rota("jogadores/{timeId}") {
+        fun comTimeId(id: Int) = "jogadores/$id"
+    }
+    object Patrocinadores   : Rota("patrocinadores")
+    object Treinamento      : Rota("treinamento/{timeId}") {
+        fun comTimeId(id: Int) = "treinamento/$id"
+    }
+    object Rodada           : Rota("rodada/{campeonatoAId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}") {
+        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int) =
+            "rodada/$campAId/$campBId/$campCId/$campDId"
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -140,7 +151,16 @@ fun ManagerFootNavGraph() {
                 onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) },
                 onIrParaEstadio      = { navController.navigate(Rota.Estadio.com(timeId)) },
                 onIrParaJuniores     = { navController.navigate(Rota.Juniores.comTimeId(timeId)) },
-                onIrParaClubes       = { navController.navigate(Rota.Clubes.comTimeId(timeId)) }
+                onIrParaJogadores    = { navController.navigate(Rota.Jogadores.comTimeId(timeId)) },
+                onIrParaRodada       = { navController.navigate(Rota.Rodada.com(
+                    campAId = saveState?.campeonatoAId ?: -1,
+                    campBId = saveState?.campeonatoBId ?: -1,
+                    campCId = saveState?.campeonatoCId ?: -1,
+                    campDId = saveState?.campeonatoDId ?: -1
+                )) },
+                onIrParaClubes            = { navController.navigate(Rota.Clubes.comTimeId(timeId)) },
+                onIrParaPatrocinadores    = { navController.navigate(Rota.Patrocinadores.caminho) },
+                onIrParaTreinamento       = { navController.navigate(Rota.Treinamento.comTimeId(timeId)) }
             )
         }
 
@@ -331,6 +351,52 @@ fun ManagerFootNavGraph() {
         ) { backStack ->
             val timeId = backStack.arguments!!.getInt("timeId")
             JunioresScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Jogadores — elenco + pesquisa global
+        composable(
+            route = Rota.Jogadores.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            JogadoresScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Patrocinadores
+        composable(route = Rota.Patrocinadores.caminho) {
+            PatrocinioScreen(onVoltar = { navController.popBackStack() })
+        }
+
+        // Treinamento do Elenco
+        composable(
+            route = Rota.Treinamento.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            TreinamentoScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+        }
+
+        // Rodadas das Séries
+        composable(
+            route = Rota.Rodada.caminho,
+            arguments = listOf(
+                navArgument("campeonatoAId") { type = NavType.IntType },
+                navArgument("campeonatoBId") { type = NavType.IntType },
+                navArgument("campeonatoCId") { type = NavType.IntType },
+                navArgument("campeonatoDId") { type = NavType.IntType }
+            )
+        ) { backStack ->
+            val campAId = backStack.arguments!!.getInt("campeonatoAId")
+            val campBId = backStack.arguments!!.getInt("campeonatoBId")
+            val campCId = backStack.arguments!!.getInt("campeonatoCId")
+            val campDId = backStack.arguments!!.getInt("campeonatoDId")
+            RodadaScreen(
+                campeonatoAId = campAId,
+                campeonatoBId = campBId,
+                campeonatoCId = campCId,
+                campeonatoDId = campDId,
+                onVoltar      = { navController.popBackStack() }
+            )
         }
     }
 }

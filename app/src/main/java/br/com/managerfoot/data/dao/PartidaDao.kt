@@ -101,67 +101,67 @@ interface PartidaDao {
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId = :campeonatoId AND ep.tipo = 'GOL'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeArtilheiros(campeonatoId: Int, limite: Int = 20): Flow<List<ArtilheiroDto>>
+    fun observeArtilheiros(campeonatoId: Int, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId = :campeonatoId AND ep.tipo = 'ASSISTENCIA'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeAssistentes(campeonatoId: Int, limite: Int = 20): Flow<List<ArtilheiroDto>>
+    fun observeAssistentes(campeonatoId: Int, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, SUM(1) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, SUM(1) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'GOL'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeArtilheirosMulti(campeonatoIds: List<Int>, limite: Int = 20): Flow<List<ArtilheiroDto>>
+    fun observeArtilheirosMulti(campeonatoIds: List<Int>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, SUM(1) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, SUM(1) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'ASSISTENCIA'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeAssistentesMulti(campeonatoIds: List<Int>, limite: Int = 20): Flow<List<ArtilheiroDto>>
+    fun observeAssistentesMulti(campeonatoIds: List<Int>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId = :campeonatoId AND ep.tipo = 'GOL'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
@@ -171,11 +171,11 @@ interface PartidaDao {
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE p.campeonatoId = :campeonatoId AND ep.tipo = 'ASSISTENCIA'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
@@ -187,59 +187,59 @@ interface PartidaDao {
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE ep.tipo = 'GOL'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeArtilheirosAllTime(limite: Int = 30): Flow<List<ArtilheiroDto>>
+    fun observeArtilheirosAllTime(limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE ep.tipo = 'ASSISTENCIA'
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeAssistentesAllTime(limite: Int = 30): Flow<List<ArtilheiroDto>>
+    fun observeAssistentesAllTime(limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p  ON ep.partidaId   = p.id
         INNER JOIN campeonatos c ON p.campeonatoId = c.id
         INNER JOIN jogadores j ON ep.jogadorId   = j.id
-        INNER JOIN times t     ON j.timeId       = t.id
+        LEFT JOIN times t     ON j.timeId       = t.id
         WHERE ep.tipo = 'GOL' AND c.tipo IN (:tipos)
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeArtilheirosHistoricoFiltrado(tipos: List<String>, limite: Int = 30): Flow<List<ArtilheiroDto>>
+    fun observeArtilheirosHistoricoFiltrado(tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p  ON ep.partidaId   = p.id
         INNER JOIN campeonatos c ON p.campeonatoId = c.id
         INNER JOIN jogadores j ON ep.jogadorId   = j.id
-        INNER JOIN times t     ON j.timeId       = t.id
+        LEFT JOIN times t     ON j.timeId       = t.id
         WHERE ep.tipo = 'ASSISTENCIA' AND c.tipo IN (:tipos)
         GROUP BY ep.jogadorId
         ORDER BY total DESC
         LIMIT :limite
     """)
-    fun observeAssistentesHistoricoFiltrado(tipos: List<String>, limite: Int = 30): Flow<List<ArtilheiroDto>>
+    fun observeAssistentesHistoricoFiltrado(tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
@@ -292,6 +292,26 @@ interface PartidaDao {
     @Query("SELECT * FROM partidas WHERE campeonatoId = :campeonatoId ORDER BY confrontoId, rodada")
     suspend fun buscarTodasPorCampeonato(campeonatoId: Int): List<PartidaEntity>
 
+    @Query("SELECT COALESCE(MAX(rodada), 0) FROM partidas WHERE campeonatoId = :campeonatoId AND fase IS NULL")
+    suspend fun maxRodada(campeonatoId: Int): Int
+
+    @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.campeonatoId = :campeonatoId AND p.rodada = :rodada AND p.fase IS NULL
+        ORDER BY p.id
+    """)
+    fun observeRodada(campeonatoId: Int, rodada: Int): Flow<List<CalendarioPartidaDto>>
+
     @Query("""
         SELECT p.id AS partidaId, p.confrontoId AS confrontoId, p.fase AS fase,
                p.rodada AS rodada, p.timeCasaId AS timeCasaId,
@@ -309,11 +329,11 @@ interface PartidaDao {
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
-               t.nome AS nomeTime, t.escudoRes AS escudoRes, COUNT(*) AS total
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
         FROM eventos_partida ep
         INNER JOIN partidas p ON ep.partidaId = p.id
         INNER JOIN jogadores j ON ep.jogadorId = j.id
-        INNER JOIN times t ON j.timeId = t.id
+        LEFT JOIN times t ON j.timeId = t.id
         WHERE ((p.timeCasaId = :timeAId AND p.timeForaId = :timeBId)
             OR (p.timeCasaId = :timeBId AND p.timeForaId = :timeAId))
         AND ep.tipo = 'GOL'
