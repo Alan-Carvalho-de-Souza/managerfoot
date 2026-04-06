@@ -357,6 +357,14 @@ fun PartidaSimulacaoScreen(
         simulacaoEncerrada = true
     }
 
+    // Rola o feed para exibir estatísticas e botão ao encerrar a partida
+    LaunchedEffect(simulacaoEncerrada, penaltisInterativoConcluido) {
+        if (simulacaoEncerrada && (!resultado.precisaPenaltis || penaltisInterativoConcluido)) {
+            delay(400) // aguarda recomposição adicionando os novos itens
+            listState.animateScrollToItem(eventosExibidos.size + 2)
+        }
+    }
+
     // Painel de lesão — interrompe a animação para substituição imediata
     if (pausadoPorLesao) {
         LesaoPainel(
@@ -462,6 +470,39 @@ fun PartidaSimulacaoScreen(
             nomeTimeForaStats = nomeTimeFora
         )
         return
+    }
+
+    // Painéis de pênaltis — exibidos em tela inteira antes do Column principal
+    if (simulacaoEncerrada && resultado.precisaPenaltis && !penaltisInterativoConcluido) {
+        if (penaltisResultado != null) {
+            PenaltiResultadoPainel(
+                penaltis      = penaltisResultado,
+                nomeTimeCasa  = nomeTimeCasa,
+                nomeTimeFora  = nomeTimeFora,
+                timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId,
+                onConcluir    = onSimulacaoFinalizada
+            )
+            return
+        }
+        val dadosAdv = dadosPenaltisAdversario
+        if (dadosAdv != null) {
+            val gk = titularesAtuais.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
+            PenaltiInterativoPainel(
+                cobradorElegiveis  = titularesAtuais.filter { it.posicaoUsada.setor != Setor.GOLEIRO }.toList(),
+                gkJogadorDefesa    = gk?.jogador?.defesa ?: 70,
+                dadosAdversario    = dadosAdv,
+                isTimeCasaOJogador = isTimeCasaOJogador,
+                timeCasaId         = resultado.timeCasaId,
+                timeForaId         = resultado.timeForaId,
+                nomeTimeJogador    = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora,
+                nomeAdversario     = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa,
+                agregadoJogador    = if (isTimeCasaOJogador) resultado.golsAgregadoCasa else resultado.golsAgregadoFora,
+                agregadoAdversario = if (isTimeCasaOJogador) resultado.golsAgregadoFora else resultado.golsAgregadoCasa,
+                onConcluir         = { res -> onPenaltisConfirmados?.invoke(res) }
+            )
+            return
+        }
+        // dadosPenaltisAdversario ainda null: exibe spinner no Column principal abaixo
     }
 
     Column(
@@ -667,82 +708,37 @@ fun PartidaSimulacaoScreen(
                     EventoCard(evento = evento, nomeTimeCasa = nomeTimeCasa)
                 }
             }
+            // Resultado final: tabs Estatísticas / Notas + botão de retorno
+            if (simulacaoEncerrada && (!resultado.precisaPenaltis || penaltisInterativoConcluido)) {
+                item {
+                    ResultadoFinalCard(
+                        estatisticasCasa   = resultado.estatisticasCasa,
+                        estatisticasFora   = resultado.estatisticasFora,
+                        nomeTimeCasa       = nomeTimeCasa,
+                        nomeTimeFora       = nomeTimeFora,
+                        resultado          = resultado,
+                        escalacaoJogador   = escalacaoJogador,
+                        isTimeCasaOJogador = isTimeCasaOJogador
+                    )
+                }
+                item {
+                    Button(
+                        onClick = onSimulacaoFinalizada,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text("Voltar ao painel")
+                    }
+                }
+            }
         }
 
         // â”€â”€ BotÃ£o de encerrar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        if (simulacaoEncerrada) {
-            if (resultado.precisaPenaltis && penaltisInterativoConcluido) {
-                // Disputa interativa já concluída — notas + botão de retorno
-                EstatisticasPartidaCard(
-                    estatisticasCasa = resultado.estatisticasCasa,
-                    estatisticasFora = resultado.estatisticasFora,
-                    nomeTimeCasa = nomeTimeCasa,
-                    nomeTimeFora = nomeTimeFora
-                )
-                NotasDaPartidaCard(
-                    resultado          = resultado,
-                    escalacaoJogador   = escalacaoJogador,
-                    isTimeCasaOJogador = isTimeCasaOJogador
-                )
-                Button(
-                    onClick = onSimulacaoFinalizada,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) { Text("Voltar ao painel") }
-            } else if (resultado.precisaPenaltis && penaltisResultado == null) {
-                val dadosAdv = dadosPenaltisAdversario
-                if (dadosAdv != null) {
-                    val gk = titularesAtuais.firstOrNull {
-                        it.posicaoUsada.setor == Setor.GOLEIRO
-                    }
-                    PenaltiInterativoPainel(
-                        cobradorElegiveis  = titularesAtuais.filter {
-                            it.posicaoUsada.setor != Setor.GOLEIRO
-                        }.toList(),
-                        gkJogadorDefesa    = gk?.jogador?.defesa ?: 70,
-                        dadosAdversario    = dadosAdv,
-                        isTimeCasaOJogador = isTimeCasaOJogador,
-                        timeCasaId         = resultado.timeCasaId,
-                        timeForaId         = resultado.timeForaId,
-                        nomeTimeJogador    = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora,
-                        nomeAdversario     = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa,
-                        agregadoJogador    = if (isTimeCasaOJogador) resultado.golsAgregadoCasa else resultado.golsAgregadoFora,
-                        agregadoAdversario = if (isTimeCasaOJogador) resultado.golsAgregadoFora else resultado.golsAgregadoCasa,
-                        onConcluir         = { res -> onPenaltisConfirmados?.invoke(res) }
-                    )
-                } else {
-                    // Dados ainda carregando
-                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-            } else if (resultado.precisaPenaltis && penaltisResultado != null) {
-                PenaltiResultadoPainel(
-                    penaltis      = penaltisResultado,
-                    nomeTimeCasa  = nomeTimeCasa,
-                    nomeTimeFora  = nomeTimeFora,
-                    timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId,
-                    onConcluir    = onSimulacaoFinalizada
-                )
-            } else {
-                EstatisticasPartidaCard(
-                    estatisticasCasa = resultado.estatisticasCasa,
-                    estatisticasFora = resultado.estatisticasFora,
-                    nomeTimeCasa = nomeTimeCasa,
-                    nomeTimeFora = nomeTimeFora
-                )
-                NotasDaPartidaCard(
-                    resultado          = resultado,
-                    escalacaoJogador   = escalacaoJogador,
-                    isTimeCasaOJogador = isTimeCasaOJogador
-                )
-                Button(
-                    onClick = onSimulacaoFinalizada,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Text("Voltar ao painel")
-                }
+        // Spinner enquanto dadosPenaltisAdversario ainda não chegou
+        if (simulacaoEncerrada && resultado.precisaPenaltis && !penaltisInterativoConcluido && penaltisResultado == null) {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
         }
     }
@@ -760,49 +756,48 @@ private fun EstatisticasTab(
     nomeTimeCasa: String,
     nomeTimeFora: String
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        item {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    nomeTimeCasa,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1565C0),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-                Spacer(Modifier.width(72.dp))
-                Text(
-                    nomeTimeFora,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFC62828),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-            }
-            HorizontalDivider()
-            Spacer(Modifier.height(4.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                nomeTimeCasa,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1565C0),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+            Spacer(Modifier.width(72.dp))
+            Text(
+                nomeTimeFora,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFC62828),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
         }
-        item { EstatisticaRow("Finalizações",       estatisticasCasa.chutes,          estatisticasFora.chutes) }
-        item { EstatisticaRow("No alvo",            estatisticasCasa.chutesNoGol,     estatisticasFora.chutesNoGol) }
-        item { EstatisticaRow("Defesas do goleiro", estatisticasCasa.defesasGoleiro,  estatisticasFora.defesasGoleiro) }
-        item { EstatisticaRow("Posse de bola",      estatisticasCasa.posse,           estatisticasFora.posse, sufixo = "%") }
-        item { EstatisticaRow("Passes errados",     estatisticasCasa.passesErrados,   estatisticasFora.passesErrados, invertido = true) }
-        item { EstatisticaRow("Faltas",             estatisticasCasa.faltas,          estatisticasFora.faltas,        invertido = true) }
-        item { EstatisticaRow("Cartões amarelos",   estatisticasCasa.cartaoAmarelo,   estatisticasFora.cartaoAmarelo, invertido = true) }
-        item { EstatisticaRow("Cartões vermelhos",  estatisticasCasa.cartaoVermelho,  estatisticasFora.cartaoVermelho, invertido = true) }
+        HorizontalDivider()
+        Spacer(Modifier.height(4.dp))
+        EstatisticaRow("Finalizações",       estatisticasCasa.chutes,          estatisticasFora.chutes)
+        EstatisticaRow("No alvo",            estatisticasCasa.chutesNoGol,     estatisticasFora.chutesNoGol)
+        EstatisticaRow("Defesas do goleiro", estatisticasCasa.defesasGoleiro,  estatisticasFora.defesasGoleiro)
+        EstatisticaRow("Posse de bola",      estatisticasCasa.posse,           estatisticasFora.posse, sufixo = "%")
+        EstatisticaRow("Passes errados",     estatisticasCasa.passesErrados,   estatisticasFora.passesErrados, invertido = true)
+        EstatisticaRow("Faltas",             estatisticasCasa.faltas,          estatisticasFora.faltas,        invertido = true)
+        EstatisticaRow("Cartões amarelos",   estatisticasCasa.cartaoAmarelo,   estatisticasFora.cartaoAmarelo, invertido = true)
+        EstatisticaRow("Cartões vermelhos",  estatisticasCasa.cartaoVermelho,  estatisticasFora.cartaoVermelho, invertido = true)
     }
 }
 
@@ -1026,6 +1021,183 @@ private fun notaColor(nota: Float): Color = when {
     nota >= 6.5f -> Color(0xFF2196F3)
     nota >= 5.0f -> Color(0xFFFFC107)
     else         -> Color(0xFFF44336)
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Card de resultado final — tabs Estatísticas / Notas
+// ─────────────────────────────────────────────────────────────────────
+@Composable
+private fun ResultadoFinalCard(
+    estatisticasCasa: EstatisticasTime,
+    estatisticasFora: EstatisticasTime,
+    nomeTimeCasa: String,
+    nomeTimeFora: String,
+    resultado: ResultadoPartida,
+    escalacaoJogador: Escalacao?,
+    isTimeCasaOJogador: Boolean
+) {
+    var abaAtiva by remember { mutableIntStateOf(0) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column {
+            TabRow(selectedTabIndex = abaAtiva) {
+                Tab(
+                    selected = abaAtiva == 0,
+                    onClick  = { abaAtiva = 0 },
+                    text     = { Text("Estatísticas") }
+                )
+                Tab(
+                    selected = abaAtiva == 1,
+                    onClick  = { abaAtiva = 1 },
+                    text     = { Text("Notas") }
+                )
+            }
+            when (abaAtiva) {
+                0 -> EstatisticasTab(
+                    estatisticasCasa = estatisticasCasa,
+                    estatisticasFora = estatisticasFora,
+                    nomeTimeCasa     = nomeTimeCasa,
+                    nomeTimeFora     = nomeTimeFora
+                )
+                1 -> NotasConteudo(
+                    resultado          = resultado,
+                    escalacaoJogador   = escalacaoJogador,
+                    isTimeCasaOJogador = isTimeCasaOJogador
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotasConteudo(
+    resultado: ResultadoPartida,
+    escalacaoJogador: Escalacao?,
+    isTimeCasaOJogador: Boolean
+) {
+    if (resultado.notasJogadores.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Notas não disponíveis nesta partida",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    // Deriva os IDs do time do jogador diretamente dos eventos (mais confiável)
+    val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+    val playerTeamIds = resultado.eventos
+        .filter { (it.tipo == TipoEvento.PARTICIPOU || it.tipo == TipoEvento.SUBSTITUICAO_ENTRA)
+                   && it.timeId == timeJogadorId }
+        .map { it.jogadorId }
+        .toSet()
+
+    // Mapa de lookup para nome/posição — proveniente da escalação (opcional)
+    val jogadoresInfoMap = ((escalacaoJogador?.titulares ?: emptyList()) +
+                            (escalacaoJogador?.reservas  ?: emptyList()))
+        .associate { it.jogador.id to it.jogador }
+
+    val notasDoTime = resultado.notasJogadores
+        .filter { (id, _) -> id in playerTeamIds }
+        .entries.sortedByDescending { it.value }
+
+    if (notasDoTime.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Notas não disponíveis nesta partida",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    val mediaTime = notasDoTime.map { it.value }.average().toFloat()
+
+    val substitutosQueEntraram = resultado.eventos
+        .filter { it.tipo == TipoEvento.SUBSTITUICAO_ENTRA && it.timeId == timeJogadorId }
+        .map { it.jogadorId }
+        .toSet()
+
+    Column(modifier = Modifier.padding(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Notas da Partida",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Média: ${"%.1f".format(mediaTime)}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = notaColor(mediaTime)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider()
+        notasDoTime.forEach { (jogadorId, nota) ->
+            val j = jogadoresInfoMap[jogadorId]
+            val ehSub = jogadorId in substitutosQueEntraram
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        j?.posicao?.abreviacao ?: "?",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(28.dp)
+                    )
+                    Text(
+                        j?.nomeAbreviado ?: "#$jogadorId",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    if (ehSub) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "↑ Sub",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                Text(
+                    "%.1f".format(nota),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = notaColor(nota)
+                )
+            }
+        }
+    }
 }
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
@@ -1677,12 +1849,14 @@ private fun IntervaloPainel(
                 )
                 3 -> BancoTab(reservas = reservas)
                 4 -> if (estatisticasCasa != null && estatisticasFora != null) {
-                    EstatisticasTab(
-                        estatisticasCasa = estatisticasCasa,
-                        estatisticasFora = estatisticasFora,
-                        nomeTimeCasa = nomeTimeCasaStats,
-                        nomeTimeFora = nomeTimeForaStats
-                    )
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        EstatisticasTab(
+                            estatisticasCasa = estatisticasCasa,
+                            estatisticasFora = estatisticasFora,
+                            nomeTimeCasa = nomeTimeCasaStats,
+                            nomeTimeFora = nomeTimeForaStats
+                        )
+                    }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Estatísticas não disponíveis", style = MaterialTheme.typography.bodyMedium)

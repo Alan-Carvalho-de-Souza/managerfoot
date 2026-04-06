@@ -258,11 +258,18 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         eventos.sortBy { it.minuto }
 
         // Estatísticas derivadas
-        val posseCasa = (50 + ((probCasa - 0.5) * 40)).roundToInt().coerceIn(30, 70)
-        val chutesCasa = golsCasa * rng.nextInt(3, 6) + rng.nextInt(2, 5)
-        val chutesFora = golsFora * rng.nextInt(3, 6) + rng.nextInt(2, 5)
-        val chutesCasaNoGol = golsCasa + rng.nextInt(0, 3)
-        val chutesForaNoGol = golsFora + rng.nextInt(0, 3)
+        // Posse de bola proporcional à dominância (probCasa/probFora já refletem forças reais)
+        val posseCasa = (50 + ((probCasa - 0.5) * 60)).roundToInt().coerceIn(30, 70)
+        // Finalizações baseadas na dominância — time dominante cria mais chances mesmo sem converter
+        val totalChutes = rng.nextInt(18, 30)
+        val chutesCasa = ((totalChutes * probCasa).roundToInt() + rng.nextInt(0, 3))
+            .coerceIn(golsCasa + 2, 22)
+        val chutesFora = ((totalChutes * probFora).roundToInt() + rng.nextInt(0, 3))
+            .coerceIn(golsFora + 2, 22)
+        // Chutes no alvo = gols marcados + defesas difíceis exigidas ao goleiro adversário
+        val chutesCasaNoGol = (golsCasa + rng.nextInt(1, 5)).coerceIn(golsCasa, chutesCasa)
+        val chutesForaNoGol = (golsFora + rng.nextInt(1, 5)).coerceIn(golsFora, chutesFora)
+        // Defesas do goleiro = chutes no alvo que não entraram
         val defesasGoleiroCasa = (chutesForaNoGol - golsFora).coerceAtLeast(0)
         val defesasGoleiroFora = (chutesCasaNoGol - golsCasa).coerceAtLeast(0)
         val passesErradosCasa = ((100 - posseCasa) / 4 + rng.nextInt(5, 15)).coerceIn(5, 40)
