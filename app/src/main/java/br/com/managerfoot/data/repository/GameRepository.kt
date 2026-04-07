@@ -1,5 +1,6 @@
 package br.com.managerfoot.data.repository
 
+import androidx.room.withTransaction
 import br.com.managerfoot.data.dao.CampeonatoDao
 import br.com.managerfoot.data.dao.ClassificacaoDao
 import br.com.managerfoot.data.dao.CopaPartidaDto
@@ -7,6 +8,7 @@ import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.dao.RankingGeralDao
+import br.com.managerfoot.data.database.AppDatabase
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.domain.engine.*
 import br.com.managerfoot.domain.model.*
@@ -17,6 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class GameRepository @Inject constructor(
+    private val db: AppDatabase,
     private val campeonatoDao: CampeonatoDao,
     private val partidaDao: PartidaDao,
     private val classificacaoDao: ClassificacaoDao,
@@ -28,6 +31,44 @@ class GameRepository @Inject constructor(
     private val estadioDao: EstadioDao
 ) {
     private val simulador = SimuladorPartida()
+
+    /**
+     * Insere times e jogadores do seed em uma única transação atômica.
+     * Se qualquer parte falhar, nenhuma linha fica no banco — evitando o
+     * estado corrompido de "times sem jogadores".
+     */
+    suspend fun inserirSeedTransacional(
+        times: List<TimeEntity>,
+        jogadores: List<JogadorEntity>
+    ) {
+        db.withTransaction {
+            db.timeDao().inserirTodos(times)
+            db.jogadorDao().inserirTodos(jogadores)
+        }
+    }
+
+    /**
+     * Retorna true se o seed está íntegro: há times E cada time possui pelo menos
+     * [ELENCO_MINIMO_SEED] jogadores associados.
+     *
+     * O limiar de [ELENCO_MINIMO_SEED] (16) cobre tanto o seed inicial (20-26 jogadores
+     * por time) quanto times em andamento de jogo que venderam jogadores — a IA mantém
+     * elencos acima de 18, portanto 16 é o piso seguro que distingue um seed válido de
+     * uma inserção parcial (crash entre inserirTodos(times) e inserirTodos(jogadores)).
+     */
+    suspend fun seedEstaIntegro(): Boolean {
+        val times = db.timeDao().buscarTodos()
+        if (times.isEmpty()) return false
+        val contagemPorTime = db.jogadorDao()
+            .contarJogadoresPorTime()
+            .associate { it.timeId to it.total }
+        return times.all { (contagemPorTime[it.id] ?: 0) >= ELENCO_MINIMO_SEED }
+    }
+
+    companion object {
+        /** Mínimo de jogadores por time para considerar o seed íntegro. */
+        private const val ELENCO_MINIMO_SEED = 16
+    }
 
     // Limpa todos os dados do jogo em ordem segura (filhos antes de pais)
     suspend fun limparTodosDados() {
@@ -65,6 +106,26 @@ class GameRepository @Inject constructor(
 
     fun observarTabela(campeonatoId: Int): Flow<List<ClassificacaoEntity>> =
         classificacaoDao.observeTabelaPorCampeonato(campeonatoId)
+
+    /**
+     * Reconstrói a classificação do zero a partir das partidas reais jogadas na liga.
+     * Garante consistência total: corrige qualquer divergência causada por falhas
+     * em updates incrementais anteriores (ex.: partidas marcadas como jogadas mas
+     * sem pontos contabilizados). Só processa partidas da liga (fase = null);
+     * partidas de Copa (fase != null) não afetam a tabela.
+     */
+    suspend fun recalcularClassificacao(campeonatoId: Int) {
+        val partidas = partidaDao.buscarPartidasJogadasDeLiga(campeonatoId)
+        classificacaoDao.resetarEstatisticas(campeonatoId)
+        for (p in partidas) {
+            val gc = p.golsCasa ?: continue   // skip if no result (safety)
+            val gf = p.golsFora ?: continue
+            val casaV = if (gc > gf) 1 else 0; val casaE = if (gc == gf) 1 else 0; val casaD = if (gc < gf) 1 else 0
+            val foraV = if (gf > gc) 1 else 0; val foraE = casaE;                    val foraD = if (gf < gc) 1 else 0
+            classificacaoDao.atualizarEstatisticas(campeonatoId, p.timeCasaId, casaV, casaE, casaD, gc, gf)
+            classificacaoDao.atualizarEstatisticas(campeonatoId, p.timeForaId, foraV, foraE, foraD, gf, gc)
+        }
+    }
 
     fun observarArtilheiros(campeonatoId: Int) = partidaDao.observeArtilheiros(campeonatoId)
     fun observarAssistentes(campeonatoId: Int) = partidaDao.observeAssistentes(campeonatoId)
@@ -112,10 +173,25 @@ class GameRepository @Inject constructor(
             .filter { !it.jogada }
 
         for (partida in partidas) {
-            simularPartidaInterna(partida)
+            try {
+                simularPartidaInterna(partida)
+            } catch (_: Exception) {
+                // Falha isolada: ignora esta partida e continua as demais
+            }
         }
 
         campeonatoDao.avancarRodada(campeonatoId)
+
+        // Treinamento/descanso automático para todos os times desta rodada
+        val timeIds = partidas.flatMap { listOf(it.timeCasaId, it.timeForaId) }.toSet()
+        aplicarTreinamentoAutomaticoIA(timeIds)
+    }
+
+    /** Aplica treino ou descanso automático para times da IA (exclui time do jogador se fornecido). */
+    private suspend fun aplicarTreinamentoAutomaticoIA(timeIds: Collection<Int>) {
+        for (timeId in timeIds) {
+            if (timeId > 0) jogadorRepository.treinarOuDescansarTimeIA(timeId)
+        }
     }
 
     /**
@@ -444,12 +520,35 @@ class GameRepository @Inject constructor(
         }
 
         // Simula demais partidas da rodada com IA
+        // Primeiro, recupera e simula partidas atrasadas de rodadas anteriores na liga do jogador
+        val atrasadasLiga = partidaDao.buscarTodasPorCampeonato(ctx.campeonatoId)
+            .filter { !it.jogada && it.rodada < ctx.rodada && it.fase == null }
+        for (partida in atrasadasLiga) {
+            if (partida.id != ctx.partidaDoJogadorId) {
+                try { simularPartidaInterna(partida) } catch (_: Exception) {}
+            }
+        }
+
+        // Simula as partidas da rodada atual com IA
         val partidas = partidaDao.buscarPorRodada(ctx.campeonatoId, ctx.rodada).filter { !it.jogada }
         for (partida in partidas) {
-            if (partida.id != ctx.partidaDoJogadorId) simularPartidaInterna(partida)
+            if (partida.id != ctx.partidaDoJogadorId) {
+                try {
+                    simularPartidaInterna(partida)
+                } catch (_: Exception) {
+                    // Falha isolada: não bloqueia o avanço da rodada
+                }
+            }
         }
 
         campeonatoDao.avancarRodada(ctx.campeonatoId)
+
+        // Treinamento/descanso automático para os times da IA na liga do jogador (exclui o time do jogador)
+        val iaTimeIdsLiga = (atrasadasLiga + partidas)
+            .flatMap { listOf(it.timeCasaId, it.timeForaId) }
+            .filter { it != ctx.timeJogadorId }
+            .toSet()
+        aplicarTreinamentoAutomaticoIA(iaTimeIdsLiga)
 
         // Simula rodada atual em todos os outros campeonatos paralelos (Séries B, C, D, Copa)
         simularRodadaEmOutrosCampeonatos(ctx.campeonatoId, outrosCampeonatoIds)
@@ -568,7 +667,8 @@ class GameRepository @Inject constructor(
         campeonatoCId: Int,
         campeonatoDId: Int,
         temporadaId: Int,
-        ano: Int
+        ano: Int,
+        timeJogadorId: Int = -1
     ): NovaTemporadaInfo {
         // ── Série A ──────────────────────────────────────────────
         val participantesA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
@@ -624,6 +724,28 @@ class GameRepository @Inject constructor(
         aplicarBonusTitulo(campeonatoBId, 0.03) // Série B +3%
         aplicarBonusTitulo(campeonatoCId, 0.02) // Série C +2%
         aplicarBonusTitulo(campeonatoDId, 0.01) // Série D +1%
+
+        // ── Premiações de títulos — somente para o time do jogador ─────────
+        // Os valores estão em centavos (1 milhão = 1_000_000_00L no padrão monetário do jogo)
+        suspend fun premiarSeJogador(campId: Int, premio: Long, desc: String) {
+            if (campId <= 0 || timeJogadorId <= 0) return
+            val campeao = classificacaoDao.buscarTop2(campId).firstOrNull() ?: return
+            if (campeao.timeId != timeJogadorId) return
+            timeRepository.creditarSaldo(timeJogadorId, premio)
+            financaDao.inserir(
+                br.com.managerfoot.data.database.entities.FinancaEntity(
+                    timeId            = timeJogadorId,
+                    temporadaId       = temporadaId,
+                    mes               = 13,  // mês 13 = encerramento da temporada
+                    receitaPremiacoes = premio,
+                    saldoFinal        = premio
+                )
+            )
+        }
+        premiarSeJogador(campeonatoAId, 20_000_000_00L, "Campeão Série A")  // R$ 20 milhões
+        premiarSeJogador(campeonatoBId,  8_000_000_00L, "Campeão Série B")  // R$  8 milhões
+        premiarSeJogador(campeonatoCId,  5_000_000_00L, "Campeão Série C")  // R$  5 milhões
+        premiarSeJogador(campeonatoDId,  2_000_000_00L, "Campeão Série D")  // R$  2 milhões
 
         // ── Desfechos (promoções / rebaixamentos) ─────────────────
         suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
@@ -740,7 +862,12 @@ class GameRepository @Inject constructor(
 
     // ── Verifica se fase atual foi concluída e avança para próxima ──
     // Retorna true se a Copa foi finalizada (Final concluída).
-    suspend fun verificarEAvancarFaseCopa(copaId: Int, anoAtual: Int): Boolean {
+    suspend fun verificarEAvancarFaseCopa(
+        copaId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
         val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaId)
         if (todasPartidas.isEmpty()) return false
 
@@ -835,6 +962,19 @@ class GameRepository @Inject constructor(
                     )
                 }
                 campeonatoDao.encerrar(copaId)
+                // Premiação Copa do Brasil → somente para o time do jogador
+                if (timeJogadorId > 0 && campeaoId == timeJogadorId) {
+                    timeRepository.creditarSaldo(timeJogadorId, 30_000_000_00L)  // R$ 30 milhões
+                    financaDao.inserir(
+                        br.com.managerfoot.data.database.entities.FinancaEntity(
+                            timeId            = timeJogadorId,
+                            temporadaId       = temporadaId,
+                            mes               = 13,
+                            receitaPremiacoes = 30_000_000_00L,
+                            saldoFinal        = 30_000_000_00L
+                        )
+                    )
+                }
                 // Copa do Brasil: +4% de reputação para o campeão
                 val campeaoCopa = timeRepository.buscarPorId(campeaoId)
                 if (campeaoCopa != null) {
@@ -1264,6 +1404,14 @@ class GameRepository @Inject constructor(
             if (campId <= 0 || campId == playerCampeonatoId) continue
             val camp = campeonatoDao.buscarPorId(campId) ?: continue
             if (camp.encerrado) continue
+
+            // Recupera e simula partidas atrasadas de rodadas já encerradas nesta liga
+            val atrasadas = partidaDao.buscarTodasPorCampeonato(campId)
+                .filter { !it.jogada && it.rodada <= camp.rodadaAtual && it.fase == null }
+            for (partida in atrasadas) {
+                try { simularPartidaInterna(partida) } catch (_: Exception) {}
+            }
+
             val proximaRodada = camp.rodadaAtual + 1
             if (proximaRodada <= camp.totalRodadas) {
                 simularRodada(campId, proximaRodada)
@@ -1417,8 +1565,21 @@ class GameRepository @Inject constructor(
     }
 
     private suspend fun gerarEscalacaoIA(timeId: Int): Escalacao {
-        val time = timeRepository.buscarPorId(timeId)
-            ?: throw IllegalStateException("Time $timeId não encontrado")
+        val time = timeRepository.buscarPorId(timeId) ?: Time(
+            id                  = timeId,
+            nome                = "Time $timeId",
+            cidade              = "",
+            estado              = "",
+            nivel               = 1,
+            divisao             = 1,
+            saldo               = 0L,
+            estadioCapacidade   = 0,
+            precoIngresso       = 0L,
+            taticaFormacao      = "4-4-2",
+            estiloJogo          = EstiloJogo.EQUILIBRADO,
+            reputacao           = 50f,
+            controladoPorJogador = false
+        )
         val elenco = jogadorRepository.buscarDisponiveis(timeId)
         return IATimeRival.gerarEscalacao(time, elenco)
     }
@@ -1460,15 +1621,18 @@ class GameRepository @Inject constructor(
             timeRepository.creditarSaldo(resultado.timeCasaId, receita)
         }
 
-        partidaDao.inserirEventos(resultado.eventos.map { ev ->
-            EventoPartidaEntity(
-                partidaId = resultado.partidaId,
-                jogadorId = ev.jogadorId,
-                minuto = ev.minuto,
-                tipo = ev.tipo,
-                descricao = ev.descricao
-            )
-        })
+        partidaDao.inserirEventos(resultado.eventos
+            .filter { ev -> ev.jogadorId > 0 }
+            .map { ev ->
+                EventoPartidaEntity(
+                    partidaId = resultado.partidaId,
+                    jogadorId = ev.jogadorId,
+                    minuto = ev.minuto,
+                    tipo = ev.tipo,
+                    descricao = ev.descricao
+                )
+            }
+        )
 
         val (deltaCasa, deltaFora) = MotorCampeonato.calcularDelta(resultado)
         val campeonatoId = buscarCampeonatoIdDaPartida(resultado.partidaId)
@@ -1507,7 +1671,7 @@ class GameRepository @Inject constructor(
         // aplica também a evolução/regressão incremental baseada na performance
         val notas = calcularNotasJogadores(resultado)
         notas.forEach { (jogadorId, nota) ->
-            jogadorRepository.atualizarNotaEEvolucao(jogadorId, nota)
+            if (jogadorId > 0) jogadorRepository.atualizarNotaEEvolucao(jogadorId, nota)
         }
 
         // Atualiza fadiga: participantes perdem energia, quem ficou no banco recupera.

@@ -30,6 +30,15 @@ interface ClassificacaoDao {
     @Query("DELETE FROM classificacoes")
     suspend fun deleteAll()
 
+    /** Zera todos os contadores de uma liga para recalcular do zero. */
+    @Query("""
+        UPDATE classificacoes SET
+            jogos = 0, vitorias = 0, empates = 0, derrotas = 0,
+            pontos = 0, golsPro = 0, golsContra = 0, saldoGols = 0, aproveitamento = 0
+        WHERE campeonatoId = :campeonatoId
+    """)
+    suspend fun resetarEstatisticas(campeonatoId: Int)
+
     // Atualiza estatísticas após uma partida (casa)
     @Query("""
         UPDATE classificacoes SET

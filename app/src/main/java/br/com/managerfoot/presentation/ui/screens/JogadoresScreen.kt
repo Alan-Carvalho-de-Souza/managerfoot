@@ -39,6 +39,7 @@ fun JogadoresScreen(
     val idadeMaxFiltro    by vm.idadeMaxFiltro.collectAsState()
     val saldo             by vm.saldo.collectAsState()
     val mensagem          by vm.mensagem.collectAsState()
+    val nomesPorTime      by vm.nomesPorTime.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -174,6 +175,7 @@ fun JogadoresScreen(
                     forcaMin           = forcaMinFiltro,
                     idadeMax           = idadeMaxFiltro,
                     saldo              = saldo,
+                    nomesPorTime       = nomesPorTime,
                     onFiltrarPosicao   = vm::filtrarPosicao,
                     onFiltrarForcaMin  = vm::filtrarForcaMin,
                     onFiltrarIdadeMax  = vm::filtrarIdadeMax,
@@ -294,6 +296,7 @@ private fun PesquisaTab(
     forcaMin:         Int,
     idadeMax:         Int,
     saldo:            Long,
+    nomesPorTime:     Map<Int, String>,
     onFiltrarPosicao: (Posicao?) -> Unit,
     onFiltrarForcaMin:(Int) -> Unit,
     onFiltrarIdadeMax:(Int) -> Unit,
@@ -392,9 +395,10 @@ private fun PesquisaTab(
         ) {
             items(jogadores, key = { it.id }) { jogador ->
                 JogadorPesquisaItem(
-                    jogador  = jogador,
-                    saldo    = saldo,
-                    onClick  = { onClicarJogador(jogador) }
+                    jogador      = jogador,
+                    saldo        = saldo,
+                    nomeTime     = nomesPorTime[jogador.timeId],
+                    onClick      = { onClicarJogador(jogador) }
                 )
             }
         }
@@ -403,9 +407,10 @@ private fun PesquisaTab(
 
 @Composable
 private fun JogadorPesquisaItem(
-    jogador: Jogador,
-    saldo:   Long,
-    onClick: () -> Unit
+    jogador:  Jogador,
+    saldo:    Long,
+    nomeTime: String?,
+    onClick:  () -> Unit
 ) {
     val podeContratar = saldo >= jogador.valorMercado
     Card(
@@ -430,6 +435,15 @@ private fun JogadorPesquisaItem(
                 Text(
                     text     = "${jogador.idade} anos · ${jogador.posicao.name.replace("_", " ")}",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text     = nomeTime ?: "Livre no mercado",
+                    fontSize = 11.sp,
+                    fontWeight = if (nomeTime == null) FontWeight.Medium else FontWeight.Normal,
+                    color    = if (nomeTime == null)
+                        MaterialTheme.colorScheme.tertiary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Column(horizontalAlignment = Alignment.End) {

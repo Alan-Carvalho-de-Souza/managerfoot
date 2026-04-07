@@ -37,8 +37,7 @@ fun TabelaScreen(
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
     LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
-        val divisaoJogador = times.find { it.id == timeJogadorId }?.divisao ?: 1
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, divisaoJogador)
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, timeJogadorId)
     }
 
     // Opções de divisão: apenas as que têm campeonato ativo (Copa não tem tabela)

@@ -56,15 +56,11 @@ class InicioViewModel @Inject constructor(
     fun iniciarSelecionarTime() = viewModelScope.launch {
         _uiState.value = InicioUiState.Carregando
         try {
-            // Só insere o seed quando o banco está vazio (nenhum time cadastrado).
-            // Se já houver times (jogo em andamento), preserva todos os dados para não
-            // corromper campeonatos, partidas e progresso do jogo atual caso o usuário
-            // feche o app antes de confirmar a seleção do novo time.
-            val timesExistentes = timeRepository.observeTodos().first()
-            if (timesExistentes.isEmpty()) {
+            // Verifica se o seed já está íntegro (times E jogadores presentes).
+            // Isso detecta o estado corrompido de crash entre as duas inserções.
+            if (!gameRepository.seedEstaIntegro()) {
                 val seed = seedDataSource.carregar()
-                timeDao.inserirTodos(seed.times)
-                jogadorDao.inserirTodos(seed.jogadores)
+                gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
             }
             _uiState.value = InicioUiState.SelecionandoTime
         } catch (e: Exception) {
@@ -81,10 +77,9 @@ class InicioViewModel @Inject constructor(
             timeDao.deleteAll()
             jogadorDao.deleteAll()
 
-            // Insere dados frescos do seed
+            // Insere dados frescos do seed em uma única transação atômica
             val seed = seedDataSource.carregar()
-            timeDao.inserirTodos(seed.times)
-            jogadorDao.inserirTodos(seed.jogadores)
+            gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
 
             // Marca apenas o time escolhido como controlado pelo jogador
             val timeEntity = timeDao.buscarPorId(timeId) ?: run {
@@ -362,7 +357,12 @@ class DashboardViewModel @Inject constructor(
             _resultadoSimulado.value = resultadoFinal
 
             if (save.copaId > 0 && ctx.campeonatoId == save.copaId && !resultadoFinal.precisaPenaltis) {
-                gameRepository.verificarEAvancarFaseCopa(save.copaId, save.anoAtual)
+                gameRepository.verificarEAvancarFaseCopa(
+                    copaId        = save.copaId,
+                    anoAtual      = save.anoAtual,
+                    timeJogadorId = save.timeIdJogador,
+                    temporadaId   = save.temporadaId
+                )
             }
             if (save.copaId > 0 && ctx.campeonatoId == save.copaId && resultadoFinal.precisaPenaltis) {
                 _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
@@ -461,7 +461,8 @@ class DashboardViewModel @Inject constructor(
                 campeonatoCId = save.campeonatoCId,
                 campeonatoDId = save.campeonatoDId,
                 temporadaId   = save.temporadaId,
-                ano           = save.anoAtual
+                ano           = save.anoAtual,
+                timeJogadorId = save.timeIdJogador
             )
             // Determina em qual divisão o jogador estará na próxima temporada
             val divJogador = timeRepository.buscarPorId(save.timeIdJogador)?.divisao ?: 1
@@ -969,18 +970,28 @@ class TabelaViewModel @Inject constructor(
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    // Job do collector ativo — cancelado sempre que a divisão muda
+    private var coletaJob: kotlinx.coroutines.Job? = null
+
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
         campeonatoDId = campDId
-        _divisaoSelecionada.value = divisaoInicial
         launch { timeRepository.observeTodos().collect { _times.value = it } }
-        coletarTabela(campIdParaDivisao(divisaoInicial))
+        // Recalcula todas as classificações do zero a partir das partidas reais
+        listOf(campAId, campBId, campCId, campDId).filter { it > 0 }.forEach { id ->
+            gameRepository.recalcularClassificacao(id)
+        }
+        // Determina a divisão inicial pelo time do jogador; usa Série A como fallback
+        val allTimes = timeRepository.observeTodos().first { it.isNotEmpty() }
+        val divisaoJogador = if (timeJogadorId > 0) allTimes.find { it.id == timeJogadorId }?.divisao ?: 1 else 1
+        _divisaoSelecionada.value = divisaoJogador
+        coletarTabela(campIdParaDivisao(divisaoJogador))
     }
 
-    fun selecionarDivisao(divisao: Int) = viewModelScope.launch {
-        if (_divisaoSelecionada.value == divisao) return@launch
+    fun selecionarDivisao(divisao: Int) {
+        if (_divisaoSelecionada.value == divisao) return
         _divisaoSelecionada.value = divisao
         coletarTabela(campIdParaDivisao(divisao))
     }
@@ -989,15 +1000,18 @@ class TabelaViewModel @Inject constructor(
         1 -> campeonatoAId; 2 -> campeonatoBId; 3 -> campeonatoCId; else -> campeonatoDId
     }
 
-    private fun coletarTabela(campId: Int) = viewModelScope.launch {
-        if (campId <= 0) { _tabela.value = emptyList(); return@launch }
-        gameRepository.observarTabela(campId).collect { lista ->
-            _tabela.value = lista.sortedWith(
-                compareByDescending<ClassificacaoEntity> { it.pontos }
-                    .thenByDescending { it.vitorias }
-                    .thenByDescending { it.saldoGols }
-                    .thenByDescending { it.golsPro }
-            )
+    private fun coletarTabela(campId: Int) {
+        coletaJob?.cancel()
+        coletaJob = viewModelScope.launch {
+            if (campId <= 0) { _tabela.value = emptyList(); return@launch }
+            gameRepository.observarTabela(campId).collect { lista ->
+                _tabela.value = lista.sortedWith(
+                    compareByDescending<ClassificacaoEntity> { it.pontos }
+                        .thenByDescending { it.vitorias }
+                        .thenByDescending { it.saldoGols }
+                        .thenByDescending { it.golsPro }
+                )
+            }
         }
     }
 }
@@ -1753,6 +1767,11 @@ class JogadoresViewModel @Inject constructor(
 
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+
+    val nomesPorTime: StateFlow<Map<Int, String>> =
+        timeRepository.observeTodos()
+            .map { times -> times.associate { it.id to it.nome } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val resultadoPesquisa: StateFlow<List<Jogador>> = combine(
         _todosList, _posicaoFiltro, _forcaMinFiltro, _idadeMaxFiltro

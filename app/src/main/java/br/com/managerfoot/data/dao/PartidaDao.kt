@@ -22,6 +22,10 @@ interface PartidaDao {
     """)
     suspend fun buscarPorRodada(campeonatoId: Int, rodada: Int): List<PartidaEntity>
 
+    /** Retorna todas as partidas da liga (fase IS NULL) já jogadas — usada para recalcular a classificação. */
+    @Query("SELECT * FROM partidas WHERE campeonatoId = :campeonatoId AND jogada = 1 AND fase IS NULL")
+    suspend fun buscarPartidasJogadasDeLiga(campeonatoId: Int): List<PartidaEntity>
+
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0

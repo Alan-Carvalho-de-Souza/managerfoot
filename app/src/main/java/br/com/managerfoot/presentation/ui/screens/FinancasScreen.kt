@@ -22,7 +22,8 @@ import br.com.managerfoot.presentation.viewmodel.FinancasViewModel
 
 private val NOMES_MESES_FIN = listOf(
     "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+    "Encerramento"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -177,6 +178,8 @@ private fun ReceitasTab(
     val totalVendas = vendas.sumOf { it.valor }
     val patrocinios = historico.filter { it.receitaPatrocinio > 0 }
     val totalPatrocinio = patrocinios.sumOf { it.receitaPatrocinio }
+    val premiacoes = historico.filter { it.receitaPremiacoes > 0 }
+    val totalPremiacoes = premiacoes.sumOf { it.receitaPremiacoes }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -206,10 +209,16 @@ private fun ReceitasTab(
                         Text("Vendas de jogadores", style = MaterialTheme.typography.bodySmall)
                         Text(formatarSaldo(totalVendas), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
+                    if (totalPremiacoes > 0) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Premiações", style = MaterialTheme.typography.bodySmall)
+                            Text(formatarSaldo(totalPremiacoes), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Total", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Text(formatarSaldo(totalBilheteria + totalPatrocinio + totalVendas), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(formatarSaldo(totalBilheteria + totalPatrocinio + totalVendas + totalPremiacoes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -239,7 +248,15 @@ private fun ReceitasTab(
             }
         }
 
-        if (partidas.isEmpty() && vendas.isEmpty() && patrocinios.isEmpty()) {
+        if (premiacoes.isNotEmpty()) {
+            item { SecaoHeader("Premiações") }
+            items(premiacoes) { financa ->
+                PremiacaoRow(financa)
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+        }
+
+        if (partidas.isEmpty() && vendas.isEmpty() && patrocinios.isEmpty() && premiacoes.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
@@ -337,6 +354,36 @@ private fun VendaRow(venda: TransferenciaDetalhe) {
         }
         Text(
             formatarSaldo(venda.valor),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun PremiacaoRow(financa: FinancaEntity) {
+    val mesNome = NOMES_MESES_FIN.getOrElse(financa.mes) { "Mês ${financa.mes}" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Prêmio de Campeão",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                mesNome,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            formatarSaldo(financa.receitaPremiacoes),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary

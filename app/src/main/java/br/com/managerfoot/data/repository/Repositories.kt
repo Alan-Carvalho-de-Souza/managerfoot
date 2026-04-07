@@ -616,6 +616,59 @@ class JogadorRepository @Inject constructor(
     }
 
     /**
+     * Aplica treino ou descanso automático para todos os jogadores de um time da IA.
+     * - Fadiga < 65%  → descansa (+10% fadiga, sem progressoEvolucao)
+     * - Fadiga ≥ 65%  → treina (-5% fadiga, acumula progressoEvolucao;
+     *                   ao cruzar 1.0: TODOS os seis atributos ganham +1)
+     * Respeita treinouNestaCiclo para não processar o mesmo jogador duas vezes por ciclo.
+     */
+    suspend fun treinarOuDescansarTimeIA(timeId: Int) {
+        val elenco = jogadorDao.buscarElencoCompletoDoTime(timeId)
+        val atualizados = elenco.mapNotNull { j ->
+            if (j.aposentado || j.treinouNestaCiclo) return@mapNotNull null
+            if (j.fadiga < 0.65f) {
+                // Descanso: recupera fadiga sem acumular progresso
+                j.copy(fadiga = (j.fadiga + 0.10f).coerceIn(0f, 1f), treinouNestaCiclo = true)
+            } else {
+                // Treino: reduz fadiga e acumula progressoEvolucao
+                val deltaProgress: Float = when {
+                    j.categoriaBase   -> 0.25f
+                    j.idade in 16..24 -> 0.10f
+                    j.idade in 25..32 -> 0.06f
+                    else              -> 0.02f
+                }
+                var prog        = j.progressoEvolucao + deltaProgress
+                var tecnica     = j.tecnica
+                var passe       = j.passe
+                var velocidade  = j.velocidade
+                var finalizacao = j.finalizacao
+                var defesa      = j.defesa
+                var fisico      = j.fisico
+                // Ao cruzar 1.0: todos os atributos ganham +1 (não só os principais)
+                while (prog >= 1.0f) {
+                    tecnica     = (tecnica     + 1).coerceIn(1, 99)
+                    passe       = (passe       + 1).coerceIn(1, 99)
+                    velocidade  = (velocidade  + 1).coerceIn(1, 99)
+                    finalizacao = (finalizacao + 1).coerceIn(1, 99)
+                    defesa      = (defesa      + 1).coerceIn(1, 99)
+                    fisico      = (fisico      + 1).coerceIn(1, 99)
+                    prog -= 1.0f
+                }
+                val novaForca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
+                j.copy(
+                    fadiga            = (j.fadiga - 0.05f).coerceIn(0f, 1f),
+                    progressoEvolucao = prog,
+                    tecnica = tecnica, passe = passe, velocidade = velocidade,
+                    finalizacao = finalizacao, defesa = defesa, fisico = fisico,
+                    forca = novaForca,
+                    treinouNestaCiclo = true
+                )
+            }
+        }
+        if (atualizados.isNotEmpty()) jogadorDao.atualizarTodos(atualizados)
+    }
+
+    /**
      * Coloca um jogador para descansar no ciclo atual (ao invés de treinar):
      * - Recupera +10% de fadiga (até máx 100%)
      * - Marca treinouNestaCiclo = true (consome a ação do ciclo)

@@ -6,6 +6,8 @@ import br.com.managerfoot.data.database.entities.JogadorEntity
 import br.com.managerfoot.data.database.entities.Posicao
 import kotlinx.coroutines.flow.Flow
 
+data class TimeJogadoresCount(val timeId: Int, val total: Int)
+
 // ─────────────────────────────────────────────
 
 //  JogadorDao
@@ -80,6 +82,9 @@ interface JogadorDao {
 
     @Query("DELETE FROM jogadores")
     suspend fun deleteAll()
+
+    @Query("SELECT timeId, COUNT(*) AS total FROM jogadores WHERE timeId IS NOT NULL GROUP BY timeId")
+    suspend fun contarJogadoresPorTime(): List<TimeJogadoresCount>
 
     // ─── Escalação pré-definida pelo jogador ───────────────────────────────────
 

@@ -18,6 +18,9 @@ interface TimeDao {
     @Query("SELECT * FROM times WHERE id = :id")
     fun observePorId(id: Int): Flow<TimeEntity?>
 
+    @Query("SELECT * FROM times")
+    suspend fun buscarTodos(): List<TimeEntity>
+
     @Query("SELECT * FROM times WHERE controladoPorJogador = 1 LIMIT 1")
     suspend fun buscarTimeDoJogador(): TimeEntity?
 
