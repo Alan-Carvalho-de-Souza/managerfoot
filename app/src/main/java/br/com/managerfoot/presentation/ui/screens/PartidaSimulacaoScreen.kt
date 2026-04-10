@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.data.database.entities.TipoEvento
+import br.com.managerfoot.domain.engine.CalculadoraForca
 import br.com.managerfoot.domain.model.Escalacao
 import br.com.managerfoot.domain.model.EventoSimulado
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
@@ -42,9 +43,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-//  Dados de um evento enriquecido para exibiÃ§Ã£o
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
+//  Dados de um evento enriquecido para exibição
+// ─────────────────────────────────────────────
 data class EventoExibicao(
     val minuto: Int,
     val tipo: TipoEvento,
@@ -64,9 +65,9 @@ data class SubstituicaoIntervalo(
     val ehLesao: Boolean = false  // true = substituição forçada por lesão (não repetir no feed do intervalo)
 )
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 //  PartidaSimulacaoScreen
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 @Composable
 fun PartidaSimulacaoScreen(
     resultado: ResultadoPartida,
@@ -76,6 +77,7 @@ fun PartidaSimulacaoScreen(
     escudoTimeFora: String = "",
     nomeEstadio: String = "",
     escalacaoJogador: Escalacao? = null,
+    escalacaoAdversario: Escalacao? = null,
     isTimeCasaOJogador: Boolean = true,
     penaltisResultado: ResultadoPenaltis? = null,
     dadosPenaltisAdversario: DadosPenaltiAdversario? = null,
@@ -118,6 +120,11 @@ fun PartidaSimulacaoScreen(
     // ID do time controlado pelo jogador (constante para esta composição)
     val jogadorTimeId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
 
+    // ID e estado dinâmico do time adversário (titulares atualizados conforme subs da IA)
+    val adversarioTimeId = if (isTimeCasaOJogador) resultado.timeForaId else resultado.timeCasaId
+    val titularesAdversarioAtuais = remember(resultado.partidaId) { mutableStateListOf<JogadorNaEscalacao>() }
+    val reservasAdversarioAtuais  = remember(resultado.partidaId) { mutableStateListOf<JogadorNaEscalacao>() }
+
     // Lesão em campo: pausa a animação para o jogador escolher o substituto
     var pausadoPorLesao by remember(resultado.partidaId) { mutableStateOf(false) }
     var jogadorLesionadoAtual by remember(resultado.partidaId) { mutableStateOf<JogadorNaEscalacao?>(null) }
@@ -152,7 +159,7 @@ fun PartidaSimulacaoScreen(
     val acrescimo1Tempo = remember(resultado.partidaId) { (1..5).random() }
     val acrescimo2Tempo = remember(resultado.partidaId) { (2..7).random() }
 
-    // Inicializa titulares/reservas do painel a partir da escalaÃ§Ã£o passada
+    // Inicializa titulares/reservas do painel a partir da escalação passada
     LaunchedEffect(escalacaoJogador) {
         if (escalacaoJogador != null) {
             titularesAtuais.clear()
@@ -162,13 +169,23 @@ fun PartidaSimulacaoScreen(
         }
     }
 
+    // Inicializa titulares/reservas do adversário (para exibição de força em tempo real)
+    LaunchedEffect(escalacaoAdversario) {
+        if (escalacaoAdversario != null) {
+            titularesAdversarioAtuais.clear()
+            titularesAdversarioAtuais.addAll(escalacaoAdversario.titulares)
+            reservasAdversarioAtuais.clear()
+            reservasAdversarioAtuais.addAll(escalacaoAdversario.reservas)
+        }
+    }
+
     // Simulação do relógio e eventos — reinicia se a partida mudar (chave = partidaId)
     LaunchedEffect(resultado.partidaId) {
-        // PrÃ©-jogo
+        // Pré-jogo
         faseAtual = "PRÉ-JOGO"
         delay(1500)
 
-        // Primeiro tempo (0-45 + acrÃ©scimo)
+        // Primeiro tempo (0-45 + acréscimo)
         faseAtual = "1º TEMPO"
         val limiteT1 = 45 + acrescimo1Tempo
         for (minuto in 1..limiteT1) {
@@ -209,6 +226,17 @@ fun PartidaSimulacaoScreen(
                         }
                     }
                 }
+                // Rastreia substituições da IA adversária para recalcular força exibida
+                if (ev.tipo == TipoEvento.SUBSTITUICAO_SAI && ev.timeId == adversarioTimeId) {
+                    titularesAdversarioAtuais.removeIf { it.jogador.id == ev.jogadorId }
+                }
+                if (ev.tipo == TipoEvento.SUBSTITUICAO_ENTRA && ev.timeId == adversarioTimeId) {
+                    val entrando = reservasAdversarioAtuais.find { it.jogador.id == ev.jogadorId }
+                    if (entrando != null) {
+                        titularesAdversarioAtuais.add(entrando)
+                        reservasAdversarioAtuais.remove(entrando)
+                    }
+                }
                 // launch{} isola a animação: se o usuário scrollar manualmente,
                 // apenas o filho é cancelado — o loop do relógio continua.
                 launch { listState.animateScrollToItem(0) }
@@ -226,19 +254,19 @@ fun PartidaSimulacaoScreen(
             if (def1 != null) { def1.await(); mexerNoTimeDeferred.value = null }
         }
 
-        // Intervalo â€” exibe separador e pausa para intervenÃ§Ã£o do jogador
+        // Intervalo — exibe separador e pausa para intervenção do jogador
         faseAtual = "INTERVALO"
         eventosExibidos.add(
             0, EventoExibicao(45, TipoEvento.GOL, "--- Intervalo ---", -1, "")
         )
 
-        // SÃ³ mostra o painel se o jogador tem dados de escalaÃ§Ã£o
+        // Só mostra o painel se o jogador tem dados de escalação
         if (escalacaoJogador != null) {
             pausadoNoIntervalo = true
             intervaloDeferred.await()
             pausadoNoIntervalo = false
 
-            // Injeta eventos de substituiÃ§Ã£o no feed
+            // Injeta eventos de substituição no feed
             val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
             val nomeTime = if (isTimeCasaOJogador) nomeTimeCasa else nomeTimeFora
             // Apenas subs do intervalo — as de lesão já foram injetadas no feed durante o 1º tempo
@@ -315,6 +343,17 @@ fun PartidaSimulacaoScreen(
                             eventosExibidos.add(0, EventoExibicao(minSub, TipoEvento.SUBSTITUICAO_ENTRA, "\u2191 ${substituto.jogador.nomeAbreviado}", ev.timeId, nomeTimeJog))
                             launch { listState.animateScrollToItem(0) }
                         }
+                    }
+                }
+                // Rastreia substituições da IA adversária para recalcular força exibida
+                if (ev.tipo == TipoEvento.SUBSTITUICAO_SAI && ev.timeId == adversarioTimeId) {
+                    titularesAdversarioAtuais.removeIf { it.jogador.id == ev.jogadorId }
+                }
+                if (ev.tipo == TipoEvento.SUBSTITUICAO_ENTRA && ev.timeId == adversarioTimeId) {
+                    val entrando = reservasAdversarioAtuais.find { it.jogador.id == ev.jogadorId }
+                    if (entrando != null) {
+                        titularesAdversarioAtuais.add(entrando)
+                        reservasAdversarioAtuais.remove(entrando)
                     }
                 }
                 launch { listState.animateScrollToItem(0) }
@@ -429,7 +468,9 @@ fun PartidaSimulacaoScreen(
             estatisticasCasa = resultado.estatisticasCasa,
             estatisticasFora = resultado.estatisticasFora,
             nomeTimeCasaStats = nomeTimeCasa,
-            nomeTimeForaStats = nomeTimeFora
+            nomeTimeForaStats = nomeTimeFora,
+            escalacaoAdversario = escalacaoAdversario,
+            titularesAdversarioAtuais = titularesAdversarioAtuais.toList()
         )
         return
     }
@@ -467,7 +508,9 @@ fun PartidaSimulacaoScreen(
             estatisticasCasa = resultado.estatisticasCasa,
             estatisticasFora = resultado.estatisticasFora,
             nomeTimeCasaStats = nomeTimeCasa,
-            nomeTimeForaStats = nomeTimeFora
+            nomeTimeForaStats = nomeTimeFora,
+            escalacaoAdversario = escalacaoAdversario,
+            titularesAdversarioAtuais = titularesAdversarioAtuais.toList()
         )
         return
     }
@@ -510,7 +553,7 @@ fun PartidaSimulacaoScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // â”€â”€ Placar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Placar ──────────────────────────────────────────────
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -665,7 +708,7 @@ fun PartidaSimulacaoScreen(
             }
         }
 
-        // â”€â”€ Feed de eventos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Feed de eventos ──────────────────────────────────────
         // ── Botão Mexer no Time ─────────────────────────────────────
         if (escalacaoJogador != null && !simulacaoEncerrada && !pausadoNoIntervalo
             && faseAtual in listOf("1º TEMPO", "2º TEMPO")
@@ -718,6 +761,7 @@ fun PartidaSimulacaoScreen(
                         nomeTimeFora       = nomeTimeFora,
                         resultado          = resultado,
                         escalacaoJogador   = escalacaoJogador,
+                        escalacaoAdversario = escalacaoAdversario,
                         isTimeCasaOJogador = isTimeCasaOJogador
                     )
                 }
@@ -734,7 +778,7 @@ fun PartidaSimulacaoScreen(
             }
         }
 
-        // â”€â”€ BotÃ£o de encerrar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Botão de encerrar ────────────────────────────────────
         // Spinner enquanto dadosPenaltisAdversario ainda não chegou
         if (simulacaoEncerrada && resultado.precisaPenaltis && !penaltisInterativoConcluido && penaltisResultado == null) {
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -810,8 +854,8 @@ private fun EstatisticaRow(
     invertido: Boolean = false  // true = menos é melhor (faltas, passes errados)
 ) {
     val total = valorCasa + valorFora
-    val fracCasa = if (total > 0) valorCasa.toFloat() / total else 0.5f
-    val fracFora = if (total > 0) valorFora.toFloat() / total else 0.5f
+    val fracCasa = if (total > 0) (valorCasa.toFloat() / total).coerceAtLeast(0.001f) else 0.5f
+    val fracFora = if (total > 0) (valorFora.toFloat() / total).coerceAtLeast(0.001f) else 0.5f
     val colorNeutro = MaterialTheme.colorScheme.onSurface
 
     fun colorFor(isHome: Boolean): Color {
@@ -1034,6 +1078,7 @@ private fun ResultadoFinalCard(
     nomeTimeFora: String,
     resultado: ResultadoPartida,
     escalacaoJogador: Escalacao?,
+    escalacaoAdversario: Escalacao? = null,
     isTimeCasaOJogador: Boolean
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
@@ -1066,9 +1111,11 @@ private fun ResultadoFinalCard(
                     nomeTimeFora     = nomeTimeFora
                 )
                 1 -> NotasConteudo(
-                    resultado          = resultado,
-                    escalacaoJogador   = escalacaoJogador,
-                    isTimeCasaOJogador = isTimeCasaOJogador
+                    resultado           = resultado,
+                    escalacaoJogador    = escalacaoJogador,
+                    escalacaoAdversario = escalacaoAdversario,
+                    isTimeCasaOJogador  = isTimeCasaOJogador,
+                    nomeTimeFora        = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa
                 )
             }
         }
@@ -1079,7 +1126,9 @@ private fun ResultadoFinalCard(
 private fun NotasConteudo(
     resultado: ResultadoPartida,
     escalacaoJogador: Escalacao?,
-    isTimeCasaOJogador: Boolean
+    escalacaoAdversario: Escalacao? = null,
+    isTimeCasaOJogador: Boolean,
+    nomeTimeFora: String = ""
 ) {
     if (resultado.notasJogadores.isEmpty()) {
         Box(
@@ -1095,18 +1144,57 @@ private fun NotasConteudo(
         return
     }
 
-    // Deriva os IDs do time do jogador diretamente dos eventos (mais confiável)
     val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+    val timeAdversarioId = if (isTimeCasaOJogador) resultado.timeForaId else resultado.timeCasaId
+
+    // Se houver informações do adversário, mostra sub-abas
+    if (escalacaoAdversario != null) {
+        var subAbaAtiva by remember { mutableIntStateOf(0) }
+        Column {
+            TabRow(selectedTabIndex = subAbaAtiva) {
+                Tab(selected = subAbaAtiva == 0, onClick = { subAbaAtiva = 0 }, text = { Text("Meu Time") })
+                Tab(selected = subAbaAtiva == 1, onClick = { subAbaAtiva = 1 }, text = { Text("Adversário") })
+            }
+            when (subAbaAtiva) {
+                0 -> NotasTimeConteudo(
+                    resultado = resultado,
+                    timeId = timeJogadorId,
+                    jogadoresInfoMap = ((escalacaoJogador?.titulares ?: emptyList()) +
+                            (escalacaoJogador?.reservas ?: emptyList()))
+                        .associate { it.jogador.id to it.jogador }
+                )
+                1 -> NotasTimeConteudo(
+                    resultado = resultado,
+                    timeId = timeAdversarioId,
+                    jogadoresInfoMap = (escalacaoAdversario.titulares + escalacaoAdversario.reservas)
+                        .associate { it.jogador.id to it.jogador },
+                    corTitulo = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    } else {
+        NotasTimeConteudo(
+            resultado = resultado,
+            timeId = timeJogadorId,
+            jogadoresInfoMap = ((escalacaoJogador?.titulares ?: emptyList()) +
+                    (escalacaoJogador?.reservas ?: emptyList()))
+                .associate { it.jogador.id to it.jogador }
+        )
+    }
+}
+
+@Composable
+private fun NotasTimeConteudo(
+    resultado: ResultadoPartida,
+    timeId: Int,
+    jogadoresInfoMap: Map<Int, br.com.managerfoot.domain.model.Jogador>,
+    corTitulo: Color = MaterialTheme.colorScheme.onSurface
+) {
     val playerTeamIds = resultado.eventos
         .filter { (it.tipo == TipoEvento.PARTICIPOU || it.tipo == TipoEvento.SUBSTITUICAO_ENTRA)
-                   && it.timeId == timeJogadorId }
+                   && it.timeId == timeId }
         .map { it.jogadorId }
         .toSet()
-
-    // Mapa de lookup para nome/posição — proveniente da escalação (opcional)
-    val jogadoresInfoMap = ((escalacaoJogador?.titulares ?: emptyList()) +
-                            (escalacaoJogador?.reservas  ?: emptyList()))
-        .associate { it.jogador.id to it.jogador }
 
     val notasDoTime = resultado.notasJogadores
         .filter { (id, _) -> id in playerTeamIds }
@@ -1118,7 +1206,7 @@ private fun NotasConteudo(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "Notas não disponíveis nesta partida",
+                "Notas não disponíveis",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1129,7 +1217,7 @@ private fun NotasConteudo(
     val mediaTime = notasDoTime.map { it.value }.average().toFloat()
 
     val substitutosQueEntraram = resultado.eventos
-        .filter { it.tipo == TipoEvento.SUBSTITUICAO_ENTRA && it.timeId == timeJogadorId }
+        .filter { it.tipo == TipoEvento.SUBSTITUICAO_ENTRA && it.timeId == timeId }
         .map { it.jogadorId }
         .toSet()
 
@@ -1142,7 +1230,8 @@ private fun NotasConteudo(
             Text(
                 "Notas da Partida",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = corTitulo
             )
             Text(
                 "Média: ${"%.1f".format(mediaTime)}",
@@ -1199,9 +1288,9 @@ private fun NotasConteudo(
         }
     }
 }
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-//  Painel do intervalo (tÃ¡tica + substituiÃ§Ãµes)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
+//  Painel do intervalo (tática + substituições)
+// ─────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 //  PenaltiInterativoPainel  ─  disputa pênalti a pênalti
 // ─────────────────────────────────────────────────────────────
@@ -1775,7 +1864,9 @@ private fun IntervaloPainel(
     estatisticasCasa: EstatisticasTime? = null,
     estatisticasFora: EstatisticasTime? = null,
     nomeTimeCasaStats: String = "",
-    nomeTimeForaStats: String = ""
+    nomeTimeForaStats: String = "",
+    escalacaoAdversario: Escalacao? = null,
+    titularesAdversarioAtuais: List<JogadorNaEscalacao> = escalacaoAdversario?.titulares ?: emptyList()
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
     // Titular selecionado aguardando escolha do reserva
@@ -1786,7 +1877,7 @@ private fun IntervaloPainel(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // CabeÃ§alho
+        // Cabeçalho
         Card(
             Modifier
                 .fillMaxWidth()
@@ -1821,6 +1912,9 @@ private fun IntervaloPainel(
             Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Posições") })
             Tab(selected = abaAtiva == 3, onClick = { abaAtiva = 3 }, text = { Text("Banco") })
             Tab(selected = abaAtiva == 4, onClick = { abaAtiva = 4 }, text = { Text("Stats") })
+            if (escalacaoAdversario != null) {
+                Tab(selected = abaAtiva == 5, onClick = { abaAtiva = 5 }, text = { Text("Adversário") })
+            }
         }
 
         Box(Modifier.weight(1f)) {
@@ -1861,6 +1955,9 @@ private fun IntervaloPainel(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Estatísticas não disponíveis", style = MaterialTheme.typography.bodyMedium)
                     }
+                }
+                5 -> if (escalacaoAdversario != null) {
+                    EscalacaoAdversarioTab(escalacao = escalacaoAdversario, titularesAtuais = titularesAdversarioAtuais)
                 }
             }
         }
@@ -2037,6 +2134,101 @@ private fun BancoTab(reservas: List<JogadorNaEscalacao>) {
 }
 
 @Composable
+private fun EscalacaoAdversarioTab(
+    escalacao: Escalacao,
+    titularesAtuais: List<JogadorNaEscalacao> = escalacao.titulares
+) {
+    val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+    val titularesOrdenados = remember(titularesAtuais) {
+        titularesAtuais.sortedWith(compareBy(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+    val forcaAtual = remember(titularesAtuais) {
+        CalculadoraForca.calcularForcaTime(escalacao.copy(titulares = titularesAtuais)).toInt()
+    }
+    var mostrarGramado by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        // Cabeçalho do adversário
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.errorContainer)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    escalacao.time.nome,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    "Formação: ${escalacao.time.taticaFormacao} · ${when (escalacao.time.estiloJogo) {
+                        EstiloJogo.OFENSIVO -> "Ofensivo"
+                        EstiloJogo.EQUILIBRADO -> "Equilibrado"
+                        EstiloJogo.DEFENSIVO -> "Defensivo"
+                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
+                    }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    "Força média: $forcaAtual",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                )
+            }
+            TextButton(onClick = { mostrarGramado = !mostrarGramado }) {
+                Text(if (mostrarGramado) "Lista" else "Campo")
+            }
+        }
+
+        if (mostrarGramado) {
+            GramadoTatico(
+                titulares = titularesAtuais,
+                formacao = escalacao.time.taticaFormacao,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(8.dp)
+            )
+        } else {
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(titularesOrdenados) { jne ->
+                    ListItem(
+                        headlineContent = { Text(jne.jogador.nome) },
+                        supportingContent = {
+                            Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}")
+                        },
+                        trailingContent = {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    jne.posicaoUsada.abreviacao,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TrocarPosicoesTab(
     titulares: List<JogadorNaEscalacao>,
     onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit
@@ -2195,9 +2387,9 @@ private fun TaticaIntervaloPainel(
     }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 //  Card de evento individual no feed
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 @Composable
 fun EventoCard(evento: EventoExibicao, nomeTimeCasa: String) {
     // Linha de intervalo

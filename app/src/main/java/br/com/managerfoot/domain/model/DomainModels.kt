@@ -22,7 +22,8 @@ data class Time(
     val estiloJogo: EstiloJogo,
     val reputacao: Float,
     val controladoPorJogador: Boolean,
-    val escudoRes: String = ""
+    val escudoRes: String = "",
+    val pais: String = "Brasil"
 )
 
 data class Jogador(

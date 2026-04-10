@@ -5,6 +5,8 @@ import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.data.database.entities.TipoEvento
 import br.com.managerfoot.domain.model.*
 import kotlin.math.roundToInt
+import kotlin.math.pow
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 // ─────────────────────────────────────────────
@@ -178,10 +180,18 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             eventos.add(inc)
             when (inc.tipo) {
                 TipoEvento.CARTAO_VERMELHO -> {
-                    // Expulsão: jogador sai sem reposição; adversário ganha +15% de chance de gol
+                    // Expulsão: jogador sai sem reposição; adversário ganha bônus de gol
+                    // que varia com seu estilo (OFENSIVO explora mais a vantagem numérica)
                     titsAtivos.removeIf { it.jogador.id == inc.jogadorId }
                     exitMinutes[inc.jogadorId] = inc.minuto
-                    if (ehCasaInc) penalFora *= 1.15 else penalCasa *= 1.15
+                    val beneficiario = if (ehCasaInc) fora else casa
+                    val bonusExpulsao = when (beneficiario.time.estiloJogo) {
+                        EstiloJogo.OFENSIVO      -> 1.25
+                        EstiloJogo.CONTRA_ATAQUE -> 1.20
+                        EstiloJogo.EQUILIBRADO   -> 1.15
+                        EstiloJogo.DEFENSIVO     -> 1.10
+                    }
+                    if (ehCasaInc) penalFora *= bonusExpulsao else penalCasa *= bonusExpulsao
                 }
                 TipoEvento.LESAO -> {
                     val lesionado = titsAtivos.find { it.jogador.id == inc.jogadorId }
@@ -233,14 +243,16 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         if (fora.time.id != timeJogadorId)
             aplicarSubstituicoesTaticas(titsFora, resFora, fora.time.id, entryMinutes, exitMinutes, eventos)
 
-        // Dominância: eleva as forças ao quadrado antes de calcular dominance para
-        // amplificar geometricamente diferenças reais (ratio 1.5x → comporta-se como ~1.7x).
-        // dominance ∈ [-1, +1]; o time mais forte ganha até +200% de chances extra.
+        // Dominância convexa: dom^1.5 × 3.5 amplifica diferenças grandes mas mantém
+        // partidas equilibradas quando as forças são próximas (ex.: 85×80 ≈ 40/26/34%).
+        // dominance ∈ [-1, +1] derivado das forças ao quadrado (fC²/fF²).
         val fCasa2 = fCasa * fCasa
         val fFora2 = fFora * fFora
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
-        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 2.00
-        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 2.00
+        val domCasa = dominance.coerceAtLeast(0.0)
+        val domFora = (-dominance).coerceAtLeast(0.0)
+        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
+        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
 
         // Média de gols esperados — total esperado é MEDIA_GOLS_JOGO (sem multiplicador extra)
         // Com times iguais: probCasa=probFora=0.5 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
@@ -266,9 +278,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             .coerceIn(golsCasa + 2, 22)
         val chutesFora = ((totalChutes * probFora).roundToInt() + rng.nextInt(0, 3))
             .coerceIn(golsFora + 2, 22)
-        // Chutes no alvo = gols marcados + defesas difíceis exigidas ao goleiro adversário
-        val chutesCasaNoGol = (golsCasa + rng.nextInt(1, 5)).coerceIn(golsCasa, chutesCasa)
-        val chutesForaNoGol = (golsFora + rng.nextInt(1, 5)).coerceIn(golsFora, chutesFora)
+        // Chutes no alvo ≈ 32–44% do total (média real: ~35–38% no futebol profissional)
+        val chutesCasaNoGol = (chutesCasa * rng.nextInt(32, 45) / 100).coerceIn(golsCasa + 1, chutesCasa)
+        val chutesForaNoGol = (chutesFora * rng.nextInt(32, 45) / 100).coerceIn(golsFora + 1, chutesFora)
         // Defesas do goleiro = chutes no alvo que não entraram
         val defesasGoleiroCasa = (chutesForaNoGol - golsFora).coerceAtLeast(0)
         val defesasGoleiroFora = (chutesCasaNoGol - golsCasa).coerceAtLeast(0)
@@ -338,13 +350,13 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         if (candidatos.isEmpty()) return emptyList()
 
         // Peso de gol por setor:
-        //   ATAQUE: finalizacao * 5 + velocidade = fator dominante; garante ~75% dos gols
-        //           num time 4-4-2 típico e ~85% num 4-3-3
-        //   MEIO:   apenas finalizacao (reduzido deliberadamente para reservar gols ao ataque)
-        //   DEFESA: finalizacao / 7 → contribuição rara, para evitar zeramento no ranking
+        //   ATAQUE: fin²/10 + vel + tec → qualidade ofensiva amplifica as diferenças de forma quadrática
+        //           (artilheiro fin=90 marca ~61% dos gols do ataque vs ~39% de um fin=70)
+        //   MEIO:   finalizacao + técnica/2 → meia criativo pode marcar, porém raramente
+        //   DEFESA: finalizacao / 7 → contribuição rara (bola parada, etc.)
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
-            Setor.ATAQUE -> jne.jogador.finalizacao * 5 + jne.jogador.velocidade + 50
-            Setor.MEIO   -> jne.jogador.finalizacao
+            Setor.ATAQUE -> jne.jogador.finalizacao * jne.jogador.finalizacao / 10 + jne.jogador.velocidade + jne.jogador.tecnica
+            Setor.MEIO   -> jne.jogador.finalizacao + jne.jogador.tecnica / 2
             Setor.DEFESA -> (jne.jogador.finalizacao / 7).coerceAtLeast(1)
             else         -> 1
         }
@@ -674,7 +686,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 TipoEvento.CARTAO_VERMELHO -> {
                     titsAtivos.removeIf { it.jogador.id == inc.jogadorId }
                     exitMinutes[inc.jogadorId] = inc.minuto
-                    if (ehCasaInc) penalCasa *= 0.87 else penalFora *= 0.87
+                    val beneficiarioPeriodo = if (ehCasaInc) escalacaoFora else escalacaoCasa
+                    val bonusExpulsaoPeriodo = when (beneficiarioPeriodo.time.estiloJogo) {
+                        EstiloJogo.OFENSIVO      -> 1.25
+                        EstiloJogo.CONTRA_ATAQUE -> 1.20
+                        EstiloJogo.EQUILIBRADO   -> 1.15
+                        EstiloJogo.DEFENSIVO     -> 1.10
+                    }
+                    if (ehCasaInc) penalFora *= bonusExpulsaoPeriodo else penalCasa *= bonusExpulsaoPeriodo
                 }
                 TipoEvento.LESAO -> {
                     val lesionado = titsAtivos.find { it.jogador.id == inc.jogadorId }
@@ -718,8 +737,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val fCasa2 = fCasa * fCasa
         val fFora2 = fFora * fFora
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
-        val chancesMultCasa = 1.0 + dominance.coerceAtLeast(0.0) * 2.00
-        val chancesMultFora = 1.0 + (-dominance).coerceAtLeast(0.0) * 2.00
+        val domCasa = dominance.coerceAtLeast(0.0)
+        val domFora = (-dominance).coerceAtLeast(0.0)
+        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
+        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
 
         val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa
         val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora
@@ -731,6 +752,29 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             entryMinutes, exitMinutes, minInicio, minFim))
         eventos.addAll(gerarEventosGolPeriodo(golsFora, titsFora, escalacaoFora.time.id,
             entryMinutes, exitMinutes, minInicio, minFim))
+
+        // Eventos de defesa do goleiro: finalizações no alvo que não viraram gol
+        val gkCasaP  = titsCasa.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
+        val gkForaP  = titsFora.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
+        val totalChutesP  = (rng.nextInt(18, 30) * fracaoGols).roundToInt().coerceAtLeast(golsCasa + golsFora + 2)
+        val chutesCasaP   = ((totalChutesP * probCasa).roundToInt() + rng.nextInt(0, 2)).coerceIn(golsCasa + 1, 20)
+        val chutesForaP   = ((totalChutesP * probFora).roundToInt() + rng.nextInt(0, 2)).coerceIn(golsFora + 1, 20)
+        val chutesCasaNGP = (chutesCasaP * rng.nextInt(32, 45) / 100).coerceIn(golsCasa + 1, chutesCasaP)
+        val chutesForaNGP = (chutesForaP * rng.nextInt(32, 45) / 100).coerceIn(golsFora + 1, chutesForaP)
+        val defCasaGKP    = (chutesForaNGP - golsFora).coerceAtLeast(0)
+        val defForaGKP    = (chutesCasaNGP - golsCasa).coerceAtLeast(0)
+        val rangeStart    = minInicio.coerceAtLeast(1)
+        val rangeEnd      = minFim + 1
+        repeat(defCasaGKP) {
+            if (gkCasaP != null)
+                eventos.add(EventoSimulado(rng.nextInt(rangeStart, rangeEnd), TipoEvento.DEFESA_GOLEIRO,
+                    gkCasaP.jogador.id, escalacaoCasa.time.id, gkCasaP.jogador.nomeAbreviado))
+        }
+        repeat(defForaGKP) {
+            if (gkForaP != null)
+                eventos.add(EventoSimulado(rng.nextInt(rangeStart, rangeEnd), TipoEvento.DEFESA_GOLEIRO,
+                    gkForaP.jogador.id, escalacaoFora.time.id, gkForaP.jogador.nomeAbreviado))
+        }
 
         val estadoFinal = EstadoMetade(
             titsCasa     = titsCasa.toList(),
@@ -808,8 +852,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         if (candidatos.isEmpty()) return emptyList()
 
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
-            Setor.ATAQUE -> jne.jogador.finalizacao * 3 + jne.jogador.velocidade + 50
-            Setor.MEIO   -> jne.jogador.finalizacao * 2 + jne.jogador.passe
+            Setor.ATAQUE -> jne.jogador.finalizacao * jne.jogador.finalizacao / 10 + jne.jogador.velocidade + jne.jogador.tecnica
+            Setor.MEIO   -> jne.jogador.finalizacao + jne.jogador.tecnica / 2
             Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
             else         -> 1
         }

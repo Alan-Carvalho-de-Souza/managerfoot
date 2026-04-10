@@ -1,4 +1,4 @@
-package br.com.managerfoot.presentation.ui.screens
+﻿package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,6 +53,7 @@ fun DashboardScreen(
     val resultadoSimulado by vm.resultadoSimulado.collectAsStateWithLifecycle()
     val saveState by vm.saveState.collectAsStateWithLifecycle()
     val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsStateWithLifecycle()
+    val escalacaoAdversarioSimulacao by vm.escalacaoAdversarioSimulacao.collectAsStateWithLifecycle()
     val penaltisResultado by vm.penaltisResultado.collectAsStateWithLifecycle()
     val dadosPenaltisAdversario by vm.dadosPenaltisAdversario.collectAsStateWithLifecycle()
     val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsStateWithLifecycle()
@@ -83,6 +84,7 @@ fun DashboardScreen(
             escudoTimeFora = timeForaSim?.escudoRes ?: "",
             nomeEstadio = timeCasaSim?.estadioNome ?: "",
             escalacaoJogador = escalacaoSimulacao,
+            escalacaoAdversario = escalacaoAdversarioSimulacao,
             isTimeCasaOJogador = isTimeCasaOJogador,
             penaltisResultado = penaltisResultado,
             dadosPenaltisAdversario = dadosPenaltisAdversario,
@@ -155,6 +157,7 @@ fun DashboardScreen(
                         snap?.campeonatoBId -> "S\u00e9rie B"
                         snap?.campeonatoCId -> "S\u00e9rie C"
                         snap?.campeonatoDId -> "S\u00e9rie D"
+                        snap?.campeonatoArgAId -> "Primera Div."
                         else -> "Brasileir\u00e3o"
                     }
                 }
@@ -192,7 +195,7 @@ fun DashboardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "Temporada concluída! 🏆",
+                            "Temporada concluída! ðŸ†",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
@@ -236,6 +239,7 @@ fun DashboardScreen(
                     partida.campeonatoId == snap?.campeonatoBId -> "S\u00e9rie B \u2014 Rodada ${partida.rodada}"
                     partida.campeonatoId == snap?.campeonatoCId -> "S\u00e9rie C \u2014 Rodada ${partida.rodada}"
                     partida.campeonatoId == snap?.campeonatoDId -> "S\u00e9rie D \u2014 Rodada ${partida.rodada}"
+                    partida.campeonatoId == snap?.campeonatoArgAId -> "Primera Div. \u2014 Rodada ${partida.rodada}"
                     else -> "Rodada ${partida.rodada}"
                 }
                 Column {

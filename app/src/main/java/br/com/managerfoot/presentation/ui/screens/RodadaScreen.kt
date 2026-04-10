@@ -28,6 +28,7 @@ fun RodadaScreen(
     campeonatoBId: Int,
     campeonatoCId: Int = -1,
     campeonatoDId: Int = -1,
+    campeonatoArgAId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -36,8 +37,8 @@ fun RodadaScreen(
     val rodadaSelecionada  by vm.rodadaSelecionada.collectAsState()
     val maxRodada          by vm.maxRodada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId)
     }
 
     // ── Dropdown Série ──────────────────────────────────
@@ -46,6 +47,7 @@ fun RodadaScreen(
         add(2 to "Série B")
         if (campeonatoCId > 0) add(3 to "Série C")
         if (campeonatoDId > 0) add(4 to "Série D")
+        if (campeonatoArgAId > 0) add(5 to "Primera Div.")
     }
     var expandidoSerie by remember { mutableStateOf(false) }
     val labelSerie = opcoesDivisao.firstOrNull { it.first == divisaoSelecionada }?.second ?: "Série A"

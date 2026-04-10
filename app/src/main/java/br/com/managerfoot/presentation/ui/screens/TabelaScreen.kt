@@ -28,6 +28,7 @@ fun TabelaScreen(
     campeonatoBId: Int,
     campeonatoCId: Int = -1,
     campeonatoDId: Int = -1,
+    campeonatoArgAId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -36,19 +37,36 @@ fun TabelaScreen(
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, timeJogadorId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, timeJogadorId)
     }
 
-    // Opções de divisão: apenas as que têm campeonato ativo (Copa não tem tabela)
-    val opcoes = buildList {
+    // Opções por país
+    val opcoesBrasil = buildList {
         add(1 to "Série A")
         add(2 to "Série B")
         if (campeonatoCId > 0) add(3 to "Série C")
         if (campeonatoDId > 0) add(4 to "Série D")
     }
-    val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
-        ?: opcoes.first().second
+    val opcoesArgentina = buildList {
+        if (campeonatoArgAId > 0) add(5 to "Primera Div.")
+    }
+
+    val paises = buildList {
+        if (opcoesBrasil.isNotEmpty()) add("Brasil")
+        if (opcoesArgentina.isNotEmpty()) add("Argentina")
+    }
+
+    // País selecionado: derivado da divisão atual
+    val paisSelecionado = remember(divisaoSelecionada) {
+        if (divisaoSelecionada == 5) "Argentina" else "Brasil"
+    }
+
+    val opcoesDivisaoPais = if (paisSelecionado == "Argentina") opcoesArgentina else opcoesBrasil
+
+    val labelSelecionado = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
+        ?: opcoesDivisaoPais.firstOrNull()?.second ?: ""
+    var expandidoPais by remember { mutableStateOf(false) }
     var expandido by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -68,36 +86,78 @@ fun TabelaScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Seletor de divisão (dropdown)
-            ExposedDropdownMenuBox(
-                expanded = expandido,
-                onExpandedChange = { expandido = it },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = labelSelecionado,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Divisão") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = expandido,
-                    onDismissRequest = { expandido = false }
-                ) {
-                    opcoes.forEach { (div, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                vm.selecionarDivisao(div)
-                                expandido = false
-                            }
+                // Filtro de país (dropdown — só exibe se houver mais de um)
+                if (paises.size > 1) {
+                    ExposedDropdownMenuBox(
+                        expanded = expandidoPais,
+                        onExpandedChange = { expandidoPais = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = paisSelecionado,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("País") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoPais) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
                         )
+                        ExposedDropdownMenu(
+                            expanded = expandidoPais,
+                            onDismissRequest = { expandidoPais = false }
+                        ) {
+                            paises.forEach { pais ->
+                                DropdownMenuItem(
+                                    text = { Text(pais) },
+                                    onClick = {
+                                        val primeiraDivisao = if (pais == "Argentina")
+                                            opcoesArgentina.firstOrNull()?.first ?: 5
+                                        else
+                                            opcoesBrasil.firstOrNull()?.first ?: 1
+                                        vm.selecionarDivisao(primeiraDivisao)
+                                        expandidoPais = false
+                                        expandido = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Seletor de divisão (dropdown — só exibe se houver mais de uma divisão no país)
+                if (opcoesDivisaoPais.size > 1) {
+                    ExposedDropdownMenuBox(
+                        expanded = expandido,
+                        onExpandedChange = { expandido = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = labelSelecionado,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Divisão") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandido,
+                            onDismissRequest = { expandido = false }
+                        ) {
+                            opcoesDivisaoPais.forEach { (div, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        vm.selecionarDivisao(div)
+                                        expandido = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -166,6 +226,10 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao)
         posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série D
         else          -> null
     }
+    5 -> when {
+        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
+        else          -> null
+    }
     else -> when {
         posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série C
         else          -> null
@@ -187,6 +251,9 @@ private fun LegendaZonas(divisao: Int) {
         3 -> listOf(
             Color(0xFF1565C0) to "1-4: Acesso à Série B",
             Color(0xFFE53935) to "17-20: Rebaixamento"
+        )
+        5 -> listOf(
+            Color(0xFF1565C0) to "1-4: Libertadores"
         )
         else -> listOf(
             Color(0xFF1565C0) to "1-4: Acesso à Série C"

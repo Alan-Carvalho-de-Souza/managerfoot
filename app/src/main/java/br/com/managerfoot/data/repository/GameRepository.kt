@@ -356,8 +356,8 @@ class GameRepository @Inject constructor(
             golsCasa         = golsCasa1H,
             golsFora         = golsFora1H,
             eventos          = todosEventos1H,
-            estatisticasCasa = EstatisticasTime(0, 0, 50, 0, 0, 0),
-            estatisticasFora = EstatisticasTime(0, 0, 50, 0, 0, 0),
+            estatisticasCasa = estatisticasDeEventos(todosEventos1H, escalacaoCasa.time.id, escalacaoFora.time.id, golsCasa1H),
+            estatisticasFora = estatisticasDeEventos(todosEventos1H, escalacaoFora.time.id, escalacaoCasa.time.id, golsFora1H),
             torcedores       = torcedoresParcial,
             receitaPartida   = receitaParcial
         )
@@ -491,22 +491,8 @@ class GameRepository @Inject constructor(
             golsCasa         = golsCasaFinal,
             golsFora         = golsForaFinal,
             eventos          = ctx.eventosAcumulados,
-            estatisticasCasa = EstatisticasTime(
-                chutes        = golsCasaFinal * 4 + 3,
-                chutesNoGol   = golsCasaFinal + 2,
-                posse         = 50,
-                faltas        = 12,
-                cartaoAmarelo  = 0,
-                cartaoVermelho = 0
-            ),
-            estatisticasFora = EstatisticasTime(
-                chutes        = golsForaFinal * 4 + 3,
-                chutesNoGol   = golsForaFinal + 2,
-                posse         = 50,
-                faltas        = 12,
-                cartaoAmarelo  = 0,
-                cartaoVermelho = 0
-            )
+            estatisticasCasa = estatisticasDeEventos(ctx.eventosAcumulados, escalacaoCasa.time.id, escalacaoFora.time.id, golsCasaFinal),
+            estatisticasFora = estatisticasDeEventos(ctx.eventosAcumulados, escalacaoFora.time.id, escalacaoCasa.time.id, golsForaFinal)
         )
 
         val notasPartida = persistirResultado(resultadoBase)
@@ -656,6 +642,7 @@ class GameRepository @Inject constructor(
         val campeonatoBId: Int,
         val campeonatoCId: Int,
         val campeonatoDId: Int,
+        val campeonatoArgAId: Int,
         val copaId: Int,
         val temporadaId: Int,
         val ano: Int
@@ -666,6 +653,7 @@ class GameRepository @Inject constructor(
         campeonatoBId: Int,
         campeonatoCId: Int,
         campeonatoDId: Int,
+        campeonatoArgAId: Int = -1,
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -681,7 +669,7 @@ class GameRepository @Inject constructor(
             val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
             val assistente = partidaDao.buscarAssisteTop1(campId)
             val campEntity = campeonatoDao.buscarPorId(campId)
-            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; else -> "D" }
+            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Primera Div."; else -> "D" }
             hallDaFamaDao.inserir(HallDaFamaEntity(
                 ano = ano,
                 nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
@@ -711,6 +699,7 @@ class GameRepository @Inject constructor(
         registrarHallDaFama(campeonatoBId, 2)
         registrarHallDaFama(campeonatoCId, 3)
         registrarHallDaFama(campeonatoDId, 4)
+        registrarHallDaFama(campeonatoArgAId, 5)
 
         // ── Bônus de reputação por título de divisão ──────────────
         suspend fun aplicarBonusTitulo(campId: Int, bonusPercent: Double) {
@@ -724,13 +713,20 @@ class GameRepository @Inject constructor(
         aplicarBonusTitulo(campeonatoBId, 0.03) // Série B +3%
         aplicarBonusTitulo(campeonatoCId, 0.02) // Série C +2%
         aplicarBonusTitulo(campeonatoDId, 0.01) // Série D +1%
+        aplicarBonusTitulo(campeonatoArgAId, 0.04) // Primera Div. +4%
 
-        // ── Premiações de títulos — somente para o time do jogador ─────────
+        // ── Premiações de títulos — para o time do jogador se ele é campeão ou vice ─────────
         // Os valores estão em centavos (1 milhão = 1_000_000_00L no padrão monetário do jogo)
-        suspend fun premiarSeJogador(campId: Int, premio: Long, desc: String) {
+        suspend fun premiarSeJogador(campId: Int, premioCampeao: Long) {
             if (campId <= 0 || timeJogadorId <= 0) return
-            val campeao = classificacaoDao.buscarTop2(campId).firstOrNull() ?: return
-            if (campeao.timeId != timeJogadorId) return
+            val top2 = classificacaoDao.buscarTop2(campId)
+            val campeao = top2.getOrNull(0) ?: return
+            val vice    = top2.getOrNull(1)
+            val (premio, posicao) = when (timeJogadorId) {
+                campeao.timeId -> premioCampeao to "Campeão"
+                vice?.timeId   -> premioCampeao / 2 to "Vice-campeão"
+                else           -> return
+            }
             timeRepository.creditarSaldo(timeJogadorId, premio)
             financaDao.inserir(
                 br.com.managerfoot.data.database.entities.FinancaEntity(
@@ -742,10 +738,11 @@ class GameRepository @Inject constructor(
                 )
             )
         }
-        premiarSeJogador(campeonatoAId, 20_000_000_00L, "Campeão Série A")  // R$ 20 milhões
-        premiarSeJogador(campeonatoBId,  8_000_000_00L, "Campeão Série B")  // R$  8 milhões
-        premiarSeJogador(campeonatoCId,  5_000_000_00L, "Campeão Série C")  // R$  5 milhões
-        premiarSeJogador(campeonatoDId,  2_000_000_00L, "Campeão Série D")  // R$  2 milhões
+        premiarSeJogador(campeonatoAId, 20_000_000_00L)  // Cam: R$ 20M, Vice: R$ 10M
+        premiarSeJogador(campeonatoBId,  8_000_000_00L)  // Cam: R$  8M, Vice: R$  4M
+        premiarSeJogador(campeonatoCId,  5_000_000_00L)  // Cam: R$  5M, Vice: R$2.5M
+        premiarSeJogador(campeonatoDId,  2_000_000_00L)  // Cam: R$  2M, Vice: R$  1M
+        premiarSeJogador(campeonatoArgAId, 15_000_000_00L) // Cam: R$ 15M, Vice: R$7.5M
 
         // ── Desfechos (promoções / rebaixamentos) ─────────────────
         suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
@@ -787,7 +784,7 @@ class GameRepository @Inject constructor(
         val novosD = (partD - promovidosD.toSet()) + rebaixadosC
 
         // Encerra todos os campeonatos
-        listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId)
+        listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId)
             .filter { it > 0 }.forEach { campeonatoDao.encerrar(it) }
 
         jogadorRepository.processarDesenvolvimentoAnual()
@@ -817,6 +814,20 @@ class GameRepository @Inject constructor(
         atualizarRankingGeral(campeonatoBId)
         atualizarRankingGeral(campeonatoCId)
         atualizarRankingGeral(campeonatoDId)
+        atualizarRankingGeral(campeonatoArgAId)
+
+        // Renova Primera División Argentina (mesmos participantes — sem promoção/rebaixamento)
+        val participantesArgA = if (campeonatoArgAId > 0)
+            campeonatoDao.buscarIdsParticipantes(campeonatoArgAId) else emptyList()
+        val novoArgAId = if (participantesArgA.isNotEmpty()) criarCampeonato(
+            CampeonatoEntity(
+                temporadaId  = novoTemporadaId,
+                nome         = "Primera División Argentina $novoAno",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (participantesArgA.size - 1) * 2,
+                pais         = "Argentina"
+            ), participantesArgA) else -1
 
         // Cria Copa do Brasil para a próxima temporada
         val participantesCopa = determinarParticipantesCopa(novoTemporadaId, novosA)
@@ -831,7 +842,7 @@ class GameRepository @Inject constructor(
             participantesCopa
         )
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoCopaId, novoTemporadaId, novoAno)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoArgAId, novoCopaId, novoTemporadaId, novoAno)
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()
@@ -954,26 +965,39 @@ class GameRepository @Inject constructor(
                         divisao             = 5   // 5 = Copa
                     )
                 )
-                // Incrementa copasVencidas do campeão no ranking geral
+                // Incrementa copasVencidas do campeão e aplica bônus de pontos (Copa)
                 val rankCampeao = rankingGeralDao.buscarPorTime(campeaoId)
                 if (rankCampeao != null) {
                     rankingGeralDao.inserirOuAtualizar(
-                        rankCampeao.copy(copasVencidas = rankCampeao.copasVencidas + 1)
+                        rankCampeao.copy(
+                            copasVencidas    = rankCampeao.copasVencidas + 1,
+                            pontosAcumulados = rankCampeao.pontosAcumulados + 30L
+                        )
+                    )
+                }
+                // Bônus de pontos para o vice da Copa
+                val rankVice = rankingGeralDao.buscarPorTime(viceId)
+                if (rankVice != null) {
+                    rankingGeralDao.inserirOuAtualizar(
+                        rankVice.copy(pontosAcumulados = rankVice.pontosAcumulados + 15L)
                     )
                 }
                 campeonatoDao.encerrar(copaId)
-                // Premiação Copa do Brasil → somente para o time do jogador
-                if (timeJogadorId > 0 && campeaoId == timeJogadorId) {
-                    timeRepository.creditarSaldo(timeJogadorId, 30_000_000_00L)  // R$ 30 milhões
-                    financaDao.inserir(
-                        br.com.managerfoot.data.database.entities.FinancaEntity(
-                            timeId            = timeJogadorId,
-                            temporadaId       = temporadaId,
-                            mes               = 13,
-                            receitaPremiacoes = 30_000_000_00L,
-                            saldoFinal        = 30_000_000_00L
+                // Premiação Copa do Brasil → campeão e vice (metade) se for o time do jogador
+                val premiosCopa = listOf(campeaoId to 30_000_000_00L, viceId to 15_000_000_00L)
+                for ((timePremiado, valorPremio) in premiosCopa) {
+                    if (timeJogadorId > 0 && timePremiado == timeJogadorId) {
+                        timeRepository.creditarSaldo(timeJogadorId, valorPremio)
+                        financaDao.inserir(
+                            br.com.managerfoot.data.database.entities.FinancaEntity(
+                                timeId            = timeJogadorId,
+                                temporadaId       = temporadaId,
+                                mes               = 13,
+                                receitaPremiacoes = valorPremio,
+                                saldoFinal        = valorPremio
+                            )
                         )
-                    )
+                    }
                 }
                 // Copa do Brasil: +4% de reputação para o campeão
                 val campeaoCopa = timeRepository.buscarPorId(campeaoId)
@@ -1043,18 +1067,35 @@ class GameRepository @Inject constructor(
     suspend fun atualizarRankingGeral(campeonatoId: Int) {
         if (campeonatoId <= 0) return
         val classificacoes = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
-        val campeaoTimeId = classificacoes.firstOrNull()?.timeId
+        val campeonato     = campeonatoDao.buscarPorId(campeonatoId)
+        val campeaoTimeId  = classificacoes.firstOrNull()?.timeId
+        val viceTimeId     = classificacoes.getOrNull(1)?.timeId
+        val (bonusCampeao, bonusVice) = when (campeonato?.tipo) {
+            TipoCampeonato.NACIONAL_DIVISAO1        -> 35L to 15L
+            TipoCampeonato.NACIONAL_DIVISAO2        -> 20L to 12L
+            TipoCampeonato.NACIONAL_DIVISAO3        -> 15L to  9L
+            TipoCampeonato.NACIONAL_DIVISAO4        -> 10L to  6L
+            TipoCampeonato.EXTRANGEIRO_DIVISAO1     -> 20L to 10L
+            else                                    ->  0L to  0L
+        }
         for (cls in classificacoes) {
-            val time     = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
-            val existing = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
+            val time      = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
+            val existing  = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
             val ehCampeao = cls.timeId == campeaoTimeId
+            val ehVice    = cls.timeId == viceTimeId
+            val pontosExtras = when {
+                ehCampeao -> bonusCampeao
+                ehVice    -> bonusVice
+                else      -> 0L
+            }
             rankingGeralDao.inserirOuAtualizar(
                 existing.copy(
                     nomeTime          = time.nome,
                     escudoRes         = time.escudoRes,
                     divisaoAtual      = time.divisao,
                     temporadasJogadas = existing.temporadasJogadas + 1,
-                    titulosNacionais  = existing.titulosNacionais + if (ehCampeao) 1 else 0
+                    titulosNacionais  = existing.titulosNacionais + if (ehCampeao) 1 else 0,
+                    pontosAcumulados  = existing.pontosAcumulados + pontosExtras
                 )
             )
         }
@@ -1066,13 +1107,14 @@ class GameRepository @Inject constructor(
         participantesSerieA: List<Int>
     ): List<Int> {
         return if (temporadaId <= 1) {
-            // Primeira temporada: top 64 por reputação
-            timeRepository.buscarTodosOrdenadosPorReputacao().take(64).map { it.id }
+            // Primeira temporada: top 64 por reputação (somente times brasileiros)
+            timeRepository.buscarTodosOrdenadosPorReputacao()
+                .filter { it.pais == "Brasil" }.take(64).map { it.id }
         } else {
             // Série A (automáticos) + top 44 do ranking geral não presentes na Série A
             val serieASet = participantesSerieA.toSet()
             val top44 = rankingGeralDao.buscarTopN(200)
-                .filter { it.timeId !in serieASet }
+                .filter { it.timeId !in serieASet && it.divisaoAtual != 5 } // exclui times argentinos
                 .take(64 - participantesSerieA.size)
                 .map { it.timeId }
             (participantesSerieA + top44).take(64)
@@ -1705,6 +1747,36 @@ class GameRepository @Inject constructor(
      * Base 6.0 · +1.2 por gol · +0.7 por assistência · -0.3 amarelo · -1.5 vermelho ·
      * -0.5 lesão · +0.3 bônus de vitória.
      */
+    /**
+     * Deriva [EstatisticasTime] a partir de eventos acumulados.
+     * Cartões e defesas são contados diretamente; chutes estimados a partir das defesas e gols.
+     */
+    private fun estatisticasDeEventos(
+        eventos: List<EventoSimulado>,
+        timeId: Int,
+        adversarioId: Int,
+        golsTime: Int
+    ): EstatisticasTime {
+        val amarelos   = eventos.count { it.tipo == TipoEvento.CARTAO_AMARELO  && it.timeId == timeId }
+        val vermelhos  = eventos.count { it.tipo == TipoEvento.CARTAO_VERMELHO && it.timeId == timeId }
+        val defesas    = eventos.count { it.tipo == TipoEvento.DEFESA_GOLEIRO  && it.timeId == timeId }
+        val defAdv     = eventos.count { it.tipo == TipoEvento.DEFESA_GOLEIRO  && it.timeId == adversarioId }
+        // chutes no alvo por este time = defesas do adversário + gols marcados
+        val chutesNoGol = defAdv + golsTime
+        val chutes      = (chutesNoGol * 2).coerceAtLeast(golsTime + 2)
+        val faltas      = (amarelos * 3 + vermelhos * 5 + 5).coerceIn(5, 25)
+        return EstatisticasTime(
+            chutes         = chutes,
+            chutesNoGol    = chutesNoGol,
+            posse          = 50,
+            faltas         = faltas,
+            cartaoAmarelo  = amarelos,
+            cartaoVermelho = vermelhos,
+            defesasGoleiro = defesas,
+            passesErrados  = 15
+        )
+    }
+
     private fun calcularNotasJogadores(resultado: ResultadoPartida): Map<Int, Float> {
         // Participantes = titulares (PARTICIPOU) + substitutos (SUBSTITUICAO_ENTRA)
         val participantes = resultado.eventos
@@ -1715,7 +1787,7 @@ class GameRepository @Inject constructor(
         val vitoriosafora = resultado.golsFora > resultado.golsCasa
 
         return participantes.mapValues { (jogadorId, participacoes) ->
-            var nota = 6.0f
+            var nota = 5.0f
             val ehCasa = participacoes.any { it.timeId == resultado.timeCasaId }
             val eventos = resultado.eventos.filter { it.jogadorId == jogadorId }
             for (ev in eventos) {
@@ -1727,13 +1799,13 @@ class GameRepository @Inject constructor(
                     TipoEvento.CARTAO_AMARELO        -> nota -= 0.3f
                     TipoEvento.CARTAO_VERMELHO       -> nota -= 1.5f
                     TipoEvento.LESAO                 -> nota -= 0.5f
-                    TipoEvento.DEFESA_GOLEIRO        -> nota += 1.0f
+                    TipoEvento.DEFESA_GOLEIRO        -> nota += 0.6f
                     else -> Unit
                 }
             }
-            // Penalidade do goleiro por gols sofridos
-            if (jogadorId == resultado.gkCasaId) nota -= resultado.golsFora * 0.7f
-            if (jogadorId == resultado.gkForaId) nota -= resultado.golsCasa * 0.7f
+            // Penalidade do goleiro por gols sofridos (-1.0 por gol)
+            if (jogadorId == resultado.gkCasaId) nota -= resultado.golsFora * 1.0f
+            if (jogadorId == resultado.gkForaId) nota -= resultado.golsCasa * 1.0f
             if ((ehCasa && vitoriosaCasa) || (!ehCasa && vitoriosafora)) nota += 0.3f
             nota.coerceIn(1.0f, 10.0f)
         }

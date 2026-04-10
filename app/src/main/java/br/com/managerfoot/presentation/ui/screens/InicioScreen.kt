@@ -130,14 +130,36 @@ fun SelecionarTimeScreen(
 ) {
     val times by vm.timesDisponiveis.collectAsState()
     var busca by remember { mutableStateOf("") }
+    var paisSelecionado by remember { mutableStateOf("Brasil") }
 
-    val filtrados = remember(times, busca) {
-        val lista = if (busca.isBlank()) times
-                    else times.filter { it.nome.contains(busca, ignoreCase = true) }
+    val paises = remember(times) {
+        times.map { it.pais }.distinct().sorted()
+    }
+
+    val filtrados = remember(times, busca, paisSelecionado) {
+        val lista = times
+            .filter { it.pais == paisSelecionado }
+            .let { t -> if (busca.isBlank()) t else t.filter { it.nome.contains(busca, ignoreCase = true) } }
         lista.sortedBy { it.nome }
     }
 
     Column(Modifier.fillMaxSize()) {
+        // Filtro de país (tabs)
+        if (paises.size > 1) {
+            androidx.compose.material3.ScrollableTabRow(
+                selectedTabIndex = paises.indexOf(paisSelecionado).coerceAtLeast(0),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                paises.forEach { pais ->
+                    androidx.compose.material3.Tab(
+                        selected = pais == paisSelecionado,
+                        onClick = { paisSelecionado = pais; busca = "" },
+                        text = { Text(pais) }
+                    )
+                }
+            }
+        }
+
         // Barra de busca
         OutlinedTextField(
             value = busca,
@@ -184,8 +206,9 @@ private fun TimeItemRow(time: Time, onClick: () -> Unit) {
             )
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val divisaoLetra = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }
-            InfoChip("Série $divisaoLetra", MaterialTheme.colorScheme.primaryContainer)
+            val chipLabel = if (time.pais == "Argentina") "Primera Div."
+                else { val l = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }; "Série $l" }
+            InfoChip(chipLabel, MaterialTheme.colorScheme.primaryContainer)
             Text(formatarSaldo(time.saldo), style = MaterialTheme.typography.labelSmall)
         }
     }

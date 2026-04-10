@@ -25,28 +25,37 @@ class SeedDataSource @Inject constructor(
     )
 
     suspend fun carregar(): SeedData = withContext(Dispatchers.IO) {
-        val json = context.assets.open("seed_brasileirao.json")
-            .bufferedReader(Charsets.UTF_8)
-            .use { it.readText() }
-        val root = JSONObject(json)
-        val timesJson  = root.getJSONArray("times")
-        val jogadoresJson = root.getJSONArray("jogadores")
+        fun loadFile(filename: String): Pair<List<TimeEntity>, List<JogadorEntity>>? {
+            return try {
+                val json = context.assets.open(filename).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val root = JSONObject(json)
+                parseTimes(root.getJSONArray("times")) to parseJogadores(root.getJSONArray("jogadores"))
+            } catch (_: Exception) { null }
+        }
+        val (timesA, jogadoresA) = loadFile("seed_brasileirao.json")
+            ?: throw IllegalStateException("seed_brasileirao.json n\u00e3o encontrado")
+        val (timesArg, jogadoresArg) = loadFile("seed_argentina.json") ?: (emptyList<TimeEntity>() to emptyList<JogadorEntity>())
         SeedData(
-            times = parseTimes(timesJson),
-            jogadores = parseJogadores(jogadoresJson)
+            times = timesA + timesArg,
+            jogadores = jogadoresA + jogadoresArg
         )
     }
 
     private fun parseTimes(arr: JSONArray): List<TimeEntity> =
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val pais = o.optString("pais", "Brasil")
             TimeEntity(
                 id            = o.getInt("id"),
                 nome          = o.getString("nome"),
                 cidade        = o.getString("cidade"),
                 estado        = o.getString("estado"),
-                divisao       = when (o.optString("divisao").uppercase()) {
-                    "A" -> 1; "B" -> 2; "C" -> 3; "D" -> 4
+                divisao       = when {
+                    o.optString("divisao").uppercase() == "A" && pais == "Argentina" -> 5
+                    o.optString("divisao").uppercase() == "A" -> 1
+                    o.optString("divisao").uppercase() == "B" -> 2
+                    o.optString("divisao").uppercase() == "C" -> 3
+                    o.optString("divisao").uppercase() == "D" -> 4
                     else -> o.optInt("divisao", 1)
                 },
                 nivel         = o.getInt("nivel"),
@@ -57,7 +66,8 @@ class SeedDataSource @Inject constructor(
                 taticaFormacao = o.getString("tatica"),
                 estiloJogo    = EstiloJogo.valueOf(o.getString("estilo")),
                 reputacao     = o.getInt("reputacao").toFloat(),
-                escudoRes     = o.optString("escudo_res", "")
+                escudoRes     = o.optString("escudo_res", ""),
+                pais          = pais
             )
         }
 

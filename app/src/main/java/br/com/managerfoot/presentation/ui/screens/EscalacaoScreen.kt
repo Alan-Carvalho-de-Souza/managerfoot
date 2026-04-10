@@ -35,6 +35,7 @@ import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Posicao
 import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.domain.model.Jogador
+import br.com.managerfoot.domain.engine.CalculadoraForca
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.EscalacaoViewModel
@@ -56,6 +57,7 @@ fun EscalacaoScreen(
     val escalacao   by vm.escalacao.collectAsState()
     val selecionado by vm.jogadorSelecionado.collectAsState()
     val adversario  by vm.adversario.collectAsState()
+    val escalacaoAdversario by vm.escalacaoAdversario.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
     LaunchedEffect(adversarioId) {
@@ -64,7 +66,8 @@ fun EscalacaoScreen(
 
     // Em modo pré-jogo, começa na aba Tática (3) para o jogador definir o esquema
     var abaAtiva by remember { mutableIntStateOf(if (modoPreJogo) 3 else 0) }
-    val abas = listOf("Titulares", "Reservas", "Elenco", "Tática")
+    val abas = if (modoPreJogo) listOf("Titulares", "Reservas", "Elenco", "Tática", "Adversário")
+               else listOf("Titulares", "Reservas", "Elenco", "Tática")
     var titularParaTroca by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
 
     Column(Modifier.fillMaxSize()) {
@@ -372,6 +375,16 @@ fun EscalacaoScreen(
             3 -> { // Tática
                 TaticaTab(escalacao = escalacao, vm = vm, modoPreJogo = modoPreJogo)
             }
+            4 -> { // Adversário (apenas no pré-jogo)
+                val esc = escalacaoAdversario
+                if (esc == null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    EscalacaoAdversarioPreJogoTab(escalacao = esc)
+                }
+            }
         }
     }
 
@@ -426,6 +439,98 @@ fun EscalacaoScreen(
             onDismiss  = { vm.selecionarJogador(null) },
             onAposentar = { id -> vm.aposentarJogador(id); vm.selecionarJogador(null) }
         )
+    }
+}
+
+@Composable
+private fun EscalacaoAdversarioPreJogoTab(escalacao: br.com.managerfoot.domain.model.Escalacao) {
+    val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+    val titularesOrdenados = remember(escalacao) {
+        escalacao.titulares.sortedWith(compareBy(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        ))
+    }
+    val forcaAdversario = remember(escalacao) { CalculadoraForca.calcularForcaTime(escalacao).toInt() }
+    var mostrarGramado by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.errorContainer)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    escalacao.time.nome,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    "Formação: ${escalacao.time.taticaFormacao} · ${when (escalacao.time.estiloJogo) {
+                        EstiloJogo.OFENSIVO -> "Ofensivo"
+                        EstiloJogo.EQUILIBRADO -> "Equilibrado"
+                        EstiloJogo.DEFENSIVO -> "Defensivo"
+                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
+                    }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    "Força média: $forcaAdversario",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                )
+            }
+            TextButton(onClick = { mostrarGramado = !mostrarGramado }) {
+                Text(if (mostrarGramado) "Lista" else "Campo")
+            }
+        }
+
+        if (mostrarGramado) {
+            GramadoTatico(
+                titulares = escalacao.titulares,
+                formacao = escalacao.time.taticaFormacao,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(8.dp)
+            )
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(titularesOrdenados) { jne ->
+                    ListItem(
+                        headlineContent = { Text(jne.jogador.nome) },
+                        supportingContent = {
+                            Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}")
+                        },
+                        trailingContent = {
+                            androidx.compose.material3.Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    jne.posicaoUsada.abreviacao,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
+            }
+        }
     }
 }
 

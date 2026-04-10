@@ -14,7 +14,8 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 89,
-      "escudo_res": "escudo_flamengo"
+      "escudo_res": "escudo_flamengo",
+      "pais": "Brasil"
     },
     {
       "id": 2,
@@ -30,7 +31,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 87,
-      "escudo_res": "escudo_palmeiras"
+      "escudo_res": "escudo_palmeiras",
+      "pais": "Brasil"
     },
     {
       "id": 3,
@@ -46,7 +48,8 @@
       "tatica": "3-5-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 86,
-      "escudo_res": "escudo_atleticomg"
+      "escudo_res": "escudo_atleticomg",
+      "pais": "Brasil"
     },
     {
       "id": 4,
@@ -62,7 +65,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 86,
-      "escudo_res": "escudo_saopaulo"
+      "escudo_res": "escudo_saopaulo",
+      "pais": "Brasil"
     },
     {
       "id": 5,
@@ -78,7 +82,8 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 88,
-      "escudo_res": "escudo_corinthians"
+      "escudo_res": "escudo_corinthians",
+      "pais": "Brasil"
     },
     {
       "id": 6,
@@ -94,7 +99,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 85,
-      "escudo_res": "escudo_fluminense"
+      "escudo_res": "escudo_fluminense",
+      "pais": "Brasil"
     },
     {
       "id": 7,
@@ -110,7 +116,8 @@
       "tatica": "4-4-2",
       "estilo": "CONTRA_ATAQUE",
       "reputacao": 84,
-      "escudo_res": "escudo_botafogo"
+      "escudo_res": "escudo_botafogo",
+      "pais": "Brasil"
     },
     {
       "id": 8,
@@ -126,7 +133,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 87,
-      "escudo_res": "escudo_internacional"
+      "escudo_res": "escudo_internacional",
+      "pais": "Brasil"
     },
     {
       "id": 9,
@@ -142,7 +150,8 @@
       "tatica": "3-5-2",
       "estilo": "DEFENSIVO",
       "reputacao": 88,
-      "escudo_res": "escudo_gremio"
+      "escudo_res": "escudo_gremio",
+      "pais": "Brasil"
     },
     {
       "id": 10,
@@ -158,7 +167,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 87,
-      "escudo_res": "escudo_cruzeiro"
+      "escudo_res": "escudo_cruzeiro",
+      "pais": "Brasil"
     },
     {
       "id": 11,
@@ -174,7 +184,8 @@
       "tatica": "4-3-3",
       "estilo": "CONTRA_ATAQUE",
       "reputacao": 83,
-      "escudo_res": "escudo_athleticopr"
+      "escudo_res": "escudo_athleticopr",
+      "pais": "Brasil"
     },
     {
       "id": 12,
@@ -190,7 +201,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 83,
-      "escudo_res": "escudo_vascodagama"
+      "escudo_res": "escudo_vascodagama",
+      "pais": "Brasil"
     },
     {
       "id": 13,
@@ -206,7 +218,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 75,
-      "escudo_res": "escudo_fortaleza"
+      "escudo_res": "escudo_fortaleza",
+      "pais": "Brasil"
     },
     {
       "id": 14,
@@ -222,7 +235,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 78,
-      "escudo_res": "escudo_bahia"
+      "escudo_res": "escudo_bahia",
+      "pais": "Brasil"
     },
     {
       "id": 15,
@@ -238,7 +252,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 74,
-      "escudo_res": "escudo_redbullbragantino"
+      "escudo_res": "escudo_redbullbragantino",
+      "pais": "Brasil"
     },
     {
       "id": 16,
@@ -254,7 +269,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 70,
-      "escudo_res": "escudo_criciuma"
+      "escudo_res": "escudo_criciuma",
+      "pais": "Brasil"
     },
     {
       "id": 17,
@@ -270,7 +286,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": "escudo_juventude"
+      "escudo_res": "escudo_juventude",
+      "pais": "Brasil"
     },
     {
       "id": 18,
@@ -286,7 +303,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 70,
-      "escudo_res": "escudo_cuiaba"
+      "escudo_res": "escudo_cuiaba",
+      "pais": "Brasil"
     },
     {
       "id": 19,
@@ -302,7 +320,8 @@
       "tatica": "4-4-2",
       "estilo": "CONTRA_ATAQUE",
       "reputacao": 70,
-      "escudo_res": "escudo_atleticogo"
+      "escudo_res": "escudo_atleticogo",
+      "pais": "Brasil"
     },
     {
       "id": 20,
@@ -318,7 +337,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 78,
-      "escudo_res": "escudo_vitoria"
+      "escudo_res": "escudo_vitoria",
+      "pais": "Brasil"
     },
     {
       "id": 21,
@@ -334,7 +354,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 88,
-      "escudo_res": "escudo_santos"
+      "escudo_res": "escudo_santos",
+      "pais": "Brasil"
     },
     {
       "id": 22,
@@ -350,7 +371,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": "escudo_sportrecife"
+      "escudo_res": "escudo_sportrecife",
+      "pais": "Brasil"
     },
     {
       "id": 23,
@@ -366,7 +388,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 72,
-      "escudo_res": "escudo_coritiba"
+      "escudo_res": "escudo_coritiba",
+      "pais": "Brasil"
     },
     {
       "id": 24,
@@ -382,7 +405,8 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 70,
-      "escudo_res": "escudo_americamg"
+      "escudo_res": "escudo_americamg",
+      "pais": "Brasil"
     },
     {
       "id": 25,
@@ -398,7 +422,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 73,
-      "escudo_res": "escudo_ceara"
+      "escudo_res": "escudo_ceara",
+      "pais": "Brasil"
     },
     {
       "id": 26,
@@ -414,7 +439,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 76,
-      "escudo_res": "escudo_goias"
+      "escudo_res": "escudo_goias",
+      "pais": "Brasil"
     },
     {
       "id": 27,
@@ -430,7 +456,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 73,
-      "escudo_res": "escudo_crb"
+      "escudo_res": "escudo_crb",
+      "pais": "Brasil"
     },
     {
       "id": 28,
@@ -446,7 +473,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 78,
-      "escudo_res": "escudo_chapecoense"
+      "escudo_res": "escudo_chapecoense",
+      "pais": "Brasil"
     },
     {
       "id": 29,
@@ -462,7 +490,8 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 77,
-      "escudo_res": "escudo_pontepreta"
+      "escudo_res": "escudo_pontepreta",
+      "pais": "Brasil"
     },
     {
       "id": 30,
@@ -478,7 +507,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 77,
-      "escudo_res": "escudo_guarani"
+      "escudo_res": "escudo_guarani",
+      "pais": "Brasil"
     },
     {
       "id": 31,
@@ -494,7 +524,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 67,
-      "escudo_res": "escudo_sampaiocorrea"
+      "escudo_res": "escudo_sampaiocorrea",
+      "pais": "Brasil"
     },
     {
       "id": 32,
@@ -510,7 +541,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 68,
-      "escudo_res": "escudo_ituano"
+      "escudo_res": "escudo_ituano",
+      "pais": "Brasil"
     },
     {
       "id": 33,
@@ -526,7 +558,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 67,
-      "escudo_res": "escudo_novorizontino"
+      "escudo_res": "escudo_novorizontino",
+      "pais": "Brasil"
     },
     {
       "id": 34,
@@ -542,7 +575,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 68,
-      "escudo_res": "escudo_operario"
+      "escudo_res": "escudo_operario",
+      "pais": "Brasil"
     },
     {
       "id": 35,
@@ -558,7 +592,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": "escudo_botafogosp"
+      "escudo_res": "escudo_botafogosp",
+      "pais": "Brasil"
     },
     {
       "id": 36,
@@ -574,7 +609,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 66,
-      "escudo_res": "escudo_abc"
+      "escudo_res": "escudo_abc",
+      "pais": "Brasil"
     },
     {
       "id": 37,
@@ -590,7 +626,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": "escudo_vilanovago"
+      "escudo_res": "escudo_vilanovago",
+      "pais": "Brasil"
     },
     {
       "id": 38,
@@ -606,7 +643,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": "escudo_paysandu"
+      "escudo_res": "escudo_paysandu",
+      "pais": "Brasil"
     },
     {
       "id": 39,
@@ -622,7 +660,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 64,
-      "escudo_res": "escudo_tombense"
+      "escudo_res": "escudo_tombense",
+      "pais": "Brasil"
     },
     {
       "id": 40,
@@ -638,7 +677,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 78,
-      "escudo_res": "escudo_mirassol"
+      "escudo_res": "escudo_mirassol",
+      "pais": "Brasil"
     },
     {
       "id": 41,
@@ -654,7 +694,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 70,
-      "escudo_res": "escudo_voltaredonda"
+      "escudo_res": "escudo_voltaredonda",
+      "pais": "Brasil"
     },
     {
       "id": 42,
@@ -670,7 +711,8 @@
       "tatica": "4-3-3",
       "estilo": "DEFENSIVO",
       "reputacao": 65,
-      "escudo_res": "escudo_ferroviaria"
+      "escudo_res": "escudo_ferroviaria",
+      "pais": "Brasil"
     },
     {
       "id": 43,
@@ -686,7 +728,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": "escudo_londrina"
+      "escudo_res": "escudo_londrina",
+      "pais": "Brasil"
     },
     {
       "id": 44,
@@ -702,7 +745,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 64,
-      "escudo_res": "escudo_brusque"
+      "escudo_res": "escudo_brusque",
+      "pais": "Brasil"
     },
     {
       "id": 45,
@@ -718,7 +762,8 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 77,
-      "escudo_res": "escudo_figueirense"
+      "escudo_res": "escudo_figueirense",
+      "pais": "Brasil"
     },
     {
       "id": 46,
@@ -734,7 +779,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 60,
-      "escudo_res": "escudo_ypiranga"
+      "escudo_res": "escudo_ypiranga",
+      "pais": "Brasil"
     },
     {
       "id": 47,
@@ -750,7 +796,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 74,
-      "escudo_res": "escudo_nautico"
+      "escudo_res": "escudo_nautico",
+      "pais": "Brasil"
     },
     {
       "id": 48,
@@ -766,7 +813,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": "escudo_remo"
+      "escudo_res": "escudo_remo",
+      "pais": "Brasil"
     },
     {
       "id": 49,
@@ -782,7 +830,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 60,
-      "escudo_res": "escudo_anapolisgo"
+      "escudo_res": "escudo_anapolisgo",
+      "pais": "Brasil"
     },
     {
       "id": 50,
@@ -798,7 +847,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 62,
-      "escudo_res": "escudo_saobernardo"
+      "escudo_res": "escudo_saobernardo",
+      "pais": "Brasil"
     },
     {
       "id": 51,
@@ -814,7 +864,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 63,
-      "escudo_res": "escudo_botafogopb"
+      "escudo_res": "escudo_botafogopb",
+      "pais": "Brasil"
     },
     {
       "id": 52,
@@ -830,7 +881,8 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 60,
-      "escudo_res": "escudo_maringa"
+      "escudo_res": "escudo_maringa",
+      "pais": "Brasil"
     },
     {
       "id": 53,
@@ -846,7 +898,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 65,
-      "escudo_res": "escudo_interdelimeira"
+      "escudo_res": "escudo_interdelimeira",
+      "pais": "Brasil"
     },
     {
       "id": 54,
@@ -862,7 +915,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": "escudo_csa"
+      "escudo_res": "escudo_csa",
+      "pais": "Brasil"
     },
     {
       "id": 55,
@@ -878,7 +932,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 60,
-      "escudo_res": "escudo_amazonasfc"
+      "escudo_res": "escudo_amazonasfc",
+      "pais": "Brasil"
     },
     {
       "id": 56,
@@ -894,7 +949,8 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 71,
-      "escudo_res": "escudo_avai"
+      "escudo_res": "escudo_avai",
+      "pais": "Brasil"
     },
     {
       "id": 57,
@@ -910,7 +966,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 65,
-      "escudo_res": "escudo_athleticclub"
+      "escudo_res": "escudo_athleticclub",
+      "pais": "Brasil"
     },
     {
       "id": 58,
@@ -926,7 +983,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 65,
-      "escudo_res": "escudo_confiancase"
+      "escudo_res": "escudo_confiancase",
+      "pais": "Brasil"
     },
     {
       "id": 59,
@@ -942,7 +1000,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 55,
-      "escudo_res": "escudo_floresta"
+      "escudo_res": "escudo_floresta",
+      "pais": "Brasil"
     },
     {
       "id": 60,
@@ -958,7 +1017,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 80,
-      "escudo_res": "escudo_santacruz"
+      "escudo_res": "escudo_santacruz",
+      "pais": "Brasil"
     },
     {
       "id": 61,
@@ -974,7 +1034,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 38,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 62,
@@ -990,7 +1051,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 55,
-      "escudo_res": "escudo_barra"
+      "escudo_res": "escudo_barra",
+      "pais": "Brasil"
     },
     {
       "id": 63,
@@ -1006,7 +1068,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 31,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 64,
@@ -1022,7 +1085,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 37,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 65,
@@ -1038,7 +1102,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 33,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 66,
@@ -1054,7 +1119,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 55,
-      "escudo_res": "escudo_maranhao"
+      "escudo_res": "escudo_maranhao",
+      "pais": "Brasil"
     },
     {
       "id": 67,
@@ -1070,7 +1136,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 36,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 68,
@@ -1086,7 +1153,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 32,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 69,
@@ -1102,7 +1170,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 52,
-      "escudo_res": "escudo_itabaiana"
+      "escudo_res": "escudo_itabaiana",
+      "pais": "Brasil"
     },
     {
       "id": 70,
@@ -1118,7 +1187,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 38,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 71,
@@ -1134,7 +1204,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 36,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 72,
@@ -1150,7 +1221,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 30,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 73,
@@ -1166,7 +1238,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 28,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 74,
@@ -1182,7 +1255,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 31,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 75,
@@ -1198,7 +1272,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 30,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 76,
@@ -1214,7 +1289,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 28,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 77,
@@ -1230,7 +1306,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 35,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 78,
@@ -1246,7 +1323,8 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 30,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 79,
@@ -1262,7 +1340,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 36,
-      "escudo_res": ""
+      "escudo_res": "",
+      "pais": "Brasil"
     },
     {
       "id": 80,
@@ -1278,7 +1357,8 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 62,
-      "escudo_res": "escudo_caxiasdosul"
+      "escudo_res": "escudo_caxiasdosul",
+      "pais": "Brasil"
     }
   ],
   "jogadores": [
@@ -2648,14 +2728,14 @@
       "fisico": 83,
       "salario": 60000000,
       "contrato": 2,
-      "valor_mercado": 80000000
+      "valor_mercado": 2600000
     },
     {
       "id": 77,
       "time_id": 4,
-      "nome": "Nicolas Campos",
-      "nome_abrev": "N. Campos",
-      "idade": 25,
+      "nome": "Carlos Coronel",
+      "nome_abrev": "C. Coronel",
+      "idade": 29,
       "posicao": "GOLEIRO",
       "forca": 74,
       "tecnica": 69,
@@ -2666,14 +2746,14 @@
       "fisico": 76,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 9750000
     },
     {
       "id": 78,
       "time_id": 4,
-      "nome": "David Silva",
-      "nome_abrev": "D. Silva",
-      "idade": 26,
+      "nome": "Alan Franco",
+      "nome_abrev": "A. Franco",
+      "idade": 29,
       "posicao": "ZAGUEIRO",
       "forca": 87,
       "tecnica": 86,
@@ -2684,14 +2764,14 @@
       "fisico": 92,
       "salario": 26000000,
       "contrato": 1,
-      "valor_mercado": 98000000
+      "valor_mercado": 26000000
     },
     {
       "id": 79,
       "time_id": 4,
-      "nome": "Mauro Cardoso",
-      "nome_abrev": "M. Cardoso",
-      "idade": 27,
+      "nome": "Matheus Dória",
+      "nome_abrev": "M. Dória",
+      "idade": 31,
       "posicao": "ZAGUEIRO",
       "forca": 81,
       "tecnica": 78,
@@ -2702,14 +2782,14 @@
       "fisico": 86,
       "salario": 11000000,
       "contrato": 3,
-      "valor_mercado": 42000000
+      "valor_mercado": 9750000
     },
     {
       "id": 80,
       "time_id": 4,
-      "nome": "Alex Teixeira",
-      "nome_abrev": "A. Teixeira",
-      "idade": 28,
+      "nome": "Rafael Tolói",
+      "nome_abrev": "R. Tolói",
+      "idade": 35,
       "posicao": "ZAGUEIRO",
       "forca": 74,
       "tecnica": 72,
@@ -2720,13 +2800,13 @@
       "fisico": 79,
       "salario": 4500000,
       "contrato": 4,
-      "valor_mercado": 17000000
+      "valor_mercado": 6500000
     },
     {
       "id": 81,
       "time_id": 4,
-      "nome": "Michel Freitas",
-      "nome_abrev": "M. Freitas",
+      "nome": "Sabino",
+      "nome_abrev": "Sabino",
       "idade": 29,
       "posicao": "ZAGUEIRO",
       "forca": 77,
@@ -2738,14 +2818,14 @@
       "fisico": 82,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 6500000
     },
     {
       "id": 82,
       "time_id": 4,
-      "nome": "Gabriel Andrade",
-      "nome_abrev": "G. Andrade",
-      "idade": 30,
+      "nome": "Maik",
+      "nome_abrev": "Maik",
+      "idade": 21,
       "posicao": "LATERAL_DIREITO",
       "forca": 81,
       "tecnica": 82,
@@ -2756,14 +2836,14 @@
       "fisico": 81,
       "salario": 26000000,
       "contrato": 3,
-      "valor_mercado": 98000000
+      "valor_mercado": 13000000
     },
     {
       "id": 83,
       "time_id": 4,
-      "nome": "Thiago Dias",
-      "nome_abrev": "T. Dias",
-      "idade": 31,
+      "nome": "Cédric Soares",
+      "nome_abrev": "C. Soares",
+      "idade": 34,
       "posicao": "LATERAL_DIREITO",
       "forca": 74,
       "tecnica": 76,
@@ -2774,14 +2854,14 @@
       "fisico": 74,
       "salario": 4500000,
       "contrato": 1,
-      "valor_mercado": 17000000
+      "valor_mercado": 3900000
     },
     {
       "id": 84,
       "time_id": 4,
-      "nome": "Pedro Costa",
-      "nome_abrev": "P. Costa",
-      "idade": 32,
+      "nome": "Enzo Díaz",
+      "nome_abrev": "E. Díaz",
+      "idade": 30,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 87,
       "tecnica": 90,
@@ -2792,14 +2872,14 @@
       "fisico": 87,
       "salario": 26000000,
       "contrato": 4,
-      "valor_mercado": 98000000
+      "valor_mercado": 19500000
     },
     {
       "id": 85,
       "time_id": 4,
-      "nome": "Rodrigo Nascimento",
-      "nome_abrev": "R. Nascimento",
-      "idade": 19,
+      "nome": "Wendell",
+      "nome_abrev": "Wendell",
+      "idade": 32,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 71,
       "tecnica": 72,
@@ -2810,14 +2890,14 @@
       "fisico": 71,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 13000000
     },
     {
       "id": 86,
       "time_id": 4,
-      "nome": "Leandro Rodrigues",
-      "nome_abrev": "L. Rodrigues",
-      "idade": 21,
+      "nome": "Pablo Maia",
+      "nome_abrev": "P. Maia",
+      "idade": 24,
       "posicao": "VOLANTE",
       "forca": 84,
       "tecnica": 86,
@@ -2828,14 +2908,14 @@
       "fisico": 89,
       "salario": 11000000,
       "contrato": 3,
-      "valor_mercado": 42000000
+      "valor_mercado": 39000000
     },
     {
       "id": 87,
       "time_id": 4,
-      "nome": "Renato Xavier",
-      "nome_abrev": "R. Xavier",
-      "idade": 22,
+      "nome": "Luan",
+      "nome_abrev": "Luan",
+      "idade": 26,
       "posicao": "VOLANTE",
       "forca": 87,
       "tecnica": 90,
@@ -2846,14 +2926,14 @@
       "fisico": 92,
       "salario": 11000000,
       "contrato": 5,
-      "valor_mercado": 42000000
+      "valor_mercado": 6500000
     },
     {
       "id": 88,
       "time_id": 4,
-      "nome": "Joao Vieira",
-      "nome_abrev": "J. Vieira",
-      "idade": 23,
+      "nome": "Felipe Negrucci",
+      "nome_abrev": "F. Negrucci",
+      "idade": 21,
       "posicao": "VOLANTE",
       "forca": 71,
       "tecnica": 72,
@@ -2864,14 +2944,14 @@
       "fisico": 76,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 5200000
     },
     {
       "id": 89,
       "time_id": 4,
-      "nome": "Everton Sampaio",
-      "nome_abrev": "E. Sampaio",
-      "idade": 24,
+      "nome": "Marcos Antônio",
+      "nome_abrev": "M. Antônio",
+      "idade": 25,
       "posicao": "MEIA_CENTRAL",
       "forca": 84,
       "tecnica": 89,
@@ -2882,14 +2962,14 @@
       "fisico": 82,
       "salario": 26000000,
       "contrato": 4,
-      "valor_mercado": 98000000
+      "valor_mercado": 78000000
     },
     {
       "id": 90,
       "time_id": 4,
-      "nome": "Arthur Rocha",
-      "nome_abrev": "A. Rocha",
-      "idade": 25,
+      "nome": "Damián Bobadilla",
+      "nome_abrev": "D. Bobadilla",
+      "idade": 24,
       "posicao": "MEIA_CENTRAL",
       "forca": 77,
       "tecnica": 83,
@@ -2900,14 +2980,14 @@
       "fisico": 75,
       "salario": 4500000,
       "contrato": 1,
-      "valor_mercado": 17000000
+      "valor_mercado": 32500000
     },
     {
       "id": 91,
       "time_id": 4,
-      "nome": "Oscar",
-      "nome_abrev": "Oscar",
-      "idade": 34,
+      "nome": "Cauly",
+      "nome_abrev": "Cauly",
+      "idade": 30,
       "posicao": "MEIA_ATACANTE",
       "forca": 84,
       "tecnica": 88,
@@ -2918,14 +2998,14 @@
       "fisico": 79,
       "salario": 200000000,
       "contrato": 2,
-      "valor_mercado": 200000000
+      "valor_mercado": 26000000
     },
     {
       "id": 92,
       "time_id": 4,
-      "nome": "Igor Azevedo",
-      "nome_abrev": "I. Azevedo",
-      "idade": 27,
+      "nome": "Pedro Ferreira",
+      "nome_abrev": "P. Ferreira",
+      "idade": 18,
       "posicao": "MEIA_ATACANTE",
       "forca": 74,
       "tecnica": 82,
@@ -2936,13 +3016,13 @@
       "fisico": 72,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 1950000
     },
     {
       "id": 93,
       "time_id": 4,
-      "nome": "Daniel Miranda",
-      "nome_abrev": "D. Miranda",
+      "nome": "Artur",
+      "nome_abrev": "Artur",
       "idade": 28,
       "posicao": "PONTA_DIREITA",
       "forca": 87,
@@ -2954,7 +3034,7 @@
       "fisico": 85,
       "salario": 11000000,
       "contrato": 4,
-      "valor_mercado": 42000000
+      "valor_mercado": 45500000
     },
     {
       "id": 94,
@@ -2972,14 +3052,14 @@
       "fisico": 82,
       "salario": 150000000,
       "contrato": 1,
-      "valor_mercado": 200000000
+      "valor_mercado": 16250000
     },
     {
       "id": 95,
       "time_id": 4,
-      "nome": "Vitor Souza",
-      "nome_abrev": "V. Souza",
-      "idade": 30,
+      "nome": "Ferreirinha",
+      "nome_abrev": "Ferreirinha",
+      "idade": 28,
       "posicao": "PONTA_ESQUERDA",
       "forca": 84,
       "tecnica": 89,
@@ -2990,14 +3070,14 @@
       "fisico": 82,
       "salario": 26000000,
       "contrato": 2,
-      "valor_mercado": 98000000
+      "valor_mercado": 32500000
     },
     {
       "id": 96,
       "time_id": 4,
-      "nome": "Sandro Alves",
-      "nome_abrev": "S. Alves",
-      "idade": 31,
+      "nome": "Lucca",
+      "nome_abrev": "Lucca",
+      "idade": 18,
       "posicao": "PONTA_ESQUERDA",
       "forca": 77,
       "tecnica": 83,
@@ -3008,7 +3088,7 @@
       "fisico": 75,
       "salario": 4500000,
       "contrato": 1,
-      "valor_mercado": 17000000
+      "valor_mercado": 19500000
     },
     {
       "id": 97,
@@ -3026,13 +3106,13 @@
       "fisico": 85,
       "salario": 11000000,
       "contrato": 3,
-      "valor_mercado": 42000000
+      "valor_mercado": 9750000
     },
     {
       "id": 98,
       "time_id": 4,
-      "nome": "Toni Nogueira",
-      "nome_abrev": "T. Nogueira",
+      "nome": "Ryan Francisco",
+      "nome_abrev": "R. Francisco",
       "idade": 19,
       "posicao": "CENTROAVANTE",
       "forca": 74,
@@ -3044,14 +3124,14 @@
       "fisico": 79,
       "salario": 4500000,
       "contrato": 2,
-      "valor_mercado": 17000000
+      "valor_mercado": 32500000
     },
     {
       "id": 99,
       "time_id": 4,
-      "nome": "Lucas Borges",
-      "nome_abrev": "L. Borges",
-      "idade": 21,
+      "nome": "André Silva",
+      "nome_abrev": "A. Silva",
+      "idade": 28,
       "posicao": "SEGUNDA_ATACANTE",
       "forca": 87,
       "tecnica": 96,
@@ -3062,14 +3142,14 @@
       "fisico": 85,
       "salario": 11000000,
       "contrato": 4,
-      "valor_mercado": 42000000
+      "valor_mercado": 26000000
     },
     {
       "id": 100,
       "time_id": 4,
-      "nome": "Felipe Fonseca",
-      "nome_abrev": "F. Fonseca",
-      "idade": 22,
+      "nome": "Luciano",
+      "nome_abrev": "Luciano",
+      "idade": 32,
       "posicao": "SEGUNDA_ATACANTE",
       "forca": 71,
       "tecnica": 78,
@@ -3080,7 +3160,7 @@
       "fisico": 69,
       "salario": 4500000,
       "contrato": 3,
-      "valor_mercado": 17000000
+      "valor_mercado": 9750000
     },
     {
       "id": 101,
@@ -3535,8 +3615,8 @@
     {
       "id": 126,
       "time_id": 6,
-      "nome": "Luan Monteiro",
-      "nome_abrev": "L. Monteiro",
+      "nome": "Fábio",
+      "nome_abrev": "Fábio",
       "idade": 26,
       "posicao": "GOLEIRO",
       "forca": 82,
@@ -3548,13 +3628,13 @@
       "fisico": 83,
       "salario": 17000000,
       "contrato": 3,
-      "valor_mercado": 65000000
+      "valor_mercado": 47250000
     },
     {
       "id": 127,
       "time_id": 6,
-      "nome": "Wesley Campos",
-      "nome_abrev": "W. Campos",
+      "nome": "Marcelo Pitaluga",
+      "nome_abrev": "M. Pitaluga",
       "idade": 27,
       "posicao": "GOLEIRO",
       "forca": 66,
@@ -3566,13 +3646,13 @@
       "fisico": 67,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 126000000
     },
     {
       "id": 128,
       "time_id": 6,
-      "nome": "Cleber Silva",
-      "nome_abrev": "C. Silva",
+      "nome": "Ignácio",
+      "nome_abrev": "Ignácio",
       "idade": 28,
       "posicao": "ZAGUEIRO",
       "forca": 79,
@@ -3584,13 +3664,13 @@
       "fisico": 83,
       "salario": 17000000,
       "contrato": 1,
-      "valor_mercado": 65000000
+      "valor_mercado": 1260000000
     },
     {
       "id": 129,
       "time_id": 6,
-      "nome": "Fabio Cardoso",
-      "nome_abrev": "F. Cardoso",
+      "nome": "Juan Pablo Freytes",
+      "nome_abrev": "J. Freytes",
       "idade": 29,
       "posicao": "ZAGUEIRO",
       "forca": 82,
@@ -3602,13 +3682,13 @@
       "fisico": 86,
       "salario": 7500000,
       "contrato": 3,
-      "valor_mercado": 27000000
+      "valor_mercado": 3150000000
     },
     {
       "id": 130,
       "time_id": 6,
-      "nome": "Kaio Teixeira",
-      "nome_abrev": "K. Teixeira",
+      "nome": "Igor Rabello",
+      "nome_abrev": "I. Rabello",
       "idade": 30,
       "posicao": "ZAGUEIRO",
       "forca": 66,
@@ -3620,13 +3700,13 @@
       "fisico": 70,
       "salario": 3000000,
       "contrato": 4,
-      "valor_mercado": 11000000
+      "valor_mercado": 882000000
     },
     {
       "id": 131,
       "time_id": 6,
-      "nome": "Hudson Freitas",
-      "nome_abrev": "H. Freitas",
+      "nome": "Jemmes",
+      "nome_abrev": "Jemmes",
       "idade": 31,
       "posicao": "ZAGUEIRO",
       "forca": 69,
@@ -3638,13 +3718,13 @@
       "fisico": 73,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 1890000000
     },
     {
       "id": 132,
       "time_id": 6,
-      "nome": "Matheus Andrade",
-      "nome_abrev": "M. Andrade",
+      "nome": "Guga",
+      "nome_abrev": "Guga",
       "idade": 32,
       "posicao": "LATERAL_DIREITO",
       "forca": 82,
@@ -3656,13 +3736,13 @@
       "fisico": 81,
       "salario": 17000000,
       "contrato": 3,
-      "valor_mercado": 65000000
+      "valor_mercado": 1260000000
     },
     {
       "id": 133,
       "time_id": 6,
-      "nome": "Rafael Dias",
-      "nome_abrev": "R. Dias",
+      "nome": "Samuel Xavier",
+      "nome_abrev": "S. Xavier",
       "idade": 19,
       "posicao": "LATERAL_DIREITO",
       "forca": 66,
@@ -3674,13 +3754,13 @@
       "fisico": 65,
       "salario": 3000000,
       "contrato": 1,
-      "valor_mercado": 11000000
+      "valor_mercado": 157500000
     },
     {
       "id": 134,
       "time_id": 6,
-      "nome": "Diego Costa",
-      "nome_abrev": "D. Costa",
+      "nome": "Guilherme Arana",
+      "nome_abrev": "G. Arana",
       "idade": 21,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 79,
@@ -3692,13 +3772,13 @@
       "fisico": 78,
       "salario": 17000000,
       "contrato": 4,
-      "valor_mercado": 65000000
+      "valor_mercado": 4410000000
     },
     {
       "id": 135,
       "time_id": 6,
-      "nome": "Alan Nascimento",
-      "nome_abrev": "A. Nascimento",
+      "nome": "Renê",
+      "nome_abrev": "Renê",
       "idade": 22,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 72,
@@ -3710,13 +3790,13 @@
       "fisico": 71,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 315000000
     },
     {
       "id": 136,
       "time_id": 6,
-      "nome": "Eduardo Rodrigues",
-      "nome_abrev": "E. Rodrigues",
+      "nome": "Facundo Bernal",
+      "nome_abrev": "F. Bernal",
       "idade": 23,
       "posicao": "VOLANTE",
       "forca": 76,
@@ -3728,31 +3808,31 @@
       "fisico": 80,
       "salario": 7500000,
       "contrato": 3,
-      "valor_mercado": 27000000
+      "valor_mercado": 3780000000
     },
     {
       "id": 137,
       "time_id": 6,
-      "nome": "Marcos Xavier",
-      "nome_abrev": "M. Xavier",
+      "nome": "Martinelli",
+      "nome_abrev": "Martinelli",
       "idade": 24,
       "posicao": "VOLANTE",
-      "forca": 79,
-      "tecnica": 82,
-      "passe": 81,
-      "velocidade": 80,
-      "finalizacao": 74,
+      "forca": 83,
+      "tecnica": 85,
+      "passe": 83,
+      "velocidade": 83,
+      "finalizacao": 84,
       "defesa": 85,
       "fisico": 83,
       "salario": 7500000,
       "contrato": 5,
-      "valor_mercado": 27000000
+      "valor_mercado": 10080000000
     },
     {
       "id": 138,
       "time_id": 6,
-      "nome": "Ruan Vieira",
-      "nome_abrev": "R. Vieira",
+      "nome": "Otávio",
+      "nome_abrev": "Otávio",
       "idade": 25,
       "posicao": "VOLANTE",
       "forca": 72,
@@ -3764,13 +3844,13 @@
       "fisico": 76,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 945000000
     },
     {
       "id": 139,
       "time_id": 6,
-      "nome": "Patrick Sampaio",
-      "nome_abrev": "P. Sampaio",
+      "nome": "Hércules",
+      "nome_abrev": "Hércules",
       "idade": 26,
       "posicao": "MEIA_CENTRAL",
       "forca": 76,
@@ -3782,13 +3862,13 @@
       "fisico": 73,
       "salario": 17000000,
       "contrato": 4,
-      "valor_mercado": 65000000
+      "valor_mercado": 7560000000
     },
     {
       "id": 140,
       "time_id": 6,
-      "nome": "Emerson Rocha",
-      "nome_abrev": "E. Rocha",
+      "nome": "Nonato",
+      "nome_abrev": "Nonato",
       "idade": 27,
       "posicao": "MEIA_CENTRAL",
       "forca": 69,
@@ -3800,13 +3880,13 @@
       "fisico": 66,
       "salario": 3000000,
       "contrato": 1,
-      "valor_mercado": 11000000
+      "valor_mercado": 756000000
     },
     {
       "id": 141,
       "time_id": 6,
-      "nome": "Murilo Mendes",
-      "nome_abrev": "M. Mendes",
+      "nome": "Luciano Acosta",
+      "nome_abrev": "L. Acosta",
       "idade": 28,
       "posicao": "MEIA_ATACANTE",
       "forca": 82,
@@ -3818,13 +3898,13 @@
       "fisico": 79,
       "salario": 7500000,
       "contrato": 3,
-      "valor_mercado": 27000000
+      "valor_mercado": 3150000000
     },
     {
       "id": 142,
       "time_id": 6,
-      "nome": "Caio Azevedo",
-      "nome_abrev": "C. Azevedo",
+      "nome": "Jefferson Savarino",
+      "nome_abrev": "J. Savarino",
       "idade": 29,
       "posicao": "MEIA_ATACANTE",
       "forca": 66,
@@ -3836,13 +3916,13 @@
       "fisico": 63,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 5040000000
     },
     {
       "id": 143,
       "time_id": 6,
-      "nome": "Nicolas Miranda",
-      "nome_abrev": "N. Miranda",
+      "nome": "Kevin Serna",
+      "nome_abrev": "K. Serna",
       "idade": 30,
       "posicao": "PONTA_DIREITA",
       "forca": 79,
@@ -3854,13 +3934,13 @@
       "fisico": 76,
       "salario": 7500000,
       "contrato": 4,
-      "valor_mercado": 27000000
+      "valor_mercado": 3150000000
     },
     {
       "id": 144,
       "time_id": 6,
-      "nome": "David Tavares",
-      "nome_abrev": "D. Tavares",
+      "nome": "Riquelme",
+      "nome_abrev": "Riquelme",
       "idade": 31,
       "posicao": "PONTA_DIREITA",
       "forca": 72,
@@ -3872,13 +3952,13 @@
       "fisico": 69,
       "salario": 3000000,
       "contrato": 3,
-      "valor_mercado": 11000000
+      "valor_mercado": 3780000000
     },
     {
       "id": 145,
       "time_id": 6,
-      "nome": "Mauro Souza",
-      "nome_abrev": "M. Souza",
+      "nome": "Agustín Canobbio",
+      "nome_abrev": "A. Canobbio",
       "idade": 32,
       "posicao": "PONTA_ESQUERDA",
       "forca": 76,
@@ -3890,31 +3970,31 @@
       "fisico": 73,
       "salario": 17000000,
       "contrato": 2,
-      "valor_mercado": 65000000
+      "valor_mercado": 3780000000
     },
     {
       "id": 146,
       "time_id": 6,
-      "nome": "Alex Alves",
-      "nome_abrev": "A. Alves",
+      "nome": "Yeferson Soteldo",
+      "nome_abrev": "Y. Soteldo",
       "idade": 19,
       "posicao": "PONTA_ESQUERDA",
-      "forca": 69,
-      "tecnica": 75,
-      "passe": 70,
-      "velocidade": 80,
-      "finalizacao": 72,
-      "defesa": 59,
-      "fisico": 66,
+      "forca": 82,
+      "tecnica": 85,
+      "passe": 80,
+      "velocidade": 86,
+      "finalizacao": 82,
+      "defesa": 79,
+      "fisico": 81,
       "salario": 3000000,
       "contrato": 1,
-      "valor_mercado": 11000000
+      "valor_mercado": 2520000000
     },
     {
       "id": 147,
       "time_id": 6,
-      "nome": "Michel Ribeiro",
-      "nome_abrev": "M. Ribeiro",
+      "nome": "John Kennedy",
+      "nome_abrev": "J. Kennedy",
       "idade": 21,
       "posicao": "CENTROAVANTE",
       "forca": 82,
@@ -3926,13 +4006,13 @@
       "fisico": 86,
       "salario": 7500000,
       "contrato": 3,
-      "valor_mercado": 27000000
+      "valor_mercado": 4410000000
     },
     {
       "id": 148,
       "time_id": 6,
-      "nome": "Gabriel Nogueira",
-      "nome_abrev": "G. Nogueira",
+      "nome": "Germán Cano",
+      "nome_abrev": "G. Cano",
       "idade": 22,
       "posicao": "CENTROAVANTE",
       "forca": 66,
@@ -3944,33 +4024,33 @@
       "fisico": 70,
       "salario": 3000000,
       "contrato": 2,
-      "valor_mercado": 11000000
+      "valor_mercado": 378000000
     },
     {
       "id": 149,
       "time_id": 6,
-      "nome": "Thiago Borges",
-      "nome_abrev": "T. Borges",
+      "nome": "Ganso",
+      "nome_abrev": "Ganso",
       "idade": 23,
-      "posicao": "SEGUNDA_ATACANTE",
+      "posicao": "MEIA_ATACANTE",
       "forca": 79,
       "tecnica": 88,
-      "passe": 81,
-      "velocidade": 88,
-      "finalizacao": 87,
-      "defesa": 72,
-      "fisico": 76,
-      "salario": 7500000,
+      "passe": 87,
+      "velocidade": 79,
+      "finalizacao": 84,
+      "defesa": 75,
+      "fisico": 79,
+      "salario": 75000000,
       "contrato": 4,
-      "valor_mercado": 27000000
+      "valor_mercado": 220500000
     },
     {
       "id": 150,
       "time_id": 6,
-      "nome": "Pedro Fonseca",
-      "nome_abrev": "P. Fonseca",
+      "nome": "David Terans",
+      "nome_abrev": "D. Terans",
       "idade": 24,
-      "posicao": "SEGUNDA_ATACANTE",
+      "posicao": "MEIA_ATACANTE",
       "forca": 72,
       "tecnica": 79,
       "passe": 74,
@@ -3980,7 +4060,7 @@
       "fisico": 69,
       "salario": 3000000,
       "contrato": 3,
-      "valor_mercado": 11000000
+      "valor_mercado": 630000000
     },
     {
       "id": 151,
@@ -4435,9 +4515,9 @@
     {
       "id": 176,
       "time_id": 8,
-      "nome": "Guilherme Monteiro",
-      "nome_abrev": "G. Monteiro",
-      "idade": 28,
+      "nome": "Anthoni",
+      "nome_abrev": "Anthoni",
+      "idade": 24,
       "posicao": "GOLEIRO",
       "forca": 76,
       "tecnica": 70,
@@ -4448,14 +4528,14 @@
       "fisico": 79,
       "salario": 14000000,
       "contrato": 3,
-      "valor_mercado": 53000000
+      "valor_mercado": 24000000
     },
     {
       "id": 177,
       "time_id": 8,
-      "nome": "Vitor Campos",
-      "nome_abrev": "V. Campos",
-      "idade": 29,
+      "nome": "Sergio Rochet",
+      "nome_abrev": "S. Rochet",
+      "idade": 33,
       "posicao": "GOLEIRO",
       "forca": 69,
       "tecnica": 64,
@@ -4466,14 +4546,14 @@
       "fisico": 72,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 12000000
     },
     {
       "id": 178,
       "time_id": 8,
-      "nome": "Sandro Silva",
-      "nome_abrev": "S. Silva",
-      "idade": 30,
+      "nome": "Victor Gabriel",
+      "nome_abrev": "V. Gabriel",
+      "idade": 21,
       "posicao": "ZAGUEIRO",
       "forca": 82,
       "tecnica": 81,
@@ -4484,14 +4564,14 @@
       "fisico": 88,
       "salario": 14000000,
       "contrato": 1,
-      "valor_mercado": 53000000
+      "valor_mercado": 30000000
     },
     {
       "id": 179,
       "time_id": 8,
-      "nome": "Wanderson Cardoso",
-      "nome_abrev": "W. Cardoso",
-      "idade": 31,
+      "nome": "Felix Torres",
+      "nome_abrev": "F. Torres",
+      "idade": 29,
       "posicao": "ZAGUEIRO",
       "forca": 76,
       "tecnica": 73,
@@ -4502,14 +4582,14 @@
       "fisico": 82,
       "salario": 6000000,
       "contrato": 3,
-      "valor_mercado": 22000000
+      "valor_mercado": 6000000
     },
     {
       "id": 180,
       "time_id": 8,
-      "nome": "Toni Teixeira",
-      "nome_abrev": "T. Teixeira",
-      "idade": 32,
+      "nome": "Juninho",
+      "nome_abrev": "Juninho",
+      "idade": 31,
       "posicao": "ZAGUEIRO",
       "forca": 69,
       "tecnica": 67,
@@ -4520,14 +4600,14 @@
       "fisico": 75,
       "salario": 2400000,
       "contrato": 4,
-      "valor_mercado": 8800000
+      "valor_mercado": 4800000
     },
     {
       "id": 181,
       "time_id": 8,
-      "nome": "Lucas Freitas",
-      "nome_abrev": "L. Freitas",
-      "idade": 19,
+      "nome": "Clayton",
+      "nome_abrev": "Clayton",
+      "idade": 26,
       "posicao": "ZAGUEIRO",
       "forca": 72,
       "tecnica": 71,
@@ -4538,14 +4618,14 @@
       "fisico": 78,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 4800000
     },
     {
       "id": 182,
       "time_id": 8,
-      "nome": "Felipe Andrade",
-      "nome_abrev": "F. Andrade",
-      "idade": 21,
+      "nome": "Bruno Gomes",
+      "nome_abrev": "B. Gomes",
+      "idade": 25,
       "posicao": "LATERAL_DIREITO",
       "forca": 76,
       "tecnica": 77,
@@ -4556,14 +4636,14 @@
       "fisico": 77,
       "salario": 14000000,
       "contrato": 3,
-      "valor_mercado": 53000000
+      "valor_mercado": 30000000
     },
     {
       "id": 183,
       "time_id": 8,
-      "nome": "Bruno Dias",
-      "nome_abrev": "B. Dias",
-      "idade": 22,
+      "nome": "Braian Aguirre",
+      "nome_abrev": "B. Aguirre",
+      "idade": 25,
       "posicao": "LATERAL_DIREITO",
       "forca": 69,
       "tecnica": 71,
@@ -4574,14 +4654,14 @@
       "fisico": 70,
       "salario": 2400000,
       "contrato": 1,
-      "valor_mercado": 8800000
+      "valor_mercado": 15000000
     },
     {
       "id": 184,
       "time_id": 8,
-      "nome": "Anderson Costa",
-      "nome_abrev": "A. Costa",
-      "idade": 23,
+      "nome": "Alexandro Bernabei",
+      "nome_abrev": "A. Bernabei",
+      "idade": 25,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 82,
       "tecnica": 85,
@@ -4592,14 +4672,14 @@
       "fisico": 83,
       "salario": 14000000,
       "contrato": 4,
-      "valor_mercado": 53000000
+      "valor_mercado": 36000000
     },
     {
       "id": 185,
       "time_id": 8,
-      "nome": "Victor Nascimento",
-      "nome_abrev": "V. Nascimento",
-      "idade": 24,
+      "nome": "Matheus Bahia",
+      "nome_abrev": "M. Bahia",
+      "idade": 26,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 66,
       "tecnica": 67,
@@ -4610,13 +4690,13 @@
       "fisico": 67,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 18000000
     },
     {
       "id": 186,
       "time_id": 8,
-      "nome": "Carlos Rodrigues",
-      "nome_abrev": "C. Rodrigues",
+      "nome": "Rodrigo Villagra",
+      "nome_abrev": "R. Villagra",
       "idade": 25,
       "posicao": "VOLANTE",
       "forca": 79,
@@ -4628,14 +4708,14 @@
       "fisico": 85,
       "salario": 6000000,
       "contrato": 3,
-      "valor_mercado": 22000000
+      "valor_mercado": 24000000
     },
     {
       "id": 187,
       "time_id": 8,
-      "nome": "Paulo Xavier",
-      "nome_abrev": "P. Xavier",
-      "idade": 26,
+      "nome": "Thiago Maia",
+      "nome_abrev": "T. Maia",
+      "idade": 29,
       "posicao": "VOLANTE",
       "forca": 82,
       "tecnica": 85,
@@ -4646,14 +4726,14 @@
       "fisico": 88,
       "salario": 6000000,
       "contrato": 5,
-      "valor_mercado": 22000000
+      "valor_mercado": 18000000
     },
     {
       "id": 188,
       "time_id": 8,
-      "nome": "Willian Vieira",
-      "nome_abrev": "W. Vieira",
-      "idade": 27,
+      "nome": "Ronaldo",
+      "nome_abrev": "Ronaldo",
+      "idade": 29,
       "posicao": "VOLANTE",
       "forca": 66,
       "tecnica": 67,
@@ -4664,14 +4744,14 @@
       "fisico": 72,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 12000000
     },
     {
       "id": 189,
       "time_id": 8,
-      "nome": "Danilo Sampaio",
-      "nome_abrev": "D. Sampaio",
-      "idade": 28,
+      "nome": "Alan Rodriguez",
+      "nome_abrev": "A. Rodriguez",
+      "idade": 26,
       "posicao": "MEIA_CENTRAL",
       "forca": 79,
       "tecnica": 84,
@@ -4682,13 +4762,13 @@
       "fisico": 78,
       "salario": 14000000,
       "contrato": 4,
-      "valor_mercado": 53000000
+      "valor_mercado": 13800000
     },
     {
       "id": 190,
       "time_id": 8,
-      "nome": "Douglas Rocha",
-      "nome_abrev": "D. Rocha",
+      "nome": "Paulinho Paula",
+      "nome_abrev": "P. Paula",
       "idade": 29,
       "posicao": "MEIA_CENTRAL",
       "forca": 72,
@@ -4700,14 +4780,14 @@
       "fisico": 71,
       "salario": 2400000,
       "contrato": 1,
-      "valor_mercado": 8800000
+      "valor_mercado": 6000000
     },
     {
       "id": 191,
       "time_id": 8,
-      "nome": "Leonardo Mendes",
-      "nome_abrev": "L. Mendes",
-      "idade": 30,
+      "nome": "Alan Patrick",
+      "nome_abrev": "A. Patrick",
+      "idade": 34,
       "posicao": "MEIA_ATACANTE",
       "forca": 76,
       "tecnica": 83,
@@ -4718,14 +4798,14 @@
       "fisico": 75,
       "salario": 6000000,
       "contrato": 3,
-      "valor_mercado": 22000000
+      "valor_mercado": 15000000
     },
     {
       "id": 192,
       "time_id": 8,
-      "nome": "Luan Azevedo",
-      "nome_abrev": "L. Azevedo",
-      "idade": 31,
+      "nome": "Allex",
+      "nome_abrev": "Allex",
+      "idade": 19,
       "posicao": "MEIA_ATACANTE",
       "forca": 69,
       "tecnica": 77,
@@ -4736,14 +4816,14 @@
       "fisico": 68,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 6000000
     },
     {
       "id": 193,
       "time_id": 8,
-      "nome": "Wesley Miranda",
-      "nome_abrev": "W. Miranda",
-      "idade": 32,
+      "nome": "Kayky",
+      "nome_abrev": "Kayky",
+      "idade": 22,
       "posicao": "PONTA_DIREITA",
       "forca": 82,
       "tecnica": 88,
@@ -4754,14 +4834,14 @@
       "fisico": 81,
       "salario": 6000000,
       "contrato": 4,
-      "valor_mercado": 22000000
+      "valor_mercado": 30000000
     },
     {
       "id": 194,
       "time_id": 8,
-      "nome": "Cleber Tavares",
-      "nome_abrev": "C. Tavares",
-      "idade": 19,
+      "nome": "Bruno Tabata",
+      "nome_abrev": "B. Tabata",
+      "idade": 29,
       "posicao": "PONTA_DIREITA",
       "forca": 66,
       "tecnica": 70,
@@ -4772,14 +4852,14 @@
       "fisico": 65,
       "salario": 2400000,
       "contrato": 3,
-      "valor_mercado": 8800000
+      "valor_mercado": 12000000
     },
     {
       "id": 195,
       "time_id": 8,
-      "nome": "Fabio Souza",
-      "nome_abrev": "F. Souza",
-      "idade": 21,
+      "nome": "Vitinho",
+      "nome_abrev": "Vitinho",
+      "idade": 27,
       "posicao": "PONTA_ESQUERDA",
       "forca": 79,
       "tecnica": 84,
@@ -4790,14 +4870,14 @@
       "fisico": 78,
       "salario": 14000000,
       "contrato": 2,
-      "valor_mercado": 53000000
+      "valor_mercado": 30000000
     },
     {
       "id": 196,
       "time_id": 8,
-      "nome": "Kaio Alves",
-      "nome_abrev": "K. Alves",
-      "idade": 22,
+      "nome": "Johan Carbonero",
+      "nome_abrev": "J. Carbonero",
+      "idade": 26,
       "posicao": "PONTA_ESQUERDA",
       "forca": 72,
       "tecnica": 78,
@@ -4808,14 +4888,14 @@
       "fisico": 71,
       "salario": 2400000,
       "contrato": 1,
-      "valor_mercado": 8800000
+      "valor_mercado": 24000000
     },
     {
       "id": 197,
       "time_id": 8,
-      "nome": "Hudson Ribeiro",
-      "nome_abrev": "H. Ribeiro",
-      "idade": 23,
+      "nome": "Rafael Borre",
+      "nome_abrev": "R. Borre",
+      "idade": 30,
       "posicao": "CENTROAVANTE",
       "forca": 76,
       "tecnica": 78,
@@ -4826,14 +4906,14 @@
       "fisico": 82,
       "salario": 6000000,
       "contrato": 3,
-      "valor_mercado": 22000000
+      "valor_mercado": 24000000
     },
     {
       "id": 198,
       "time_id": 8,
-      "nome": "Matheus Nogueira",
-      "nome_abrev": "M. Nogueira",
-      "idade": 24,
+      "nome": "Alerrandro",
+      "nome_abrev": "Alerrandro",
+      "idade": 26,
       "posicao": "CENTROAVANTE",
       "forca": 69,
       "tecnica": 72,
@@ -4844,14 +4924,14 @@
       "fisico": 75,
       "salario": 2400000,
       "contrato": 2,
-      "valor_mercado": 8800000
+      "valor_mercado": 18000000
     },
     {
       "id": 199,
       "time_id": 8,
-      "nome": "Rafael Borges",
-      "nome_abrev": "R. Borges",
-      "idade": 25,
+      "nome": "Raykkonen",
+      "nome_abrev": "Raykkonen",
+      "idade": 17,
       "posicao": "SEGUNDA_ATACANTE",
       "forca": 82,
       "tecnica": 91,
@@ -4862,14 +4942,14 @@
       "fisico": 81,
       "salario": 6000000,
       "contrato": 4,
-      "valor_mercado": 22000000
+      "valor_mercado": 6000000
     },
     {
       "id": 200,
       "time_id": 8,
-      "nome": "Diego Fonseca",
-      "nome_abrev": "D. Fonseca",
-      "idade": 26,
+      "nome": "Benjamin",
+      "nome_abrev": "Benjamin",
+      "idade": 19,
       "posicao": "SEGUNDA_ATACANTE",
       "forca": 66,
       "tecnica": 73,
@@ -4880,7 +4960,7 @@
       "fisico": 65,
       "salario": 2400000,
       "contrato": 3,
-      "valor_mercado": 8800000
+      "valor_mercado": 2000000
     },
     {
       "id": 201,
@@ -20005,9 +20085,9 @@
     {
       "id": 1041,
       "time_id": 48,
-      "nome": "Matheus Souza",
-      "nome_abrev": "M. Souza",
-      "idade": 26,
+      "nome": "Ivan",
+      "nome_abrev": "Ivan",
+      "idade": 28,
       "posicao": "GOLEIRO",
       "forca": 54,
       "tecnica": 57,
@@ -20018,14 +20098,14 @@
       "fisico": 57,
       "salario": 719741,
       "contrato": 1,
-      "valor_mercado": 16554043
+      "valor_mercado": 8450000
     },
     {
       "id": 1042,
       "time_id": 48,
-      "nome": "Patrick Miranda",
-      "nome_abrev": "P. Miranda",
-      "idade": 21,
+      "nome": "Marcelo Rangel",
+      "nome_abrev": "M. Rangel",
+      "idade": 37,
       "posicao": "GOLEIRO",
       "forca": 50,
       "tecnica": 58,
@@ -20036,14 +20116,14 @@
       "fisico": 58,
       "salario": 430367,
       "contrato": 4,
-      "valor_mercado": 11189542
+      "valor_mercado": 487500
     },
     {
       "id": 1043,
       "time_id": 48,
-      "nome": "Carlos Ferreira",
-      "nome_abrev": "C. Ferreira",
-      "idade": 24,
+      "nome": "Tchamba",
+      "nome_abrev": "Tchamba",
+      "idade": 27,
       "posicao": "ZAGUEIRO",
       "forca": 51,
       "tecnica": 60,
@@ -20054,14 +20134,14 @@
       "fisico": 49,
       "salario": 149862,
       "contrato": 2,
-      "valor_mercado": 5544894
+      "valor_mercado": 5200000
     },
     {
       "id": 1044,
       "time_id": 48,
-      "nome": "Bruno Cruz",
-      "nome_abrev": "B. Cruz",
-      "idade": 18,
+      "nome": "Kayky Almeida",
+      "nome_abrev": "K. Almeida",
+      "idade": 20,
       "posicao": "ZAGUEIRO",
       "forca": 53,
       "tecnica": 53,
@@ -20072,14 +20152,14 @@
       "fisico": 50,
       "salario": 217601,
       "contrato": 2,
-      "valor_mercado": 5222424
+      "valor_mercado": 5200000
     },
     {
       "id": 1045,
       "time_id": 48,
-      "nome": "Nando Nascimento",
-      "nome_abrev": "N. Nascimento",
-      "idade": 35,
+      "nome": "Marllon",
+      "nome_abrev": "Marllon",
+      "idade": 33,
       "posicao": "ZAGUEIRO",
       "forca": 51,
       "tecnica": 50,
@@ -20090,14 +20170,14 @@
       "fisico": 52,
       "salario": 210593,
       "contrato": 1,
-      "valor_mercado": 5264825
+      "valor_mercado": 2600000
     },
     {
       "id": 1046,
       "time_id": 48,
-      "nome": "Fernando Nunes",
-      "nome_abrev": "F. Nunes",
-      "idade": 20,
+      "nome": "João Lucas",
+      "nome_abrev": "J. Lucas",
+      "idade": 28,
       "posicao": "LATERAL_DIREITO",
       "forca": 57,
       "tecnica": 56,
@@ -20108,14 +20188,14 @@
       "fisico": 56,
       "salario": 446037,
       "contrato": 4,
-      "valor_mercado": 15165258
+      "valor_mercado": 9750000
     },
     {
       "id": 1047,
       "time_id": 48,
-      "nome": "Sergio Alves",
-      "nome_abrev": "S. Alves",
-      "idade": 30,
+      "nome": "Matheus Alexandre",
+      "nome_abrev": "M. Alexandre",
+      "idade": 27,
       "posicao": "LATERAL_DIREITO",
       "forca": 57,
       "tecnica": 52,
@@ -20126,14 +20206,14 @@
       "fisico": 48,
       "salario": 165485,
       "contrato": 1,
-      "valor_mercado": 3640670
+      "valor_mercado": 7800000
     },
     {
       "id": 1048,
       "time_id": 48,
-      "nome": "Douglas Rodrigues",
-      "nome_abrev": "D. Rodrigues",
-      "idade": 21,
+      "nome": "Braian Cufré",
+      "nome_abrev": "B. Cufré",
+      "idade": 29,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 56,
       "tecnica": 51,
@@ -20144,14 +20224,14 @@
       "fisico": 52,
       "salario": 216164,
       "contrato": 1,
-      "valor_mercado": 7998068
+      "valor_mercado": 9750000
     },
     {
       "id": 1049,
       "time_id": 48,
-      "nome": "Eduardo Cavalcante",
-      "nome_abrev": "E. Cavalcante",
-      "idade": 22,
+      "nome": "Mayk",
+      "nome_abrev": "Mayk",
+      "idade": 26,
       "posicao": "LATERAL_ESQUERDO",
       "forca": 59,
       "tecnica": 53,
@@ -20162,14 +20242,14 @@
       "fisico": 49,
       "salario": 125666,
       "contrato": 3,
-      "valor_mercado": 2638986
+      "valor_mercado": 3250000
     },
     {
       "id": 1050,
       "time_id": 48,
-      "nome": "Leonardo Carvalho",
-      "nome_abrev": "L. Carvalho",
-      "idade": 35,
+      "nome": "Patrick de Paula",
+      "nome_abrev": "P. de Paula",
+      "idade": 26,
       "posicao": "VOLANTE",
       "forca": 59,
       "tecnica": 54,
@@ -20180,14 +20260,14 @@
       "fisico": 49,
       "salario": 270955,
       "contrato": 1,
-      "valor_mercado": 10025335
+      "valor_mercado": 19500000
     },
     {
       "id": 1051,
       "time_id": 48,
-      "nome": "Felipe Cavalcante",
-      "nome_abrev": "F. Cavalcante",
-      "idade": 21,
+      "nome": "Leonel Picco",
+      "nome_abrev": "L. Picco",
+      "idade": 27,
       "posicao": "VOLANTE",
       "forca": 55,
       "tecnica": 52,
@@ -20198,14 +20278,14 @@
       "fisico": 56,
       "salario": 103868,
       "contrato": 2,
-      "valor_mercado": 2285096
+      "valor_mercado": 19500000
     },
     {
       "id": 1052,
       "time_id": 48,
-      "nome": "Erick Lima",
-      "nome_abrev": "E. Lima",
-      "idade": 28,
+      "nome": "Zé Welison",
+      "nome_abrev": "Zé Welison",
+      "idade": 31,
       "posicao": "VOLANTE",
       "forca": 58,
       "tecnica": 54,
@@ -20216,14 +20296,14 @@
       "fisico": 60,
       "salario": 785683,
       "contrato": 1,
-      "valor_mercado": 21213441
+      "valor_mercado": 9750000
     },
     {
       "id": 1053,
       "time_id": 48,
-      "nome": "Anderson Lopes",
-      "nome_abrev": "A. Lopes",
-      "idade": 27,
+      "nome": "Patrick",
+      "nome_abrev": "Patrick",
+      "idade": 33,
       "posicao": "MEIA_CENTRAL",
       "forca": 59,
       "tecnica": 57,
@@ -20234,14 +20314,14 @@
       "fisico": 58,
       "salario": 387194,
       "contrato": 1,
-      "valor_mercado": 12777402
+      "valor_mercado": 5200000
     },
     {
       "id": 1054,
       "time_id": 48,
-      "nome": "Alex Mendes",
-      "nome_abrev": "A. Mendes",
-      "idade": 28,
+      "nome": "Giovanni Pavani",
+      "nome_abrev": "G. Pavani",
+      "idade": 29,
       "posicao": "MEIA_CENTRAL",
       "forca": 59,
       "tecnica": 58,
@@ -20252,13 +20332,13 @@
       "fisico": 58,
       "salario": 554615,
       "contrato": 1,
-      "valor_mercado": 19411525
+      "valor_mercado": 2600000
     },
     {
       "id": 1055,
       "time_id": 48,
-      "nome": "Fabio Machado",
-      "nome_abrev": "F. Machado",
+      "nome": "Vitor Bueno",
+      "nome_abrev": "V. Bueno",
       "idade": 31,
       "posicao": "MEIA_ATACANTE",
       "forca": 57,
@@ -20270,14 +20350,14 @@
       "fisico": 54,
       "salario": 156032,
       "contrato": 4,
-      "valor_mercado": 4993024
+      "valor_mercado": 7800000
     },
     {
       "id": 1056,
       "time_id": 48,
-      "nome": "Manuel Moreira",
-      "nome_abrev": "M. Moreira",
-      "idade": 24,
+      "nome": "Franco Catarozzi",
+      "nome_abrev": "F. Catarozzi",
+      "idade": 26,
       "posicao": "MEIA_ATACANTE",
       "forca": 58,
       "tecnica": 55,
@@ -20288,14 +20368,14 @@
       "fisico": 51,
       "salario": 115370,
       "contrato": 1,
-      "valor_mercado": 2884250
+      "valor_mercado": 2275000
     },
     {
       "id": 1057,
       "time_id": 48,
-      "nome": "Douglas Lima",
-      "nome_abrev": "D. Lima",
-      "idade": 35,
+      "nome": "Yago Pikachu",
+      "nome_abrev": "Y. Pikachu",
+      "idade": 33,
       "posicao": "PONTA_DIREITA",
       "forca": 54,
       "tecnica": 60,
@@ -20306,14 +20386,14 @@
       "fisico": 49,
       "salario": 199345,
       "contrato": 4,
-      "valor_mercado": 3986900
+      "valor_mercado": 5200000
     },
     {
       "id": 1058,
       "time_id": 48,
-      "nome": "Pedro Gomes",
-      "nome_abrev": "P. Gomes",
-      "idade": 24,
+      "nome": "Gabriel Taliari",
+      "nome_abrev": "G. Taliari",
+      "idade": 28,
       "posicao": "CENTROAVANTE",
       "forca": 57,
       "tecnica": 49,
@@ -20324,14 +20404,14 @@
       "fisico": 52,
       "salario": 202346,
       "contrato": 2,
-      "valor_mercado": 5665688
+      "valor_mercado": 9750000
     },
     {
       "id": 1059,
       "time_id": 48,
-      "nome": "Fabio Rezende",
-      "nome_abrev": "F. Rezende",
-      "idade": 26,
+      "nome": "Carlinhos",
+      "nome_abrev": "Carlinhos",
+      "idade": 29,
       "posicao": "CENTROAVANTE",
       "forca": 59,
       "tecnica": 48,
@@ -20342,14 +20422,14 @@
       "fisico": 49,
       "salario": 219277,
       "contrato": 2,
-      "valor_mercado": 6359033
+      "valor_mercado": 6500000
     },
     {
       "id": 1060,
       "time_id": 48,
-      "nome": "Henrique Rocha",
-      "nome_abrev": "H. Rocha",
-      "idade": 27,
+      "nome": "João Pedro",
+      "nome_abrev": "J. Pedro",
+      "idade": 29,
       "posicao": "CENTROAVANTE",
       "forca": 56,
       "tecnica": 52,
@@ -20360,7 +20440,7 @@
       "fisico": 60,
       "salario": 521777,
       "contrato": 2,
-      "valor_mercado": 19305749
+      "valor_mercado": 5200000
     },
     {
       "id": 1061,
@@ -31882,7 +31962,7 @@
       "contrato": 4,
       "valor_mercado": 2890514
     },
-	{
+    {
       "id": 1701,
       "time_id": 3,
       "nome": "Gabriel Delfim",
@@ -31900,257 +31980,599 @@
       "contrato": 4,
       "valor_mercado": 30000000
     },
-	{
-	  "id": 1702,
-	  "time_id": null,
-	  "nome": "Roberto Firmino",
-	  "nome_abrev": "R. Firmino",
-	  "idade": 33,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 79,
-	  "tecnica": 84,
-	  "passe": 79,
-	  "velocidade": 77,
-	  "finalizacao": 86,
-	  "defesa": 65,
-	  "fisico": 80,
-	  "salario": 200000000,
-	  "contrato": 1,
-	  "valor_mercado": 1500000000
-	},
-	{
-	  "id": 1703,
-	  "time_id": null,
-	  "nome": "Cristiano Ronaldo",
-	  "nome_abrev": "C. Ronaldo",
-	  "idade": 40,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 87,
-	  "tecnica": 90,
-	  "passe": 80,
-	  "velocidade": 84,
-	  "finalizacao": 95,
-	  "defesa": 76,
-	  "fisico": 91,
-	  "salario": 500000000,
-	  "contrato": 1,
-	  "valor_mercado": 4500000000
-	},
-	{
-	  "id": 1704,
-	  "time_id": null,
-	  "nome": "Lionel Messi",
-	  "nome_abrev": "L. Messi",
-	  "idade": 38,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 87,
-	  "tecnica": 93,
-	  "passe": 88,
-	  "velocidade": 83,
-	  "finalizacao": 93,
-	  "defesa": 77,
-	  "fisico": 87,
-	  "salario": 500000000,
-	  "contrato": 1,
-	  "valor_mercado": 4500000000
-	},
-	{
-	  "id": 1705,
-	  "time_id": null,
-	  "nome": "Kylian Mbappé",
-	  "nome_abrev": "K. Mbappé",
-	  "idade": 27,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 90,
-	  "tecnica": 90,
-	  "passe": 84,
-	  "velocidade": 96,
-	  "finalizacao": 93,
-	  "defesa": 79,
-	  "fisico": 90,
-	  "salario": 800000000,
-	  "contrato": 1,
-	  "valor_mercado": 20000000000
-	},
-	{
-	  "id": 1706,
-	  "time_id": null,
-	  "nome": "Gianluigi Donnarumma",
-	  "nome_abrev": "G. Donnarumma",
-	  "idade": 27,
-	  "posicao": "GOLEIRO",
-	  "forca": 85,
-	  "tecnica": 84,
-	  "passe": 82,
-	  "velocidade": 81,
-	  "finalizacao": 78,
-	  "defesa": 93,
-	  "fisico": 90,
-	  "salario": 250000000,
-	  "contrato": 1,
-	  "valor_mercado": 4500000000
-	},
-	{
-	  "id": 1707,
-	  "time_id": null,
-	  "nome": "Erling Haaland",
-	  "nome_abrev": "E. Haaland",
-	  "idade": 25,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 89,
-	  "tecnica": 88,
-	  "passe": 84,
-	  "velocidade": 93,
-	  "finalizacao": 93,
-	  "defesa": 82,
-	  "fisico": 93,
-	  "salario": 600000000,
-	  "contrato": 1,
-	  "valor_mercado": 20000000000
-	},
-	{
-	  "id": 1708,
-	  "time_id": null,
-	  "nome": "Phil Foden",
-	  "nome_abrev": "P. Foden",
-	  "idade": 25,
-	  "posicao": "MEIA_ATACANTE",
-	  "forca": 88,
-	  "tecnica": 89,
-	  "passe": 90,
-	  "velocidade": 88,
-	  "finalizacao": 87,
-	  "defesa": 84,
-	  "fisico": 89,
-	  "salario": 400000000,
-	  "contrato": 1,
-	  "valor_mercado": 8000000000
-	},
-	{
-	  "id": 1709,
-	  "time_id": null,
-	  "nome": "James Trafford",
-	  "nome_abrev": "J. Trafford",
-	  "idade": 23,
-	  "posicao": "GOLEIRO",
-	  "forca": 80,
-	  "tecnica": 83,
-	  "passe": 80,
-	  "velocidade": 79,
-	  "finalizacao": 71,
-	  "defesa": 84,
-	  "fisico": 85,
-	  "salario": 40000000,
-	  "contrato": 2,
-	  "valor_mercado": 2500000000
-	},
-	{
-	  "id": 1710,
-	  "time_id": null,
-	  "nome": "Rayan Cherki",
-	  "nome_abrev": "R. Cherki",
-	  "idade": 22,
-	  "posicao": "MEIA_ATACANTE",
-	  "forca": 86,
-	  "tecnica": 89,
-	  "passe": 90,
-	  "velocidade": 83,
-	  "finalizacao": 87,
-	  "defesa": 84,
-	  "fisico": 88,
-	  "salario": 500000000,
-	  "contrato": 2,
-	  "valor_mercado": 6500000000
-	},
-	{
-	  "id": 1711,
-	  "time_id": null,
-	  "nome": "Enzo Fernández",
-	  "nome_abrev": "E. Fernández",
-	  "idade": 25,
-	  "posicao": "MEIA_CENTRAL",
-	  "forca": 86,
-	  "tecnica": 87,
-	  "passe": 88,
-	  "velocidade": 86,
-	  "finalizacao": 86,
-	  "defesa": 85,
-	  "fisico": 87,
-	  "salario": 350000000,
-	  "contrato": 2,
-	  "valor_mercado": 9000000000
-	},
-	{
-	  "id": 1712,
-	  "time_id": null,
-	  "nome": "Wesley Fofana",
-	  "nome_abrev": "W. Fofana",
-	  "idade": 25,
-	  "posicao": "ZAGUEIRO",
-	  "forca": 85,
-	  "tecnica": 84,
-	  "passe": 83,
-	  "velocidade": 84,
-	  "finalizacao": 77,
-	  "defesa": 89,
-	  "fisico": 90,
-	  "salario": 320000000,
-	  "contrato": 2,
-	  "valor_mercado": 2800000000
-	},
-	{
-	  "id": 1713,
-	  "time_id": null,
-	  "nome": "Kepa Arrizabalaga",
-	  "nome_abrev": "Kepa",
-	  "idade": 31,
-	  "posicao": "GOLEIRO",
-	  "forca": 81,
-	  "tecnica": 82,
-	  "passe": 80,
-	  "velocidade": 78,
-	  "finalizacao": 72,
-	  "defesa": 89,
-	  "fisico": 90,
-	  "salario": 200000000,
-	  "contrato": 2,
-	  "valor_mercado": 700000000
-	},
-	{
-	  "id": 1714,
-	  "time_id": null,
-	  "nome": "Viktor Gyökeres",
-	  "nome_abrev": "V. Gyökeres",
-	  "idade": 27,
-	  "posicao": "CENTROAVANTE",
-	  "forca": 86,
-	  "tecnica": 84,
-	  "passe": 81,
-	  "velocidade": 90,
-	  "finalizacao": 93,
-	  "defesa": 80,
-	  "fisico": 89,
-	  "salario": 450000000,
-	  "contrato": 2,
-	  "valor_mercado": 6500000000
-	},
-	{
-	  "id": 1715,
-	  "time_id": null,
-	  "nome": "Declan Rice",
-	  "nome_abrev": "D. Rice",
-	  "idade": 27,
-	  "posicao": "MEIA_CENTRAL",
-	  "forca": 87,
-	  "tecnica": 88,
-	  "passe": 90,
-	  "velocidade": 85,
-	  "finalizacao": 88,
-	  "defesa": 83,
-	  "fisico": 88,
-	  "salario": 550000000,
-	  "contrato": 2,
-	  "valor_mercado": 12000000000
-	}
+    {
+      "id": 1702,
+      "time_id": null,
+      "nome": "Roberto Firmino",
+      "nome_abrev": "R. Firmino",
+      "idade": 33,
+      "posicao": "CENTROAVANTE",
+      "forca": 79,
+      "tecnica": 84,
+      "passe": 79,
+      "velocidade": 77,
+      "finalizacao": 86,
+      "defesa": 65,
+      "fisico": 80,
+      "salario": 200000000,
+      "contrato": 1,
+      "valor_mercado": 1500000000
+    },
+    {
+      "id": 1703,
+      "time_id": null,
+      "nome": "Cristiano Ronaldo",
+      "nome_abrev": "C. Ronaldo",
+      "idade": 40,
+      "posicao": "CENTROAVANTE",
+      "forca": 87,
+      "tecnica": 90,
+      "passe": 80,
+      "velocidade": 84,
+      "finalizacao": 95,
+      "defesa": 76,
+      "fisico": 91,
+      "salario": 500000000,
+      "contrato": 1,
+      "valor_mercado": 4500000000
+    },
+    {
+      "id": 1704,
+      "time_id": null,
+      "nome": "Lionel Messi",
+      "nome_abrev": "L. Messi",
+      "idade": 38,
+      "posicao": "CENTROAVANTE",
+      "forca": 87,
+      "tecnica": 93,
+      "passe": 88,
+      "velocidade": 83,
+      "finalizacao": 93,
+      "defesa": 77,
+      "fisico": 87,
+      "salario": 500000000,
+      "contrato": 1,
+      "valor_mercado": 4500000000
+    },
+    {
+      "id": 1705,
+      "time_id": null,
+      "nome": "Kylian Mbappé",
+      "nome_abrev": "K. Mbappé",
+      "idade": 27,
+      "posicao": "CENTROAVANTE",
+      "forca": 90,
+      "tecnica": 90,
+      "passe": 84,
+      "velocidade": 96,
+      "finalizacao": 93,
+      "defesa": 79,
+      "fisico": 90,
+      "salario": 800000000,
+      "contrato": 1,
+      "valor_mercado": 20000000000
+    },
+    {
+      "id": 1706,
+      "time_id": null,
+      "nome": "Gianluigi Donnarumma",
+      "nome_abrev": "G. Donnarumma",
+      "idade": 27,
+      "posicao": "GOLEIRO",
+      "forca": 85,
+      "tecnica": 84,
+      "passe": 82,
+      "velocidade": 81,
+      "finalizacao": 78,
+      "defesa": 93,
+      "fisico": 90,
+      "salario": 250000000,
+      "contrato": 1,
+      "valor_mercado": 4500000000
+    },
+    {
+      "id": 1707,
+      "time_id": null,
+      "nome": "Erling Haaland",
+      "nome_abrev": "E. Haaland",
+      "idade": 25,
+      "posicao": "CENTROAVANTE",
+      "forca": 89,
+      "tecnica": 88,
+      "passe": 84,
+      "velocidade": 93,
+      "finalizacao": 93,
+      "defesa": 82,
+      "fisico": 93,
+      "salario": 600000000,
+      "contrato": 1,
+      "valor_mercado": 20000000000
+    },
+    {
+      "id": 1708,
+      "time_id": null,
+      "nome": "Phil Foden",
+      "nome_abrev": "P. Foden",
+      "idade": 25,
+      "posicao": "MEIA_ATACANTE",
+      "forca": 88,
+      "tecnica": 89,
+      "passe": 90,
+      "velocidade": 88,
+      "finalizacao": 87,
+      "defesa": 84,
+      "fisico": 89,
+      "salario": 400000000,
+      "contrato": 1,
+      "valor_mercado": 8000000000
+    },
+    {
+      "id": 1709,
+      "time_id": null,
+      "nome": "James Trafford",
+      "nome_abrev": "J. Trafford",
+      "idade": 23,
+      "posicao": "GOLEIRO",
+      "forca": 80,
+      "tecnica": 83,
+      "passe": 80,
+      "velocidade": 79,
+      "finalizacao": 71,
+      "defesa": 84,
+      "fisico": 85,
+      "salario": 40000000,
+      "contrato": 2,
+      "valor_mercado": 2500000000
+    },
+    {
+      "id": 1710,
+      "time_id": null,
+      "nome": "Rayan Cherki",
+      "nome_abrev": "R. Cherki",
+      "idade": 22,
+      "posicao": "MEIA_ATACANTE",
+      "forca": 86,
+      "tecnica": 89,
+      "passe": 90,
+      "velocidade": 83,
+      "finalizacao": 87,
+      "defesa": 84,
+      "fisico": 88,
+      "salario": 500000000,
+      "contrato": 2,
+      "valor_mercado": 6500000000
+    },
+    {
+      "id": 1711,
+      "time_id": null,
+      "nome": "Enzo Fernández",
+      "nome_abrev": "E. Fernández",
+      "idade": 25,
+      "posicao": "MEIA_CENTRAL",
+      "forca": 86,
+      "tecnica": 87,
+      "passe": 88,
+      "velocidade": 86,
+      "finalizacao": 86,
+      "defesa": 85,
+      "fisico": 87,
+      "salario": 350000000,
+      "contrato": 2,
+      "valor_mercado": 9000000000
+    },
+    {
+      "id": 1712,
+      "time_id": null,
+      "nome": "Wesley Fofana",
+      "nome_abrev": "W. Fofana",
+      "idade": 25,
+      "posicao": "ZAGUEIRO",
+      "forca": 85,
+      "tecnica": 84,
+      "passe": 83,
+      "velocidade": 84,
+      "finalizacao": 77,
+      "defesa": 89,
+      "fisico": 90,
+      "salario": 320000000,
+      "contrato": 2,
+      "valor_mercado": 2800000000
+    },
+    {
+      "id": 1713,
+      "time_id": null,
+      "nome": "Kepa Arrizabalaga",
+      "nome_abrev": "Kepa",
+      "idade": 31,
+      "posicao": "GOLEIRO",
+      "forca": 81,
+      "tecnica": 82,
+      "passe": 80,
+      "velocidade": 78,
+      "finalizacao": 72,
+      "defesa": 89,
+      "fisico": 90,
+      "salario": 200000000,
+      "contrato": 2,
+      "valor_mercado": 700000000
+    },
+    {
+      "id": 1714,
+      "time_id": null,
+      "nome": "Viktor Gyökeres",
+      "nome_abrev": "V. Gyökeres",
+      "idade": 27,
+      "posicao": "CENTROAVANTE",
+      "forca": 86,
+      "tecnica": 84,
+      "passe": 81,
+      "velocidade": 90,
+      "finalizacao": 93,
+      "defesa": 80,
+      "fisico": 89,
+      "salario": 450000000,
+      "contrato": 2,
+      "valor_mercado": 6500000000
+    },
+    {
+      "id": 1715,
+      "time_id": null,
+      "nome": "Declan Rice",
+      "nome_abrev": "D. Rice",
+      "idade": 27,
+      "posicao": "MEIA_CENTRAL",
+      "forca": 87,
+      "tecnica": 88,
+      "passe": 90,
+      "velocidade": 85,
+      "finalizacao": 88,
+      "defesa": 83,
+      "fisico": 88,
+      "salario": 550000000,
+      "contrato": 2,
+      "valor_mercado": 12000000000
+    },
+    {
+      "id": 1716,
+      "time_id": 4,
+      "nome": "Young",
+      "nome_abrev": "Young",
+      "idade": 24,
+      "posicao": "GOLEIRO",
+      "forca": 70,
+      "tecnica": 68,
+      "passe": 70,
+      "velocidade": 66,
+      "finalizacao": 50,
+      "defesa": 75,
+      "fisico": 73,
+      "salario": 2500000,
+      "contrato": 1,
+      "valor_mercado": 650000
+    },
+    {
+      "id": 1717,
+      "time_id": 4,
+      "nome": "Felipe Preis",
+      "nome_abrev": "F. Preis",
+      "idade": 20,
+      "posicao": "GOLEIRO",
+      "forca": 65,
+      "tecnica": 63,
+      "passe": 65,
+      "velocidade": 62,
+      "finalizacao": 48,
+      "defesa": 70,
+      "fisico": 68,
+      "salario": 1500000,
+      "contrato": 1,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 1718,
+      "time_id": 4,
+      "nome": "Robert Arboleda",
+      "nome_abrev": "R. Arboleda",
+      "idade": 34,
+      "posicao": "ZAGUEIRO",
+      "forca": 75,
+      "tecnica": 74,
+      "passe": 76,
+      "velocidade": 73,
+      "finalizacao": 60,
+      "defesa": 82,
+      "fisico": 81,
+      "salario": 3500000,
+      "contrato": 2,
+      "valor_mercado": 3900000
+    },
+    {
+      "id": 1719,
+      "time_id": 4,
+      "nome": "Matheus Belem",
+      "nome_abrev": "M. Belem",
+      "idade": 23,
+      "posicao": "ZAGUEIRO",
+      "forca": 72,
+      "tecnica": 71,
+      "passe": 73,
+      "velocidade": 71,
+      "finalizacao": 57,
+      "defesa": 78,
+      "fisico": 77,
+      "salario": 2500000,
+      "contrato": 1,
+      "valor_mercado": 5200000
+    },
+    {
+      "id": 1720,
+      "time_id": 4,
+      "nome": "Joao Moreira",
+      "nome_abrev": "J. Moreira",
+      "idade": 21,
+      "posicao": "LATERAL_DIREITO",
+      "forca": 73,
+      "tecnica": 74,
+      "passe": 75,
+      "velocidade": 77,
+      "finalizacao": 65,
+      "defesa": 76,
+      "fisico": 72,
+      "salario": 2500000,
+      "contrato": 2,
+      "valor_mercado": 6500000
+    },
+    {
+      "id": 1721,
+      "time_id": 4,
+      "nome": "Lucas Ramon",
+      "nome_abrev": "L. Ramon",
+      "idade": 32,
+      "posicao": "LATERAL_DIREITO",
+      "forca": 73,
+      "tecnica": 75,
+      "passe": 74,
+      "velocidade": 77,
+      "finalizacao": 66,
+      "defesa": 77,
+      "fisico": 73,
+      "salario": 2500000,
+      "contrato": 2,
+      "valor_mercado": 4875000
+    },
+    {
+      "id": 1722,
+      "time_id": 4,
+      "nome": "Igor Felisberto",
+      "nome_abrev": "I. Felisberto",
+      "idade": 19,
+      "posicao": "LATERAL_DIREITO",
+      "forca": 65,
+      "tecnica": 64,
+      "passe": 65,
+      "velocidade": 68,
+      "finalizacao": 57,
+      "defesa": 67,
+      "fisico": 64,
+      "salario": 1200000,
+      "contrato": 3,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 1723,
+      "time_id": 4,
+      "nome": "Nicolas",
+      "nome_abrev": "Nicolas",
+      "idade": 19,
+      "posicao": "LATERAL_ESQUERDO",
+      "forca": 66,
+      "tecnica": 65,
+      "passe": 66,
+      "velocidade": 69,
+      "finalizacao": 58,
+      "defesa": 68,
+      "fisico": 65,
+      "salario": 1200000,
+      "contrato": 4,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 1724,
+      "time_id": 4,
+      "nome": "Hugo Leonardo",
+      "nome_abrev": "H. Leonardo",
+      "idade": 22,
+      "posicao": "VOLANTE",
+      "forca": 68,
+      "tecnica": 70,
+      "passe": 72,
+      "velocidade": 67,
+      "finalizacao": 62,
+      "defesa": 72,
+      "fisico": 74,
+      "salario": 1500000,
+      "contrato": 3,
+      "valor_mercado": 1950000
+    },
+    {
+      "id": 1725,
+      "time_id": 4,
+      "nome": "Danielzinho",
+      "nome_abrev": "Danielzinho",
+      "idade": 31,
+      "posicao": "MEIA_CENTRAL",
+      "forca": 76,
+      "tecnica": 80,
+      "passe": 82,
+      "velocidade": 78,
+      "finalizacao": 74,
+      "defesa": 72,
+      "fisico": 73,
+      "salario": 3500000,
+      "contrato": 2,
+      "valor_mercado": 6500000
+    },
+    {
+      "id": 1726,
+      "time_id": 4,
+      "nome": "Djhordney",
+      "nome_abrev": "Djhordney",
+      "idade": 18,
+      "posicao": "MEIA_CENTRAL",
+      "forca": 64,
+      "tecnica": 67,
+      "passe": 68,
+      "velocidade": 65,
+      "finalizacao": 61,
+      "defesa": 60,
+      "fisico": 63,
+      "salario": 1000000,
+      "contrato": 4,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 1727,
+      "time_id": 4,
+      "nome": "Gonzalo Tapia",
+      "nome_abrev": "G. Tapia",
+      "idade": 24,
+      "posicao": "PONTA_DIREITA",
+      "forca": 79,
+      "tecnica": 82,
+      "passe": 79,
+      "velocidade": 87,
+      "finalizacao": 80,
+      "defesa": 70,
+      "fisico": 76,
+      "salario": 5000000,
+      "contrato": 4,
+      "valor_mercado": 26000000
+    },
+    {
+      "id": 1728,
+      "time_id": 4,
+      "nome": "Tete",
+      "nome_abrev": "Tete",
+      "idade": 18,
+      "posicao": "PONTA_ESQUERDA",
+      "forca": 66,
+      "tecnica": 69,
+      "passe": 66,
+      "velocidade": 72,
+      "finalizacao": 67,
+      "defesa": 58,
+      "fisico": 63,
+      "salario": 1000000,
+      "contrato": 4,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 1729,
+      "time_id": 4,
+      "nome": "Paulinho",
+      "nome_abrev": "Paulinho",
+      "idade": 20,
+      "posicao": "CENTROAVANTE",
+      "forca": 68,
+      "tecnica": 70,
+      "passe": 66,
+      "velocidade": 71,
+      "finalizacao": 72,
+      "defesa": 58,
+      "fisico": 70,
+      "salario": 1200000,
+      "contrato": 2,
+      "valor_mercado": 1300000
+    },
+    {
+      "id": 2390,
+      "time_id": 8,
+      "nome": "Kauan",
+      "nome_abrev": "Kauan",
+      "idade": 22,
+      "posicao": "GOLEIRO",
+      "forca": 69,
+      "tecnica": 64,
+      "passe": 68,
+      "velocidade": 64,
+      "finalizacao": 45,
+      "defesa": 76,
+      "fisico": 72,
+      "salario": 2400000,
+      "contrato": 2,
+      "valor_mercado": 2000000
+    },
+    {
+      "id": 2391,
+      "time_id": 8,
+      "nome": "Gabriel Mercado",
+      "nome_abrev": "G. Mercado",
+      "idade": 39,
+      "posicao": "ZAGUEIRO",
+      "forca": 69,
+      "tecnica": 67,
+      "passe": 72,
+      "velocidade": 67,
+      "finalizacao": 53,
+      "defesa": 75,
+      "fisico": 75,
+      "salario": 2400000,
+      "contrato": 4,
+      "valor_mercado": 900000
+    },
+    {
+      "id": 2392,
+      "time_id": 8,
+      "nome": "Richard",
+      "nome_abrev": "Richard",
+      "idade": 32,
+      "posicao": "VOLANTE",
+      "forca": 66,
+      "tecnica": 67,
+      "passe": 70,
+      "velocidade": 65,
+      "finalizacao": 59,
+      "defesa": 69,
+      "fisico": 72,
+      "salario": 2400000,
+      "contrato": 2,
+      "valor_mercado": 4200000
+    },
+    {
+      "id": 2393,
+      "time_id": 8,
+      "nome": "Bruno Henrique",
+      "nome_abrev": "B. Henrique",
+      "idade": 36,
+      "posicao": "MEIA_CENTRAL",
+      "forca": 72,
+      "tecnica": 78,
+      "passe": 81,
+      "velocidade": 75,
+      "finalizacao": 70,
+      "defesa": 70,
+      "fisico": 71,
+      "salario": 2400000,
+      "contrato": 1,
+      "valor_mercado": 2100000
+    },
+    {
+      "id": 2394,
+      "time_id": 8,
+      "nome": "Yago Noal",
+      "nome_abrev": "Y. Noal",
+      "idade": 19,
+      "posicao": "MEIA_ATACANTE",
+      "forca": 69,
+      "tecnica": 77,
+      "passe": 75,
+      "velocidade": 74,
+      "finalizacao": 72,
+      "defesa": 62,
+      "fisico": 68,
+      "salario": 2400000,
+      "contrato": 2,
+      "valor_mercado": 3000000
+    }
   ]
 }

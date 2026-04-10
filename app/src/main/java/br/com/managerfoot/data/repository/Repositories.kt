@@ -73,7 +73,8 @@ class TimeRepository @Inject constructor(
         estiloJogo = estiloJogo,
         reputacao = reputacao,
         controladoPorJogador = controladoPorJogador,
-        escudoRes = escudoRes
+        escudoRes = escudoRes,
+        pais = pais
     )
 }
 

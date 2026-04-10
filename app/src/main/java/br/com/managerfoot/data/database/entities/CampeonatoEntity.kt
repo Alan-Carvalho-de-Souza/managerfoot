@@ -36,7 +36,8 @@ enum class TipoCampeonato {
     COPA_NACIONAL,          // Copa do Brasil
     CONTINENTAL,            // Libertadores / Copa Sul-Americana
     MUNDIAL_CLUBES,
-    SELECOES
+    SELECOES,
+    EXTRANGEIRO_DIVISAO1    // Primera División Argentina (e futuros)
 }
 
 enum class FormatoCampeonato {
