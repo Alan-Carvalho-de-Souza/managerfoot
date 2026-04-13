@@ -113,6 +113,7 @@ fun TimeHeaderCard(
     posicao: Int = 0,
     rodadaAtual: Int = 0,
     mes: Int = 0,
+    dia: Int = 0,
     ano: Int = 0
 ) {
     val serieLabel = when (time.divisao) { 1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; else -> "Série" }
@@ -120,7 +121,10 @@ fun TimeHeaderCard(
         append(serieLabel)
         if (rodadaAtual > 0) append(" · Rodada $rodadaAtual")
     }
-    val periodoLabel = if (mes in 1..12 && ano > 0) "${NOMES_MESES_HEADER[mes]}. $ano" else ""
+    val periodoLabel = if (mes in 1..12 && ano > 0) {
+        if (dia > 0) "$dia ${NOMES_MESES_HEADER[mes]}. $ano"
+        else "${NOMES_MESES_HEADER[mes]}. $ano"
+    } else ""
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -508,6 +512,7 @@ fun MatchCard(
     escudoFora: String = "",
     competicao: String = "",
     rodada: Int,
+    dataJogo: String = "",
     enabled: Boolean = true,
     onSimular: () -> Unit,
     onEscalacao: (() -> Unit)? = null,
@@ -519,8 +524,12 @@ fun MatchCard(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
+            val rodadaOuFase = if (competicao.contains("—")) competicao
+                               else if (competicao.isNotBlank()) "$competicao · Rodada $rodada"
+                               else "Rodada $rodada"
+            val labelCompleto = if (dataJogo.isNotBlank()) "$rodadaOuFase · $dataJogo" else rodadaOuFase
             Text(
-                text = if (competicao.isNotBlank()) "$competicao · Rodada $rodada" else "Rodada $rodada",
+                text = labelCompleto,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

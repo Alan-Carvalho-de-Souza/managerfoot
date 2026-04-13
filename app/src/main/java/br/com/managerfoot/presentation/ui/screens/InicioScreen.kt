@@ -206,8 +206,9 @@ private fun TimeItemRow(time: Time, onClick: () -> Unit) {
             )
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val chipLabel = if (time.pais == "Argentina") "Primera Div."
-                else { val l = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }; "Série $l" }
+            val chipLabel = if (time.pais == "Argentina") {
+                when (time.divisao) { 6 -> "Segunda Div."; else -> "Primera Div." }
+            } else { val l = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }; "Série $l" }
             InfoChip(chipLabel, MaterialTheme.colorScheme.primaryContainer)
             Text(formatarSaldo(time.saldo), style = MaterialTheme.typography.labelSmall)
         }

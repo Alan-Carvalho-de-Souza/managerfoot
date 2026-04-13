@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.domain.model.Time
 import br.com.managerfoot.presentation.ui.components.EmptyState
+import br.com.managerfoot.presentation.ui.components.TeamBadge
 import br.com.managerfoot.presentation.ui.components.JogadorRow
 import br.com.managerfoot.presentation.ui.components.SecaoHeader
 import br.com.managerfoot.presentation.viewmodel.ClubesViewModel
@@ -160,6 +161,18 @@ fun ClubesScreen(
         }
     } else {
         // Lista de clubes
+        var filtro by remember { mutableStateOf("Todos") }
+        var dropdownAberto by remember { mutableStateOf(false) }
+
+        val opcoesFiltro = remember(times) {
+            listOf("Todos") + times.map { it.pais }.distinct().sorted()
+        }
+
+        val timesFiltrados = remember(times, filtro) {
+            val base = if (filtro == "Todos") times else times.filter { it.pais == filtro }
+            base.sortedBy { it.nome }
+        }
+
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -175,13 +188,45 @@ fun ClubesScreen(
             if (times.isEmpty()) {
                 EmptyState("Carregando clubes…")
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding)
-                ) {
-                    item { SecaoHeader("${times.size} clubes") }
-                    items(times) { time ->
-                        ClubeRow(time = time, onClick = { vm.selecionarTime(time) })
-                        HorizontalDivider(thickness = 0.5.dp)
+                Column(Modifier.fillMaxSize().padding(padding)) {
+                    // Filtro de país
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        ExposedDropdownMenuBox(
+                            expanded = dropdownAberto,
+                            onExpandedChange = { dropdownAberto = it }
+                        ) {
+                            OutlinedTextField(
+                                value = if (filtro == "Todos") "Todos os países" else filtro,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Filtrar por país") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownAberto) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                singleLine = true
+                            )
+                            ExposedDropdownMenu(
+                                expanded = dropdownAberto,
+                                onDismissRequest = { dropdownAberto = false }
+                            ) {
+                                opcoesFiltro.forEach { opcao ->
+                                    DropdownMenuItem(
+                                        text = { Text(if (opcao == "Todos") "Todos os países" else opcao) },
+                                        onClick = { filtro = opcao; dropdownAberto = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item { SecaoHeader("${timesFiltrados.size} clubes") }
+                        items(timesFiltrados) { time ->
+                            ClubeRow(time = time, onClick = { vm.selecionarTime(time) })
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
                     }
                 }
             }
@@ -198,10 +243,14 @@ private fun ClubeRow(time: Time, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 36.dp)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(time.nome, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            val localInfo = if (time.pais == "Argentina") "${time.pais} · ${nomeDivisao(time.divisao)}"
+                            else "${nomeDivisao(time.divisao)} · ${time.estado}"
             Text(
-                "${nomeDivisao(time.divisao)} · ${time.estado}",
+                localInfo,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -219,6 +268,8 @@ private fun nomeDivisao(divisao: Int): String = when (divisao) {
     2 -> "Série B"
     3 -> "Série C"
     4 -> "Série D"
+    5 -> "Primera División"
+    6 -> "Primera Nacional"
     else -> "Divisão $divisao"
 }
 

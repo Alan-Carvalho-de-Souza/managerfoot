@@ -197,7 +197,8 @@ data class ContextoSimulacaoMetade(
     val estadoMetade1: EstadoMetade,             // squad + penas após 1º tempo
     val golsCasaMetade1: Int,
     val golsForaMetade1: Int,
-    val eventosAcumulados: List<EventoSimulado>  // eventos canônicos acumulados para persistência
+    val eventosAcumulados: List<EventoSimulado>, // eventos canônicos acumulados para persistência
+    val campoNeutro: Boolean = false             // desativa fator mandante (ex: Supercopa Rei)
 )
 
 /** Substituição passada da UI para o motor — sem dependência de Compose. */

@@ -29,6 +29,8 @@ fun TabelaScreen(
     campeonatoCId: Int = -1,
     campeonatoDId: Int = -1,
     campeonatoArgAId: Int = -1,
+    campeonatoArgBId: Int = -1,
+    campeonatoArgClausuraId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -37,8 +39,8 @@ fun TabelaScreen(
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, timeJogadorId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId, timeJogadorId = timeJogadorId)
     }
 
     // Opções por país
@@ -49,7 +51,10 @@ fun TabelaScreen(
         if (campeonatoDId > 0) add(4 to "Série D")
     }
     val opcoesArgentina = buildList {
-        if (campeonatoArgAId > 0) add(5 to "Primera Div.")
+        if (campeonatoArgAId > 0) add(5 to "Apertura")
+        if (campeonatoArgBId > 0) add(6 to "Segunda Div.")
+        if (campeonatoArgClausuraId > 0) add(7 to "Clausura")
+        if (campeonatoArgAId > 0 && campeonatoArgClausuraId > 0) add(8 to "Geral")
     }
 
     val paises = buildList {
@@ -59,7 +64,7 @@ fun TabelaScreen(
 
     // País selecionado: derivado da divisão atual
     val paisSelecionado = remember(divisaoSelecionada) {
-        if (divisaoSelecionada == 5) "Argentina" else "Brasil"
+        if (divisaoSelecionada == 5 || divisaoSelecionada == 6 || divisaoSelecionada == 7 || divisaoSelecionada == 8) "Argentina" else "Brasil"
     }
 
     val opcoesDivisaoPais = if (paisSelecionado == "Argentina") opcoesArgentina else opcoesBrasil
@@ -162,26 +167,71 @@ fun TabelaScreen(
                 }
             }
 
-            // Header row
-            TabelaHeader()
-            HorizontalDivider()
+            val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7
+            val gruposArgentina = remember(tabela, ehGrupos) {
+                if (ehGrupos) tabela.groupBy { it.grupo ?: "?" }.entries.sortedBy { it.key }
+                else emptyList()
+            }
+
+            // Header row (só para visualização plana)
+            if (!ehGrupos) {
+                TabelaHeader()
+                HorizontalDivider()
+            }
 
             LazyColumn {
-                itemsIndexed(tabela) { index, item ->
-                    val time = times.find { it.id == item.timeId }
-                    val nomeTime = time?.nome ?: "Time ${item.timeId}"
-                    val escudoRes = time?.escudoRes ?: ""
-                    val ehJogador = item.timeId == timeJogadorId
-                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
-                    TabelaRow(
-                        posicao = index + 1,
-                        nomeTime = nomeTime,
-                        escudoRes = escudoRes,
-                        item = item,
-                        destaque = ehJogador,
-                        zonaColor = zona
-                    )
-                    HorizontalDivider(thickness = 0.5.dp)
+                if (ehGrupos) {
+                    gruposArgentina.forEach { (grupo, grupoTabela) ->
+                        item {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    "Zona $grupo",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            TabelaHeader()
+                            HorizontalDivider()
+                        }
+                        itemsIndexed(grupoTabela) { index, item ->
+                            val time = times.find { it.id == item.timeId }
+                            val nomeTime = time?.nome ?: "Time ${item.timeId}"
+                            val escudoRes = time?.escudoRes ?: ""
+                            val ehJogador = item.timeId == timeJogadorId
+                            val zona = if (index < 8) Color(0xFF1565C0) else null
+                            TabelaRow(
+                                posicao = index + 1,
+                                nomeTime = nomeTime,
+                                escudoRes = escudoRes,
+                                item = item,
+                                destaque = ehJogador,
+                                zonaColor = zona
+                            )
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
+                        item { Spacer(Modifier.height(8.dp)) }
+                    }
+                } else {
+                    itemsIndexed(tabela) { index, item ->
+                        val time = times.find { it.id == item.timeId }
+                        val nomeTime = time?.nome ?: "Time ${item.timeId}"
+                        val escudoRes = time?.escudoRes ?: ""
+                        val ehJogador = item.timeId == timeJogadorId
+                        val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
+                        TabelaRow(
+                            posicao = index + 1,
+                            nomeTime = nomeTime,
+                            escudoRes = escudoRes,
+                            item = item,
+                            destaque = ehJogador,
+                            zonaColor = zona
+                        )
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
                 }
             }
 
@@ -226,8 +276,12 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao)
         posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série D
         else          -> null
     }
-    5 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
+    5, 7 -> when {
+        posicao <= 8  -> Color(0xFF1565C0)  // Oitavas de Final
+        else          -> null
+    }
+    8 -> when {
+        posicao == 1  -> Color(0xFFFFD700)  // Campeão Geral
         else          -> null
     }
     else -> when {
@@ -252,8 +306,11 @@ private fun LegendaZonas(divisao: Int) {
             Color(0xFF1565C0) to "1-4: Acesso à Série B",
             Color(0xFFE53935) to "17-20: Rebaixamento"
         )
-        5 -> listOf(
-            Color(0xFF1565C0) to "1-4: Libertadores"
+        5, 7 -> listOf(
+            Color(0xFF1565C0) to "1-8: Oitavas de Final"
+        )
+        8 -> listOf(
+            Color(0xFFFFD700) to "1º: Campeão Geral"
         )
         else -> listOf(
             Color(0xFF1565C0) to "1-4: Acesso à Série C"

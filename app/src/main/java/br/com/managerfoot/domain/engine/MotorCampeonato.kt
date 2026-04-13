@@ -286,4 +286,148 @@ object MotorCampeonato {
             else -> "Empate [$g]"
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Formato Argentine Apertura / Clausura  (GRUPOS_E_MATA_MATA)
+    //  30 teams → Zona A (15) + Zona B (15)
+    //  Fase de grupos: 14 rodadas intra-zona (turno único, cap) + 2 interzonais = 16 total
+    //  Fase eliminatória: Oitavas (R17) → Quartas (R18) → Semi (R19) → Final (R20)
+    //  Apertura: ordemGlobal = rodada * 10          (OG 10–200)
+    //  Clausura:  ordemGlobal = rodada * 10 + 210   (OG 220–410)
+    // ══════════════════════════════════════════════════════════════
+    const val ARG_GRUPO_A              = "A"
+    const val ARG_GRUPO_B              = "B"
+    const val ARG_ROUNDS_ZONA          = 14   // rounds for turno único in each 15-team zone (capped)
+    const val ARG_ROUNDS_GROUP_TOTAL   = 16   // 14 (zona) + 2 (interzonais)
+    const val ARG_ROUND_KNOCKOUT_START = 17   // first knockout rodada
+    const val ARG_TOTAL_ROUNDS         = 20   // total rodadas per tournament
+    const val ARG_CLAUSURA_OG_OFFSET   = 210  // added to rodada*10 for Clausura
+
+    val ARG_FASES_KNOCKOUT = listOf("Oitavas", "Quartas", "Semi", "Final")
+
+    /**
+     * Generates single round-robin (turno only) for one group of N teams.
+     * For odd N a dummy bye (-1) is injected so every possible pair meets exactly once.
+     * Matches for round [rodadaBase + 0 .. rodadaBase + min(N-1, maxRodadas)-1] are produced.
+     * ordemGlobal = rodada * 10 + ogOffset
+     */
+    fun gerarTurnoUnicoGrupo(
+        campeonatoId: Int,
+        participantes: List<Int>,
+        rodadaBase: Int = 1,
+        ogOffset: Int = 0,
+        maxRodadas: Int = Int.MAX_VALUE
+    ): List<PartidaEntity> {
+        val times = participantes.toMutableList()
+        val partidas = mutableListOf<PartidaEntity>()
+        if (times.size % 2 != 0) times.add(-1)          // bye for odd N
+
+        val metade    = times.size / 2
+        val numRodadas = minOf(times.size - 1, maxRodadas)
+
+        repeat(numRodadas) { idx ->
+            val rodada = rodadaBase + idx
+            val og     = rodada * 10 + ogOffset
+            for (i in 0 until metade) {
+                val teamA = times[i]
+                val teamB = times[times.size - 1 - i]
+                if (teamA != -1 && teamB != -1) {
+                    // Alternate home/away each round
+                    val (casa, fora) = if (idx % 2 == 0) teamA to teamB else teamB to teamA
+                    partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                        timeCasaId = casa, timeForaId = fora, ordemGlobal = og))
+                }
+            }
+            val ultimo = times.removeAt(times.size - 1)
+            times.add(1, ultimo)
+        }
+        return partidas
+    }
+
+    /**
+     * Generates 2 interzonal rounds starting at [rodadaBase]:
+     *   Round +0: fixed rival pairings  (grupoA[i] vs grupoB[i])
+     *   Round +1: shuffled secondary pairings
+     */
+    fun gerarInterzonais(
+        campeonatoId: Int,
+        grupoA: List<Int>,
+        grupoB: List<Int>,
+        rodadaBase: Int,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        require(grupoA.size == grupoB.size)
+        val partidas = mutableListOf<PartidaEntity>()
+
+        // Round 1 – rival (A[i] hosts B[i])
+        val r1 = rodadaBase
+        val og1 = r1 * 10 + ogOffset
+        grupoA.forEachIndexed { i, teamA ->
+            partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = r1,
+                timeCasaId = teamA, timeForaId = grupoB[i], ordemGlobal = og1))
+        }
+
+        // Round 2 – random secondary (B[j] hosts A[j], shuffled independently)
+        val r2  = rodadaBase + 1
+        val og2 = r2 * 10 + ogOffset
+        val shA = grupoA.shuffled()
+        val shB = grupoB.shuffled()
+        shA.forEachIndexed { i, teamA ->
+            partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = r2,
+                timeCasaId = shB[i], timeForaId = teamA, ordemGlobal = og2))
+        }
+        return partidas
+    }
+
+    /**
+     * Generates Oitavas bracket for Argentine knockout.
+     * Cross-seeding: A1-B8, A2-B7, A3-B6, A4-B5 (A side hosts);
+     *                B1-A8, B2-A7, B3-A6, B4-A5 (B side hosts)
+     * top8A sorted best→worst; top8B sorted best→worst.
+     */
+    fun gerarOitavasArgentina(
+        campeonatoId: Int,
+        top8A: List<Int>,
+        top8B: List<Int>,
+        rodada: Int,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        require(top8A.size == 8 && top8B.size == 8)
+        val og = rodada * 10 + ogOffset
+        return buildList {
+            for (i in 0 until 4) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = top8A[i], timeForaId = top8B[7 - i],
+                    fase = "Oitavas", ordemGlobal = og))
+            }
+            for (i in 0 until 4) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = top8B[i], timeForaId = top8A[7 - i],
+                    fase = "Oitavas", ordemGlobal = og))
+            }
+        }
+    }
+
+    /**
+     * Generates next knockout phase by pairing winners consecutively.
+     * Winner[0] (home) vs Winner[1], Winner[2] (home) vs Winner[3], ...
+     */
+    fun gerarProximaFaseKnockoutArgentina(
+        campeonatoId: Int,
+        vencedores: List<Int>,
+        rodada: Int,
+        fase: String,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        val og = rodada * 10 + ogOffset
+        return buildList {
+            var i = 0
+            while (i + 1 < vencedores.size) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = vencedores[i], timeForaId = vencedores[i + 1],
+                    fase = fase, ordemGlobal = og))
+                i += 2
+            }
+        }
+    }
 }

@@ -12,8 +12,8 @@ import javax.inject.Singleton
 
 // ─────────────────────────────────────────────
 //  SeedDataSource
-//  Lê o arquivo assets/seed_brasileirao.json e
-//  converte para entidades Room.
+//  Lê o arquivo assets/seed_data.json (arquivo único consolidado)
+//  e converte para entidades Room.
 // ─────────────────────────────────────────────
 @Singleton
 class SeedDataSource @Inject constructor(
@@ -25,19 +25,11 @@ class SeedDataSource @Inject constructor(
     )
 
     suspend fun carregar(): SeedData = withContext(Dispatchers.IO) {
-        fun loadFile(filename: String): Pair<List<TimeEntity>, List<JogadorEntity>>? {
-            return try {
-                val json = context.assets.open(filename).bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val root = JSONObject(json)
-                parseTimes(root.getJSONArray("times")) to parseJogadores(root.getJSONArray("jogadores"))
-            } catch (_: Exception) { null }
-        }
-        val (timesA, jogadoresA) = loadFile("seed_brasileirao.json")
-            ?: throw IllegalStateException("seed_brasileirao.json n\u00e3o encontrado")
-        val (timesArg, jogadoresArg) = loadFile("seed_argentina.json") ?: (emptyList<TimeEntity>() to emptyList<JogadorEntity>())
+        val json = context.assets.open("seed_data.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val root = JSONObject(json)
         SeedData(
-            times = timesA + timesArg,
-            jogadores = jogadoresA + jogadoresArg
+            times     = parseTimes(root.getJSONArray("times")),
+            jogadores = parseJogadores(root.getJSONArray("jogadores"))
         )
     }
 
@@ -52,6 +44,7 @@ class SeedDataSource @Inject constructor(
                 estado        = o.getString("estado"),
                 divisao       = when {
                     o.optString("divisao").uppercase() == "A" && pais == "Argentina" -> 5
+                    o.optString("divisao").uppercase() == "B" && pais == "Argentina" -> 6
                     o.optString("divisao").uppercase() == "A" -> 1
                     o.optString("divisao").uppercase() == "B" -> 2
                     o.optString("divisao").uppercase() == "C" -> 3

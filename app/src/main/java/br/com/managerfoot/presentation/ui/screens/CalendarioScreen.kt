@@ -38,14 +38,14 @@ fun CalendarioScreen(
         partidas.filter { !it.jogada }.sortedWith(
             compareBy(
                 { anoDePartida(it.nomeCampeonato) },
-                { it.ordemGlobal }
+                { val (m, d) = ordemGlobalParaData(it.ordemGlobal, it.nomeCampeonato); m * 100 + d }
             )
         )
     }
     val realizados = remember(partidas) {
         partidas.filter { it.jogada }.sortedWith(
             compareByDescending<CalendarioPartidaDto> { anoDePartida(it.nomeCampeonato) }
-                .thenByDescending { it.ordemGlobal }
+                .thenByDescending { val (m, d) = ordemGlobalParaData(it.ordemGlobal, it.nomeCampeonato); m * 100 + d }
         )
     }
 
@@ -97,10 +97,11 @@ fun CalendarioScreen(
                     buildList {
                         var chavePrev = ""
                         lista.forEach { p ->
-                            val mes = mesDeOrdemGlobal(p.ordemGlobal)
+                            val (mes, dia) = ordemGlobalParaData(p.ordemGlobal, p.nomeCampeonato)
                             val ano = anoDePartida(p.nomeCampeonato)
-                            val chave = "${ano}_${mes}"
-                            val label = if (ano > 0) "${NOMES_MESES[mes]} $ano" else NOMES_MESES[mes]
+                            val chave = "${ano}_${"%02d".format(mes)}_${"%02d".format(dia)}"
+                            val mesNome = NOMES_MESES[mes]
+                            val label = if (ano > 0) "$dia de $mesNome de $ano" else "$dia de $mesNome"
                             if (chave != chavePrev) {
                                 add(CalendarioItem.Header(chave, label))
                                 chavePrev = chave
@@ -142,6 +143,9 @@ private fun CalendarioCard(
     val destaqueColor = MaterialTheme.colorScheme.primaryContainer
     val normalColor   = MaterialTheme.colorScheme.surfaceVariant
 
+    val (mes, dia) = ordemGlobalParaData(partida.ordemGlobal, partida.nomeCampeonato)
+    val dataCurta  = "$dia ${NOMES_MESES[mes].take(3)}"
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -149,7 +153,7 @@ private fun CalendarioCard(
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Cabeçalho: competição + rodada
+            // Cabeçalho: competição + data · rodada/fase
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,10 +163,11 @@ private fun CalendarioCard(
                     text = partida.nomeCampeonato,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = partida.fase ?: "Rodada ${partida.rodada}",
+                    text = "$dataCurta · ${partida.fase ?: "Rodada ${partida.rodada}"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -262,7 +267,7 @@ private fun CalendarioCard(
 }
 
 // ─────────────────────────────────────────────
-//  Cabeçalho de mês
+//  Cabeçalho de dia
 // ─────────────────────────────────────────────
 @Composable
 private fun MesHeader(nome: String) {
@@ -286,36 +291,56 @@ private sealed class CalendarioItem {
 }
 
 // ─────────────────────────────────────────────
-//  Mapeamento de mês
-//  • Copa do Brasil: janeiro (Prim. Fase) → novembro (Final)
-//  • Brasileirão:   janeiro (R1) → dezembro (R38), 38 rodadas / 12 meses
-//  Alinhado com saveState.mesAtual que começa em 1 (Janeiro).
+//  Mapeamento ordemGlobal → data exata
+//
+//  Regras por campeonato:
+//  • Supercopa Rei          → ordemGlobal = 1  → 25 Jan
+//  • Copa do Brasil         → mapeamento fixo pelos ordemGlobal conhecidos
+//  • Argentina A/B          → 58 rodadas, OG 10-580 → Fev 8 – Nov 30
+//  • Brasileirão A-D        → 38 rodadas, OG 10-380 → Fev 8 – Nov 30
 // ─────────────────────────────────────────────
 private val NOMES_MESES = listOf(
     "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 )
 
+// COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+private val COPA_DATAS: Map<Int, Pair<Int, Int>> = mapOf(
+    2   to (2 to 10),   7   to (2 to 25),
+    15  to (3 to 15),   35  to (4 to  5),
+    95  to (5 to 15),  115  to (6 to 10),
+    175 to (7 to 15),  195  to (8 to  5),
+    245 to (9 to 10),  265  to (10 to  8),
+    335 to (11 to 12), 355  to (12 to  3)
+)
+
+private val DIAS_MES = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+/** Converte dia-do-ano (1-365) em (mês, dia). */
+private fun diaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {
+    var rem = diaDoAno.coerceIn(1, 365)
+    for (m in 1..12) {
+        if (rem <= DIAS_MES[m]) return m to rem
+        rem -= DIAS_MES[m]
+    }
+    return 12 to 31
+}
+
+/** Retorna (mês, dia) para uma partida baseado em ordemGlobal e nome do campeonato. */
+private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> = when {
+    ordemGlobal == 1 -> 1 to 25   // Supercopa Rei: 25 de Janeiro
+    nomeCampeonato.contains("Copa", ignoreCase = true) ->
+        COPA_DATAS[ordemGlobal]
+            ?: diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
+    nomeCampeonato.contains("Argentina", ignoreCase = true) -> {
+        // 21 rodadas × 2 torneios → OG 10..420; temporada fev (dia 39) a nov (dia 334) = 295 dias
+        diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 410).coerceIn(1, 365))
+    }
+    else -> {
+        // Brasileirão A-D: 38 rodadas → OG 10..380; temporada fev (dia 39) a nov (dia 334)
+        diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
+    }
+}
+
 private fun anoDePartida(nomeCampeonato: String): Int =
     Regex("\\d{4}").find(nomeCampeonato)?.value?.toIntOrNull() ?: 0
-
-// Deriva o mês do calendário a partir do ordemGlobal, que é a referência canônica
-// de posição para Copa e Brasileirão. ordemGlobal=10 (R1 Bras.) → jan(1);  =380 (R38) → dez(12).
-private fun mesDeOrdemGlobal(ordemGlobal: Int): Int =
-    (1 + (ordemGlobal.coerceAtLeast(1) - 1) * 11 / 379).coerceIn(1, 12)
-
-private fun mesDePartida(nomeCampeonato: String, rodada: Int, fase: String?): Int =
-    if (nomeCampeonato.contains("Copa", ignoreCase = true)) {
-        when (fase) {
-            "Primeira Fase" -> 1
-            "Segunda Fase"  -> 2
-            "Oitavas"       -> 4
-            "Quartas"       -> 6
-            "Semi"          -> 8
-            "Final"         -> 11
-            else            -> 4
-        }
-    } else {
-        // 38 rodadas de janeiro (1) a dezembro (12) = 12 meses
-        (1 + ((rodada - 1) * 11 / 37)).coerceIn(1, 12)
-    }

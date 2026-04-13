@@ -317,6 +317,23 @@ interface PartidaDao {
     fun observeRodada(campeonatoId: Int, rodada: Int): Flow<List<CalendarioPartidaDto>>
 
     @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.campeonatoId = :campeonatoId AND p.fase IS NOT NULL
+        ORDER BY p.rodada, p.id
+    """)
+    fun observeArgKnockout(campeonatoId: Int): Flow<List<CalendarioPartidaDto>>
+
+    @Query("""
         SELECT p.id AS partidaId, p.confrontoId AS confrontoId, p.fase AS fase,
                p.rodada AS rodada, p.timeCasaId AS timeCasaId,
                tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
@@ -375,6 +392,24 @@ interface PartidaDao {
         ORDER BY c.temporadaId ASC, p.rodada ASC
     """)
     suspend fun buscarHistoricoCopaDoTime(timeId: Int): List<PartidaCopaHistoricoDto>
+
+    @Query("""
+        SELECT p.campeonatoId AS campeonatoId,
+               c.nome        AS nomeCampeonato,
+               c.temporadaId AS temporadaId,
+               p.timeCasaId  AS timeCasaId,
+               p.timeForaId  AS timeForaId,
+               p.golsCasa    AS golsCasa,
+               p.golsFora    AS golsFora,
+               p.fase        AS fase
+        FROM partidas p
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        WHERE c.tipo = 'SUPERCOPA'
+        AND (p.timeCasaId = :timeId OR p.timeForaId = :timeId)
+        AND p.jogada = 1
+        ORDER BY c.temporadaId ASC, p.rodada ASC
+    """)
+    suspend fun buscarHistoricoSupercopaDoTime(timeId: Int): List<PartidaCopaHistoricoDto>
 
     // ── Estatísticas de jogadores por equipe ──
 

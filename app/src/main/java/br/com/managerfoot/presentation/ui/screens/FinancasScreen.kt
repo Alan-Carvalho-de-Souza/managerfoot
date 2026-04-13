@@ -364,6 +364,7 @@ private fun VendaRow(venda: TransferenciaDetalhe) {
 @Composable
 private fun PremiacaoRow(financa: FinancaEntity) {
     val mesNome = NOMES_MESES_FIN.getOrElse(financa.mes) { "Mês ${financa.mes}" }
+    val titulo = financa.descricaoPremio ?: "Prêmio de Campeão"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -372,7 +373,7 @@ private fun PremiacaoRow(financa: FinancaEntity) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "Prêmio de Campeão",
+                titulo,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -636,7 +637,8 @@ private fun SaldoCaixaTab(
     val totalBilheteria  = partidas.sumOf { it.receitaPartida ?: 0L }
     val totalPatrocinio  = historico.sumOf { it.receitaPatrocinio }
     val totalVendas      = vendas.sumOf { it.valor }
-    val totalEntradas    = totalBilheteria + totalPatrocinio + totalVendas
+    val totalPremiacoes  = historico.sumOf { it.receitaPremiacoes }
+    val totalEntradas    = totalBilheteria + totalPatrocinio + totalVendas + totalPremiacoes
 
     val totalSalarios    = historico.sumOf { it.despesaSalarios }
     val totalAmpliacoes  = historico.sumOf { it.despesaAmpliacaoEstadio }
@@ -712,6 +714,7 @@ private fun SaldoCaixaTab(
                     SaldoResumoLinha("Bilheteria",       totalBilheteria, positivo = true)
                     SaldoResumoLinha("Patrocínio",       totalPatrocinio, positivo = true)
                     SaldoResumoLinha("Vendas de jogadores", totalVendas,  positivo = true)
+                    SaldoResumoLinha("Premiações",        totalPremiacoes, positivo = true)
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween

@@ -227,12 +227,13 @@ private fun AbaHistorico(
 
 @Composable
 private fun HistoricoCard(h: HistoricoTemporada) {
-    val tipoLabel = when (h.tipo) {
-        "COPA_NACIONAL" -> "Copa do Brasil"
-        "NACIONAL_DIVISAO1" -> "Série A"
-        "NACIONAL_DIVISAO2" -> "Série B"
-        "NACIONAL_DIVISAO3" -> "Série C"
-        "NACIONAL_DIVISAO4" -> "Série D"
+    val tipoLabel = when {
+        h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Supercopa", ignoreCase = true) -> "Supercopa Rei"
+        h.tipo == "COPA_NACIONAL" -> "Copa do Brasil"
+        h.tipo == "NACIONAL_DIVISAO1" -> "Série A"
+        h.tipo == "NACIONAL_DIVISAO2" -> "Série B"
+        h.tipo == "NACIONAL_DIVISAO3" -> "Série C"
+        h.tipo == "NACIONAL_DIVISAO4" -> "Série D"
         else -> h.nomeCampeonato
     }
 
@@ -266,7 +267,25 @@ private fun HistoricoCard(h: HistoricoTemporada) {
                 }
             }
 
-            if (h.tipo == "COPA_NACIONAL") {
+            if (h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Supercopa", ignoreCase = true)) {
+                val resultado = when {
+                    h.vitorias > 0 -> "Campeão"
+                    h.derrotas > 0 -> "Vice"
+                    else -> "—"
+                }
+                val corResultado = if (h.vitorias > 0)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                Text(
+                    resultado,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = corResultado,
+                    modifier = Modifier.width(56.dp),
+                    textAlign = TextAlign.Center
+                )
+            } else if (h.tipo == "COPA_NACIONAL") {
                 Text(
                     h.faseAtingida?.faseLabel() ?: "—",
                     style = MaterialTheme.typography.titleSmall,

@@ -28,6 +28,8 @@ fun ArtilheirosScreen(
     campeonatoDId: Int = -1,
     copaId: Int = -1,
     campeonatoArgAId: Int = -1,
+    campeonatoArgBId: Int = -1,
+    campeonatoArgClausuraId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -40,8 +42,8 @@ fun ArtilheirosScreen(
     val divisaoSelecionada        by vm.divisaoSelecionada.collectAsState()
     val divisaoHistoricoSelecionada by vm.divisaoHistoricoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, campeonatoArgAId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, campeonatoArgAId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId)
     }
 
     // Escopo: 0 = temporada atual, 1 = histórico total
@@ -92,7 +94,10 @@ fun ArtilheirosScreen(
                 if (campeonatoCId > 0) add(3 to "Série C")
                 if (campeonatoDId > 0) add(4 to "Série D")
                 if (copaId > 0) add(5 to "Copa do Brasil")
-                if (campeonatoArgAId > 0) add(6 to "Primera Div.")
+                if (campeonatoArgAId > 0 || campeonatoArgClausuraId > 0) add(6 to "Primera Div. (Combinado)")
+                if (campeonatoArgAId > 0) add(8 to "Apertura")
+                if (campeonatoArgClausuraId > 0) add(9 to "Clausura")
+                if (campeonatoArgBId > 0) add(7 to "Segunda Div.")
             }
 
             // Seletor de competição (dropdown) — só visível em "Temporada atual"
