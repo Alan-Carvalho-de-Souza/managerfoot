@@ -101,7 +101,7 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity) {
         else -> MaterialTheme.colorScheme.onSurface
     }
     val divLabel = when (entry.divisaoAtual) {
-        1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "A"; else -> "?"
+        1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "A"; 6 -> "B"; else -> "?"
     }
 
     Row(

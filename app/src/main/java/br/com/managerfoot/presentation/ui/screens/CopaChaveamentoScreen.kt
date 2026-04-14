@@ -27,17 +27,25 @@ import br.com.managerfoot.presentation.viewmodel.CopaChaveamentoViewModel
 @Composable
 fun CopaChaveamentoScreen(
     copaId: Int,
+    copaArgId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
 ) {
-    val partidas by vm.partidas.collectAsState()
+    val partidas    by vm.partidas.collectAsState()
+    val partidasArg by vm.partidasArg.collectAsState()
 
-    LaunchedEffect(copaId) { vm.carregar(copaId) }
+    LaunchedEffect(copaId, copaArgId) { vm.carregarAmbas(copaId, copaArgId) }
+
+    val mostrarFiltro = copaId > 0 && copaArgId > 0
+    var paisSelecionado by remember { mutableStateOf("Brasil") }
+
+    val partidasAtivas = if (paisSelecionado == "Argentina") partidasArg else partidas
+    val fasesMotor     = if (paisSelecionado == "Argentina") MotorCampeonato.COPA_ARG_FASES else MotorCampeonato.COPA_FASES
 
     // Agrupa por fase (ordem definida pelo motor)
-    val faseDisponivel = remember(partidas) {
-        MotorCampeonato.COPA_FASES.filter { fase -> partidas.any { it.fase == fase } }
+    val faseDisponivel = remember(partidasAtivas, fasesMotor) {
+        fasesMotor.filter { fase -> partidasAtivas.any { it.fase == fase } }
     }
 
     var faseSelecionada by remember(faseDisponivel) {
@@ -47,7 +55,7 @@ fun CopaChaveamentoScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Copa do Brasil — Chaveamento") },
+                title = { Text("Copas") },
                 navigationIcon = {
                     IconButton(onClick = onVoltar) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
@@ -61,6 +69,25 @@ fun CopaChaveamentoScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // ── Filtro de país (só exibido quando ambas as copas existem) ──────────
+            if (mostrarFiltro) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("🇧🇷 Brasil", "🇦🇷 Argentina").forEach { label ->
+                        val pais = if (label.contains("Brasil")) "Brasil" else "Argentina"
+                        FilterChip(
+                            selected = paisSelecionado == pais,
+                            onClick  = { paisSelecionado = pais },
+                            label    = { Text(label) }
+                        )
+                    }
+                }
+            }
+
             if (faseDisponivel.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Copa ainda não iniciada.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -82,8 +109,8 @@ fun CopaChaveamentoScreen(
                 }
             }
 
-            val confrontosDaFase = remember(partidas, faseSelecionada) {
-                partidas.filter { it.fase == faseSelecionada }
+            val confrontosDaFase = remember(partidasAtivas, faseSelecionada) {
+                partidasAtivas.filter { it.fase == faseSelecionada }
                     .groupBy { it.confrontoId }
                     .values.toList()
                     .sortedBy { it.firstOrNull()?.confrontoId ?: 0 }

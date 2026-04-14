@@ -255,8 +255,12 @@ private fun RodadaKnockoutCard(partida: CalendarioPartidaDto) {
                 }
                 Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (partida.jogada && partida.golsCasa != null && partida.golsFora != null) {
-                        Text("${partida.golsCasa} �? ${partida.golsFora}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("jogo único", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${partida.golsCasa} × ${partida.golsFora}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        if (partida.penaltisCasa != null && partida.penaltisForaId != null && partida.golsCasa == partida.golsFora) {
+                            Text("pen ${partida.penaltisCasa}–${partida.penaltisForaId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Text("jogo único", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     } else {
                         Text("vs", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -321,7 +325,7 @@ private fun RodadaCard(partida: CalendarioPartidaDto) {
             ) {
                 if (partida.jogada && partida.golsCasa != null && partida.golsFora != null) {
                     Text(
-                        text = "${partida.golsCasa}  �?  ${partida.golsFora}",
+                        text = "${partida.golsCasa} × ${partida.golsFora}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )

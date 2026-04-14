@@ -263,10 +263,12 @@ fun DashboardScreen(
                 val escudoCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.escudoRes ?: ""
                 val escudoFora = todosOsTimes.find { it.id == partida.timeForaId }?.escudoRes ?: ""
                 val ehCopaPartida = snap != null && snap.copaId > 0 && partida.campeonatoId == snap.copaId
+                val ehCopaArgPartida = snap != null && snap.copaArgId > 0 && partida.campeonatoId == snap.copaArgId
                 val ehSupercopaPartida = snap != null && snap.supercopaId > 0 && partida.campeonatoId == snap.supercopaId
                 val resultLabel = when {
                     ehSupercopaPartida -> "Supercopa Rei"
                     ehCopaPartida -> "Copa do Brasil \u2014 ${partida.fase ?: "Copa"}"
+                    ehCopaArgPartida -> "Copa Argentina \u2014 ${partida.fase ?: "Copa"}"
                     partida.campeonatoId == snap?.campeonatoAId -> "S\u00e9rie A \u2014 Rodada ${partida.rodada}"
                     partida.campeonatoId == snap?.campeonatoBId -> "S\u00e9rie B \u2014 Rodada ${partida.rodada}"
                     partida.campeonatoId == snap?.campeonatoCId -> "S\u00e9rie C \u2014 Rodada ${partida.rodada}"
@@ -282,7 +284,7 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = when {
                             ehSupercopaPartida -> MaterialTheme.colorScheme.tertiary
-                            ehCopaPartida -> MaterialTheme.colorScheme.primary
+                            ehCopaPartida || ehCopaArgPartida -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         },
                         modifier = Modifier.padding(start = 20.dp, top = 4.dp)
@@ -397,7 +399,7 @@ private fun MenuAba(
         item { OutlinedButton(onClick = onIrParaArtilheiros,      modifier = Modifier.fillMaxWidth()) { Text("Artilharia & Assistências") } }
         item { OutlinedButton(onClick = onIrParaCalendario,       modifier = Modifier.fillMaxWidth()) { Text("Calendário") } }
         item { OutlinedButton(onClick = onIrParaClubes,           modifier = Modifier.fillMaxWidth()) { Text("Clubes") } }
-        item { OutlinedButton(onClick = onIrParaCopaChaveamento,  modifier = Modifier.fillMaxWidth()) { Text("Copa do Brasil — Chaveamento") } }
+        item { OutlinedButton(onClick = onIrParaCopaChaveamento,  modifier = Modifier.fillMaxWidth()) { Text("Copas") } }
         item { OutlinedButton(onClick = onIrParaEstadio,          modifier = Modifier.fillMaxWidth()) { Text("Estádio") } }
         item { OutlinedButton(onClick = onIrParaEstatisticasTime, modifier = Modifier.fillMaxWidth()) { Text("Estatísticas do Time") } }
         item { OutlinedButton(onClick = onIrParaFinancas,         modifier = Modifier.fillMaxWidth()) { Text("Finanças do Clube") } }

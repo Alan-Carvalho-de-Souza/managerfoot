@@ -45,7 +45,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId = :campeonatoId
-        ORDER BY rodada DESC
+        ORDER BY ordemGlobal DESC
         LIMIT :limite
     """)
     suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int, limite: Int = 5): List<PartidaEntity>
@@ -53,7 +53,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId IN (:campeonatoIds)
-        ORDER BY rodada DESC
+        ORDER BY ordemGlobal DESC
         LIMIT :limite
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
@@ -323,7 +323,8 @@ interface PartidaDao {
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
-               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida,
+               p.penaltisCasa AS penaltisCasa, p.penaltisForaId AS penaltisForaId
         FROM partidas p
         INNER JOIN campeonatos c  ON p.campeonatoId = c.id
         INNER JOIN times tc ON p.timeCasaId = tc.id
@@ -480,7 +481,9 @@ data class CalendarioPartidaDto(
     val golsFora: Int?,
     val jogada: Boolean,
     val torcedores: Int? = null,
-    val receitaPartida: Long? = null
+    val receitaPartida: Long? = null,
+    val penaltisCasa: Int? = null,
+    val penaltisForaId: Int? = null
 )
 
 data class CopaPartidaDto(

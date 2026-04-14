@@ -53,8 +53,8 @@ sealed class Rota(val caminho: String) {
     object Calendario      : Rota("calendario/{timeId}") {
         fun comTimeId(id: Int) = "calendario/$id"
     }
-    object CopaChaveamento : Rota("copa_chaveamento/{copaId}/{timeId}") {
-        fun com(copaId: Int, timeId: Int) = "copa_chaveamento/$copaId/$timeId"
+    object CopaChaveamento : Rota("copa_chaveamento/{copaId}/{copaArgId}/{timeId}") {
+        fun com(copaId: Int, copaArgId: Int, timeId: Int) = "copa_chaveamento/$copaId/$copaArgId/$timeId"
     }
     object RankingGeral    : Rota("ranking_geral")
     object EstatisticasTime : Rota("estatisticas_time/{timeId}") {
@@ -151,7 +151,8 @@ fun ManagerFootNavGraph() {
                 onIrParaCalendario  = { navController.navigate(Rota.Calendario.comTimeId(timeId)) },
                 onIrParaCopaChaveamento = {
                     val copaId = saveState?.copaId ?: -1
-                    if (copaId > 0) navController.navigate(Rota.CopaChaveamento.com(copaId, timeId))
+                    val copaArgId = saveState?.copaArgId ?: -1
+                    if (copaId > 0 || copaArgId > 0) navController.navigate(Rota.CopaChaveamento.com(copaId, copaArgId, timeId))
                 },
                 onIrParaRankingGeral = { navController.navigate(Rota.RankingGeral.caminho) },
                 onIrParaEstatisticasTime = { navController.navigate(Rota.EstatisticasTime.com(timeId)) },
@@ -340,12 +341,14 @@ fun ManagerFootNavGraph() {
             route = Rota.CopaChaveamento.caminho,
             arguments = listOf(
                 navArgument("copaId") { type = NavType.IntType },
+                navArgument("copaArgId") { type = NavType.IntType },
                 navArgument("timeId") { type = NavType.IntType }
             )
         ) { backStack ->
             val copaId = backStack.arguments!!.getInt("copaId")
+            val copaArgId = backStack.arguments!!.getInt("copaArgId")
             val timeId = backStack.arguments!!.getInt("timeId")
-            CopaChaveamentoScreen(copaId = copaId, timeJogadorId = timeId, onVoltar = { navController.popBackStack() })
+            CopaChaveamentoScreen(copaId = copaId, copaArgId = copaArgId, timeJogadorId = timeId, onVoltar = { navController.popBackStack() })
         }
 
         // Ranking Geral

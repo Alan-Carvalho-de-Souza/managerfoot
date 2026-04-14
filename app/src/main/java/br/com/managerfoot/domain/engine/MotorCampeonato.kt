@@ -13,7 +13,7 @@ import br.com.managerfoot.domain.model.ResultadoPartida
 // ─────────────────────────────────────────────
 object MotorCampeonato {
 
-    // ── Fases da Copa (em ordem) ──────────────────────────────────
+    // ── Fases da Copa do Brasil (em ordem) — 64 times ───────────────
     val COPA_FASES = listOf(
         "Primeira Fase",
         "Segunda Fase",
@@ -23,10 +23,20 @@ object MotorCampeonato {
         "Final"
     )
 
+    // ── Fases da Copa Argentina (em ordem) — 32 times ────────────────
+    // Primeira Fase (32→16), Oitavas (16→8), Quartas (8→4), Semi (4→2), Final (2→1)
+    val COPA_ARG_FASES = listOf(
+        "Primeira Fase",
+        "Oitavas",
+        "Quartas",
+        "Semi",
+        "Final"
+    )
+
     // Retorna rodadaIda de uma fase (0-indexed faseIndex)
     fun rodadaIdaDeFase(faseIndex: Int) = faseIndex * 2 + 1
 
-    // ordemGlobal de cada jogo da Copa no calendário multi-competição.
+    // ordemGlobal de cada jogo da Copa do Brasil no calendário multi-competição.
     // Copa Fase 0 ida fica após Brasileirão R3 (30), e assim por diante.
     // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em N*10+5.
     // Índices: 0=F0-ida, 1=F0-volta, 2=F1-ida, 3=F1-volta, ... 11=Final-volta
@@ -39,9 +49,20 @@ object MotorCampeonato {
     //   Final         ─ Nov:  entre R33 (330) e R35 (350)
     val COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
 
-    fun proximaFaseCopa(faseAtual: String): String? {
-        val idx = COPA_FASES.indexOf(faseAtual)
-        return if (idx >= 0 && idx < COPA_FASES.size - 1) COPA_FASES[idx + 1] else null
+    // ordemGlobal de cada jogo da Copa Argentina no calendário Argentine.
+    // Argentine calendar: Apertura OG 10–200 (rodada*10), Clausura OG 220–410 (rodada*10+210).
+    // Índices: 0=PF-ida, 1=PF-volta, 2=Oitavas-ida, 3=Oitavas-volta,
+    //          4=Quartas-ida, 5=Quartas-volta, 6=Semi-ida, 7=Semi-volta, 8=Final-ida, 9=Final-volta
+    //   Primeira Fase ─ após Apertura R2  (OG 20)
+    //   Oitavas       ─ após Apertura R8  (OG 80)
+    //   Quartas       ─ após Apertura R14 (OG 140)
+    //   Semifinal     ─ gap Apertura-Clausura (OG 200–220)
+    //   Final         ─ após Clausura R20 (OG 420)
+    val COPA_ARG_ORDEM_GLOBAL = intArrayOf(25, 45, 85, 115, 145, 175, 205, 215, 415, 425)
+
+    fun proximaFaseCopa(faseAtual: String, fases: List<String> = COPA_FASES): String? {
+        val idx = fases.indexOf(faseAtual)
+        return if (idx >= 0 && idx < fases.size - 1) fases[idx + 1] else null
     }
 
     // ── Geração de fase mata-mata ida e volta ─────────────────────

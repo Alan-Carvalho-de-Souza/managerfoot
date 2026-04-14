@@ -184,6 +184,22 @@ class InicioViewModel @Inject constructor(
                 participantesArgB
             ) else -1
 
+            // Cria Copa Argentina: todos da Primera División + top 2 da Segunda
+            val participantesCopaArg = gameRepository.determinarParticipantesCopaArgentina(
+                campeonatoArgAId, campeonatoArgBId
+            )
+            val copaArgId = if (participantesCopaArg.isNotEmpty()) gameRepository.criarCopaArgentina(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Copa Argentina 2026",
+                    tipo         = TipoCampeonato.COPA_NACIONAL,
+                    formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                    totalRodadas = 10,
+                    pais         = "Argentina"
+                ),
+                participantesCopaArg
+            ) else -1
+
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)
             val divJogador = timeEntity2?.divisao ?: 1
@@ -206,6 +222,7 @@ class InicioViewModel @Inject constructor(
                 campeonatoArgBId = campeonatoArgBId,
                 campeonatoArgClausuraId = campeonatoArgClausuraId,
                 copaId = copaId,
+                copaArgId = copaArgId,
                 supercopaId = supercopaId,
                 ano = 2026
             )
@@ -316,7 +333,7 @@ class DashboardViewModel @Inject constructor(
         // durante a simulação para evitar exibir o resultado antes da animação finalizar
         val copaIdInicial = save.copaId
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-            timeId, listOf(campeonatoId, copaIdInicial, save.supercopaId, save.campeonatoArgClausuraId).filter { it > 0 }
+            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.supercopaId, save.campeonatoArgClausuraId).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
         _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
@@ -430,6 +447,29 @@ class DashboardViewModel @Inject constructor(
                     anoAtual      = save.anoAtual
                 )
             }
+            // ── Copa Argentina ──────────────────────────────────────────────────────
+            if (save.copaArgId > 0 && ctx.campeonatoId == save.copaArgId && !resultadoFinal.precisaPenaltis) {
+                gameRepository.verificarEAvancarFaseCopaArgentina(
+                    copaArgId     = save.copaArgId,
+                    anoAtual      = save.anoAtual,
+                    timeJogadorId = save.timeIdJogador,
+                    temporadaId   = save.temporadaId
+                )
+            }
+            if (save.copaArgId > 0 && ctx.campeonatoId == save.copaArgId && resultadoFinal.precisaPenaltis) {
+                _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                    copaId         = save.copaArgId,
+                    voltaPartidaId = resultadoFinal.partidaId,
+                    timeJogadorId  = save.timeIdJogador
+                )
+            }
+            if (ctx.campeonatoId != save.copaArgId && save.copaArgId > 0) {
+                gameRepository.simularProximaFaseCopaArgentinaSeJogadorEliminado(
+                    copaArgId     = save.copaArgId,
+                    timeJogadorId = save.timeIdJogador,
+                    anoAtual      = save.anoAtual
+                )
+            }
             // ── Supercopa Rei ──────────────────────────────────────────────────────
             if (save.supercopaId > 0 && ctx.campeonatoId == save.supercopaId) {
                 if (resultadoFinal.precisaPenaltis) {
@@ -468,6 +508,16 @@ class DashboardViewModel @Inject constructor(
                         temporadaId   = save.temporadaId
                     )
                 }
+            // Carrega dados para pênaltis interativos no mata-mata Argentine
+            listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
+                .firstOrNull { it > 0 && it == ctx.campeonatoId && resultadoFinal.precisaPenaltis }
+                ?.let { argId ->
+                    _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                        copaId         = argId,
+                        voltaPartidaId = resultadoFinal.partidaId,
+                        timeJogadorId  = save.timeIdJogador
+                    )
+                }
             // Avança torneios Argentine onde jogador não está (ou já foi eliminado)
             listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
                 .filter { it > 0 && it != ctx.campeonatoId }
@@ -493,7 +543,7 @@ class DashboardViewModel @Inject constructor(
             var save = gameDataStore.saveState.first()
             // Atualiza últimos resultados só agora, após a animação ter sido exibida
             _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-                save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.supercopaId, save.campeonatoArgClausuraId).filter { it > 0 }
+                save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.copaArgId, save.supercopaId, save.campeonatoArgClausuraId).filter { it > 0 }
             )
             _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(save.campeonatoId, save.timeIdJogador)
 
@@ -532,23 +582,39 @@ class DashboardViewModel @Inject constructor(
     fun finalizarPenaltisJogador(resultado: ResultadoPenaltis) = viewModelScope.launch {
         val save          = gameDataStore.saveState.first()
         val resultadoPartida = _resultadoSimulado.value ?: return@launch
+        val argId = listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
+            .firstOrNull { it > 0 && it == _contextoSimulacao?.campeonatoId }
         try {
-            if (_penaltisParaSupercopa) {
-                gameRepository.persistirResultadoPenaltisJogadorSupercopa(
-                    resultado     = resultado,
-                    supercopaId   = save.supercopaId,
-                    anoAtual      = save.anoAtual,
-                    partidaId     = resultadoPartida.partidaId,
-                    timeJogadorId = save.timeIdJogador,
-                    temporadaId   = save.temporadaId
-                )
-            } else {
-                gameRepository.persistirResultadoPenaltisJogador(
-                    resultado      = resultado,
-                    copaId         = save.copaId,
-                    anoAtual       = save.anoAtual,
-                    voltaPartidaId = resultadoPartida.partidaId
-                )
+            when {
+                _penaltisParaSupercopa -> {
+                    gameRepository.persistirResultadoPenaltisJogadorSupercopa(
+                        resultado     = resultado,
+                        supercopaId   = save.supercopaId,
+                        anoAtual      = save.anoAtual,
+                        partidaId     = resultadoPartida.partidaId,
+                        timeJogadorId = save.timeIdJogador,
+                        temporadaId   = save.temporadaId
+                    )
+                }
+                argId != null -> {
+                    gameRepository.persistirResultadoPenaltisJogadorArgentina(
+                        resultado       = resultado,
+                        argCampeonatoId = argId,
+                        anoAtual        = save.anoAtual,
+                        partidaId       = resultadoPartida.partidaId,
+                        timeJogadorId   = save.timeIdJogador,
+                        temporadaId     = save.temporadaId
+                    )
+                }
+                else -> {
+                    val copaIdAtivo = if (save.copaArgId > 0 && _contextoSimulacao?.campeonatoId == save.copaArgId) save.copaArgId else save.copaId
+                    gameRepository.persistirResultadoPenaltisJogador(
+                        resultado      = resultado,
+                        copaId         = copaIdAtivo,
+                        anoAtual       = save.anoAtual,
+                        voltaPartidaId = resultadoPartida.partidaId
+                    )
+                }
             }
             _penaltisParaSupercopa = false
             _penaltisInterativoConcluido.value = true
@@ -562,26 +628,43 @@ class DashboardViewModel @Inject constructor(
     ) = viewModelScope.launch {
         val save    = gameDataStore.saveState.first()
         val resultado = _resultadoSimulado.value ?: return@launch
+        val argId = listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
+            .firstOrNull { it > 0 && it == _contextoSimulacao?.campeonatoId }
         try {
-            val penaltis = if (_penaltisParaSupercopa) {
-                gameRepository.simularEPersistirPenaltisJogadorSupercopa(
-                    supercopaId          = save.supercopaId,
-                    anoAtual             = save.anoAtual,
-                    partidaId            = resultado.partidaId,
-                    cobradoresJogador    = cobradores,
-                    timeJogadorId        = save.timeIdJogador,
-                    goleiroJogadorDefesa = goleiroDefesa,
-                    temporadaId          = save.temporadaId
-                )
-            } else {
-                gameRepository.simularEPersistirPenaltisJogador(
-                    copaId               = save.copaId,
-                    anoAtual             = save.anoAtual,
-                    voltaPartidaId       = resultado.partidaId,
-                    cobradoresJogador    = cobradores,
-                    timeJogadorId        = save.timeIdJogador,
-                    goleiroJogadorDefesa = goleiroDefesa
-                )
+            val penaltis = when {
+                _penaltisParaSupercopa -> {
+                    gameRepository.simularEPersistirPenaltisJogadorSupercopa(
+                        supercopaId          = save.supercopaId,
+                        anoAtual             = save.anoAtual,
+                        partidaId            = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        temporadaId          = save.temporadaId
+                    )
+                }
+                argId != null -> {
+                    gameRepository.simularEPersistirPenaltisJogadorArgentina(
+                        argCampeonatoId      = argId,
+                        anoAtual             = save.anoAtual,
+                        partidaId            = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        temporadaId          = save.temporadaId
+                    )
+                }
+                else -> {
+                    val copaIdAtivo = if (save.copaArgId > 0 && _contextoSimulacao?.campeonatoId == save.copaArgId) save.copaArgId else save.copaId
+                    gameRepository.simularEPersistirPenaltisJogador(
+                        copaId               = copaIdAtivo,
+                        anoAtual             = save.anoAtual,
+                        voltaPartidaId       = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa
+                    )
+                }
             }
             _penaltisParaSupercopa = false
             _penaltisResultado.value = penaltis
@@ -623,6 +706,7 @@ class DashboardViewModel @Inject constructor(
                 campeonatoArgBId         = novaInfo.campeonatoArgBId,
                 campeonatoArgClausuraId  = novaInfo.campeonatoArgClausuraId,
                 copaId        = novaInfo.copaId,
+                copaArgId     = novaInfo.copaArgId,
                 supercopaId   = novaInfo.supercopaId,
                 temporadaId   = novaInfo.temporadaId,
                 ano           = novaInfo.ano
@@ -631,7 +715,7 @@ class DashboardViewModel @Inject constructor(
             _proximaPartida.value    = gameRepository.buscarProximaPartida(saveAtualizado.timeIdJogador)
             _ultimosResultados.value = gameRepository.buscarUltimosResultados(
                 saveAtualizado.timeIdJogador,
-                listOf(saveAtualizado.campeonatoId, saveAtualizado.copaId, saveAtualizado.supercopaId, saveAtualizado.campeonatoArgClausuraId).filter { it > 0 }
+                listOf(saveAtualizado.campeonatoId, saveAtualizado.copaId, saveAtualizado.copaArgId, saveAtualizado.supercopaId, saveAtualizado.campeonatoArgClausuraId).filter { it > 0 }
             )
         } catch (e: Exception) {
             // Registrar erro sem travar a UI
@@ -1495,9 +1579,21 @@ class CopaChaveamentoViewModel @Inject constructor(
     private val _partidas = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
     val partidas: StateFlow<List<CopaPartidaDto>> = _partidas.asStateFlow()
 
+    private val _partidasArg = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasArg: StateFlow<List<CopaPartidaDto>> = _partidasArg.asStateFlow()
+
     fun carregar(copaId: Int) = viewModelScope.launch {
         if (copaId <= 0) return@launch
         gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it }
+    }
+
+    fun carregarAmbas(copaId: Int, copaArgId: Int) = viewModelScope.launch {
+        if (copaId > 0) {
+            launch { gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it } }
+        }
+        if (copaArgId > 0) {
+            launch { gameRepository.observarCopaPartidas(copaArgId).collect { _partidasArg.value = it } }
+        }
     }
 }
 

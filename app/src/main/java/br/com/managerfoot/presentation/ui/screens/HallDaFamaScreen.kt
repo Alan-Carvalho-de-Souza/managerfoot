@@ -33,7 +33,10 @@ fun HallDaFamaScreen(
         3 to "Série C",
         4 to "Série D",
         5 to "Copa do Brasil",
-        6 to "Supercopa Rei"
+        6 to "Supercopa Rei",
+        7 to "Apertura Argentina",
+        8 to "Clausura Argentina",
+        9 to "Copa Argentina"
     )
     val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoes.first().second
