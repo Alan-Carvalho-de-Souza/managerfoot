@@ -229,7 +229,13 @@ private fun AbaHistorico(
 private fun HistoricoCard(h: HistoricoTemporada) {
     val tipoLabel = when {
         h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Supercopa", ignoreCase = true) -> "Supercopa Rei"
+        h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Argentina", ignoreCase = true) -> "Copa da Argentina"
         h.tipo == "COPA_NACIONAL" -> "Copa do Brasil"
+        h.tipo == "LIGA_ARGENTINA" -> "Liga Argentina"
+        h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Apertura", ignoreCase = true) -> "Apertura"
+        h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Clausura", ignoreCase = true) -> "Clausura"
+        h.tipo == "EXTRANGEIRO_DIVISAO1" -> "Primera División"
+        h.tipo == "EXTRANGEIRO_DIVISAO2" -> "Segunda División"
         h.tipo == "NACIONAL_DIVISAO1" -> "Série A"
         h.tipo == "NACIONAL_DIVISAO2" -> "Série B"
         h.tipo == "NACIONAL_DIVISAO3" -> "Série C"
@@ -294,6 +300,15 @@ private fun HistoricoCard(h: HistoricoTemporada) {
                     modifier = Modifier.width(56.dp),
                     textAlign = TextAlign.Center
                 )
+            } else if (h.tipo == "LIGA_ARGENTINA") {
+                Text(
+                    "—",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(36.dp),
+                    textAlign = TextAlign.Center
+                )
             } else {
                 Text(
                     "${h.posicao}º",
@@ -316,6 +331,7 @@ private fun HistoricoCard(h: HistoricoTemporada) {
                 EstatStat("E", h.empates)
                 EstatStat("D", h.derrotas)
                 if (h.tipo != "COPA_NACIONAL") EstatStat("Pts", h.pontos)
+                if (h.tipo == "LIGA_ARGENTINA") EstatStat("J", h.jogos)
             }
         }
     }

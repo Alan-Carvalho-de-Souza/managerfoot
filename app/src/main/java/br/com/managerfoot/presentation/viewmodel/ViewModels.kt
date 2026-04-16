@@ -1339,6 +1339,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoCId: Int = -1
     private var campeonatoDId: Int = -1
     private var copaId: Int = -1
+    private var copaArgId: Int = -1
     private var campeonatoArgAId: Int = -1
     private var campeonatoArgBId: Int = -1
     private var campeonatoArgClausuraId: Int = -1
@@ -1349,12 +1350,13 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
         campeonatoDId = campDId
         this@ArtilheirosViewModel.copaId = copaId
+        this@ArtilheirosViewModel.copaArgId = copaArgId
         campeonatoArgAId = campArgAId
         campeonatoArgBId = campArgBId
         campeonatoArgClausuraId = campArgClausuraId
@@ -1379,7 +1381,7 @@ class ArtilheirosViewModel @Inject constructor(
 
     private fun campIdParaDivisao(div: Int) = when (div) {
         1 -> campeonatoAId; 2 -> campeonatoBId; 3 -> campeonatoCId; 4 -> campeonatoDId
-        5 -> copaId; 7 -> campeonatoArgBId; 8 -> campeonatoArgAId; 9 -> campeonatoArgClausuraId
+        5 -> copaId; 10 -> copaArgId; 7 -> campeonatoArgBId; 8 -> campeonatoArgAId; 9 -> campeonatoArgClausuraId
         else -> -1 // div=6 (combinado) e div=0 (tudo) são tratados em coletarArtilheiros
     }
 
@@ -1400,7 +1402,7 @@ class ArtilheirosViewModel @Inject constructor(
     /** div == 0 → todas as competições da temporada (multi-query) */
     private fun coletarArtilheiros(div: Int) = viewModelScope.launch {
         val useMulti: List<Int>? = when (div) {
-            0 -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId).filter { it > 0 }
+            0 -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId).filter { it > 0 }
             6 -> listOf(campeonatoArgAId, campeonatoArgClausuraId).filter { it > 0 }
             else -> null
         }
@@ -1421,9 +1423,21 @@ class ArtilheirosViewModel @Inject constructor(
             _assistentesHistorico.value = emptyList()
             return@launch
         }
-        val tipos = tiposDaDiv(div)
-        launch { gameRepository.observarArtilheirosHistoricoFiltrado(tipos).collect { _artilheirosHistorico.value = it } }
-        launch { gameRepository.observarAssistentesHistoricoFiltrado(tipos).collect { _assistentesHistorico.value = it } }
+        when (div) {
+            5 -> {
+                launch { gameRepository.observarArtilheirosHistoricoCopaBrasil().collect { _artilheirosHistorico.value = it } }
+                launch { gameRepository.observarAssistentesHistoricoCopaBrasil().collect { _assistentesHistorico.value = it } }
+            }
+            10 -> {
+                launch { gameRepository.observarArtilheirosHistoricoCopaArgentina().collect { _artilheirosHistorico.value = it } }
+                launch { gameRepository.observarAssistentesHistoricoCopaArgentina().collect { _assistentesHistorico.value = it } }
+            }
+            else -> {
+                val tipos = tiposDaDiv(div)
+                launch { gameRepository.observarArtilheirosHistoricoFiltrado(tipos).collect { _artilheirosHistorico.value = it } }
+                launch { gameRepository.observarAssistentesHistoricoFiltrado(tipos).collect { _assistentesHistorico.value = it } }
+            }
+        }
     }
 }
 
@@ -1672,6 +1686,8 @@ class EstatisticasTimeViewModel @Inject constructor(
             save.campeonatoBId -> "Série B"
             save.campeonatoCId -> "Série C"
             save.campeonatoDId -> "Série D"
+            save.campeonatoArgAId -> "Apertura"
+            save.campeonatoArgClausuraId -> "Clausura"
             else -> "Liga"
         }
         val temporadaList = mutableListOf<TemporadaCompeticao>()
@@ -1764,6 +1780,40 @@ class EstatisticasTimeViewModel @Inject constructor(
             }
         }
 
+        // Copa Argentina da temporada corrente
+        if (save.copaArgId > 0) {
+            val partidas = gameRepository.buscarPartidasDaEquipe(save.copaArgId, timeId)
+            if (partidas.isNotEmpty()) {
+                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.copaArgId, timeId)
+                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
+                var faseAtingida: String? = null
+                for (p in partidas) {
+                    val ehCasa = p.timeCasaId == timeId
+                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
+                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
+                    gp += gf; gc += ga
+                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
+                    if (p.fase != null) faseAtingida = p.fase
+                }
+                temporadaList.add(
+                    TemporadaCompeticao(
+                        campeonatoId = save.copaArgId,
+                        nome         = "Copa da Argentina",
+                        vitorias     = v,
+                        empates      = e,
+                        derrotas     = d,
+                        golsPro      = gp,
+                        golsContra   = gc,
+                        pontos       = 0,
+                        jogos        = partidas.size,
+                        jogadores    = jogadores,
+                        ehCopa       = true,
+                        faseAtingida = faseAtingida
+                    )
+                )
+            }
+        }
+
         _temporadaStats.value = temporadaList
 
         // Histórico de ligas
@@ -1849,7 +1899,29 @@ class EstatisticasTimeViewModel @Inject constructor(
                 )
             }
 
-        _historicoStats.value = (ligaEntries + copaEntries + supercopaEntries).sortedByDescending { it.temporadaId }
+        // Liga Argentina: combina Apertura + Clausura por temporada
+        val argLigaEntries = ligaEntries
+            .filter { it.tipo == "EXTRANGEIRO_DIVISAO1" }
+            .groupBy { it.temporadaId }
+            .map { (tempId, lista) ->
+                val ano = Regex("\\d{4}").find(lista.first().nomeCampeonato)?.value ?: ""
+                HistoricoTemporada(
+                    campeonatoId   = -tempId,
+                    nomeCampeonato = "Liga Argentina $ano",
+                    temporadaId    = tempId,
+                    tipo           = "LIGA_ARGENTINA",
+                    posicao        = 0,
+                    vitorias       = lista.sumOf { it.vitorias },
+                    empates        = lista.sumOf { it.empates },
+                    derrotas       = lista.sumOf { it.derrotas },
+                    golsPro        = lista.sumOf { it.golsPro },
+                    golsContra     = lista.sumOf { it.golsContra },
+                    pontos         = lista.sumOf { it.pontos },
+                    jogos          = lista.sumOf { it.jogos }
+                )
+            }
+
+        _historicoStats.value = (ligaEntries + copaEntries + supercopaEntries + argLigaEntries).sortedByDescending { it.temporadaId }
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
 

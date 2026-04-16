@@ -135,6 +135,10 @@ class GameRepository @Inject constructor(
     fun observarAssistentesMulti(ids: List<Int>) = partidaDao.observeAssistentesMulti(ids)
     fun observarArtilheirosHistoricoFiltrado(tipos: List<String>) = partidaDao.observeArtilheirosHistoricoFiltrado(tipos)
     fun observarAssistentesHistoricoFiltrado(tipos: List<String>) = partidaDao.observeAssistentesHistoricoFiltrado(tipos)
+    fun observarArtilheirosHistoricoCopaArgentina() = partidaDao.observeArtilheirosHistoricoCopaArgentina()
+    fun observarAssistentesHistoricoCopaArgentina() = partidaDao.observeAssistentesHistoricoCopaArgentina()
+    fun observarArtilheirosHistoricoCopaBrasil() = partidaDao.observeArtilheirosHistoricoCopaBrasil()
+    fun observarAssistentesHistoricoCopaBrasil() = partidaDao.observeAssistentesHistoricoCopaBrasil()
 
     suspend fun buscarPartidasConfronto(timeAId: Int, timeBId: Int) =
         partidaDao.buscarPartidasConfronto(timeAId, timeBId)
@@ -868,7 +872,7 @@ class GameRepository @Inject constructor(
             val campeaoId = when {
                 gC > gF -> finalPartida.timeCasaId
                 gF > gC -> finalPartida.timeForaId
-                (finalPartida.penaltisCasa ?: 0) >= (finalPartida.penaltisForaId ?: 0) -> finalPartida.timeCasaId
+                (finalPartida.penaltisCasa ?: 0) > (finalPartida.penaltisForaId ?: 0) -> finalPartida.timeCasaId
                 else -> finalPartida.timeForaId
             }
             val timeEnt = timeRepository.buscarEntityPorId(campeaoId) ?: return
@@ -901,6 +905,26 @@ class GameRepository @Inject constructor(
                 rankingGeralDao.inserirOuAtualizar(rankCG.copy(
                     titulosNacionais = rankCG.titulosNacionais + 1,
                     pontosAcumulados = rankCG.pontosAcumulados + 10L
+                ))
+            }
+        }
+
+        // ── Incrementa temporadasJogadas para a Primera División Argentina ──
+        // Feito a partir dos participantes do Apertura (Clausura tem os mesmos times),
+        // garantindo que cada clube incremente a contagem uma única vez por temporada.
+        if (campeonatoArgAId > 0) {
+            val participantesArgentina = campeonatoDao.buscarIdsParticipantes(campeonatoArgAId)
+            for (timeId in participantesArgentina) {
+                val timeEnt = timeRepository.buscarEntityPorId(timeId) ?: continue
+                val existing = rankingGeralDao.buscarPorTime(timeId)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = timeId, nomeTime = timeEnt.nome, escudoRes = timeEnt.escudoRes, divisaoAtual = timeEnt.divisao
+                    )
+                rankingGeralDao.inserirOuAtualizar(existing.copy(
+                    nomeTime          = timeEnt.nome,
+                    escudoRes         = timeEnt.escudoRes,
+                    divisaoAtual      = timeEnt.divisao,
+                    temporadasJogadas = existing.temporadasJogadas + 1
                 ))
             }
         }
@@ -1224,7 +1248,9 @@ class GameRepository @Inject constructor(
     /**
      * Avança automaticamente as fases do torneio Argentine quando o jogador não participa
      * (já eliminado ou jogo num time sem participação).
-     * Simula UMA rodada pendente por chamada para manter o progresso gradual.
+     * Simula TODAS as fases/rodadas pendentes de uma vez até o torneio ser encerrado,
+     * garantindo que o campeão seja definido mesmo quando o jogador não tem mais jogos
+     * suficientes para acionar chamadas individuais.
      */
     suspend fun simularProximaFaseArgentinaSeNecessario(
         campeonatoId: Int,
@@ -1243,20 +1269,29 @@ class GameRepository @Inject constructor(
         }
         if (playerStillIn) return
 
-        val pendentes = todasPartidas.filter { !it.jogada }
-        if (pendentes.isEmpty()) {
-            verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
-            return
-        }
+        // Simula TODAS as fases/rodadas pendentes até o torneio ser encerrado
+        var iteracoes = 10 // limite de segurança para evitar loop infinito
+        while (iteracoes-- > 0) {
+            if (campeonatoDao.buscarPorId(campeonatoId)?.encerrado == true) return
 
-        // Simula apenas a MENOR rodada pendente (uma rodada por vez)
-        val proximaRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: return
-        val partidasRodada = pendentes.filter { it.rodada == proximaRodada }
-        for (p in partidasRodada) {
-            try { simularPartidaInterna(p) } catch (_: Exception) {}
+            val pendentes = partidaDao.buscarTodasPorCampeonato(campeonatoId).filter { !it.jogada }
+            if (pendentes.isEmpty()) {
+                // Todas as partidas da fase atual já foram jogadas — avança/finaliza
+                verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+                return
+            }
+
+            // Simula a menor rodada pendente
+            val proximaRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: return
+            val partidasRodada = pendentes.filter { it.rodada == proximaRodada }
+            for (p in partidasRodada) {
+                try { simularPartidaInterna(p) } catch (_: Exception) {}
+            }
+            campeonatoDao.avancarRodada(campeonatoId)
+            val encerrou = verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+            if (encerrou) return
+            // se não encerrou, continua o loop para simular a próxima fase/rodada
         }
-        campeonatoDao.avancarRodada(campeonatoId)
-        verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
     }
 
     // ── Cria a Copa: gera Primeira Fase ──────────────────────────────
@@ -1407,6 +1442,8 @@ class GameRepository @Inject constructor(
         premioCampeao: Long = 30_000_000_00L,
         premioVice: Long = 15_000_000_00L
     ): Boolean {
+        val campEntity = campeonatoDao.buscarPorId(copaId) ?: return false
+        if (campEntity.encerrado) return false
         val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaId)
         if (todasPartidas.isEmpty()) return false
 
@@ -1764,7 +1801,11 @@ class GameRepository @Inject constructor(
         }
         for (cls in classificacoes) {
             val time      = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
-            val existing  = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
+            val existing  = rankingGeralDao.buscarPorTime(cls.timeId)
+                ?: RankingGeralEntity(
+                    timeId = cls.timeId, nomeTime = time.nome,
+                    escudoRes = time.escudoRes, divisaoAtual = time.divisao
+                )
             val ehCampeao = cls.timeId == campeaoTimeId
             val ehVice    = cls.timeId == viceTimeId
             val pontosExtras = when {

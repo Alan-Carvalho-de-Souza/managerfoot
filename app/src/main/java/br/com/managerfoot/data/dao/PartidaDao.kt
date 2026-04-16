@@ -246,6 +246,66 @@ interface PartidaDao {
     fun observeAssistentesHistoricoFiltrado(tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'GOL' AND c.tipo = 'COPA_NACIONAL' AND c.pais = 'Argentina'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeArtilheirosHistoricoCopaArgentina(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'ASSISTENCIA' AND c.tipo = 'COPA_NACIONAL' AND c.pais = 'Argentina'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeAssistentesHistoricoCopaArgentina(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'GOL' AND c.tipo = 'COPA_NACIONAL' AND (c.pais IS NULL OR c.pais != 'Argentina')
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeArtilheirosHistoricoCopaBrasil(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'ASSISTENCIA' AND c.tipo = 'COPA_NACIONAL' AND (c.pais IS NULL OR c.pais != 'Argentina')
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeAssistentesHistoricoCopaBrasil(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.timeCasaId AS timeCasaId, p.timeForaId AS timeForaId,
