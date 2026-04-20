@@ -37,17 +37,16 @@ object MotorCampeonato {
     fun rodadaIdaDeFase(faseIndex: Int) = faseIndex * 2 + 1
 
     // ordemGlobal de cada jogo da Copa do Brasil no calendário multi-competição.
-    // Copa Fase 0 ida fica após Brasileirão R3 (30), e assim por diante.
-    // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em N*10+5.
+    // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em valores entre rodadas.
     // Índices: 0=F0-ida, 1=F0-volta, 2=F1-ida, 3=F1-volta, ... 11=Final-volta
     // Copa encaixa entre as rodadas do Brasileirão (ordemGlobal = rodada*10):
-    //   Primeira Fase ─ Fev:  antes de R1 (10)
-    //   Segunda Fase  ─ Mar:  entre R1 (10) e R4 (40)
-    //   Oitavas       ─ Mai:  entre R9 (90) e R12 (120)
-    //   Quartas       ─ Jul:  entre R17 (170) e R19 (190)
-    //   Semifinal     ─ Set:  entre R24 (240) e R26 (260)
-    //   Final         ─ Nov:  entre R33 (330) e R35 (350)
-    val COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+    //   Primeira Fase ─ Fev:  entre R1 (10) e R4 (40)   → 13, 33
+    //   Segunda Fase  ─ Mar/Abr: entre R5 (50) e R9 (90)  → 53, 83
+    //   Oitavas       ─ Mai/Jun: entre R13(130) e R17(170) → 133, 163
+    //   Quartas       ─ Jul/Ago: entre R20(200) e R24(240) → 207, 233
+    //   Semifinal     ─ Set/Out: entre R27(270) e R32(320) → 278, 313
+    //   Final         ─ Nov/Dez: entre R35(350) e fim      → 357, 383
+    val COPA_ORDEM_GLOBAL = intArrayOf(13, 33, 53, 83, 133, 163, 207, 233, 278, 313, 357, 383)
 
     // ordemGlobal de cada jogo da Copa Argentina no calendário Argentine.
     // Argentine calendar: Apertura OG 10–200 (rodada*10), Clausura OG 220–410 (rodada*10+210).
@@ -451,4 +450,32 @@ object MotorCampeonato {
             }
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Formato Uruguaio Apertura / Intermediário / Clausura
+    //  16 times na Primera División
+    //  Apertura:      turno único (15 rods)  OG = rodada*10           (10–150)
+    //  Intermediário: 2 grupos de 8, turno único (7 rods) + Final(R8) OG = rodada*10+155 (165–235)
+    //  Clausura:      turno único invertido  (15 rods)  OG = rodada*10+250 (260–400)
+    //  Playoff:       Semi (R16 OG 411), Final (R17 OG 421) — armazenados no Clausura
+    // ══════════════════════════════════════════════════════════════
+    const val URU_ROUNDS_APERTURA       = 15   // 16 teams, turno único (N-1)
+    const val URU_ROUNDS_INTERM_GROUP   = 7    // 8 teams per group, turno único
+    const val URU_INTERM_FINAL_RODADA   = 8    // Intermediário Final round
+    const val URU_INTERM_OG_OFFSET      = 155  // OG offset for Intermediário (R1→165)
+    const val URU_INTERM_OG_FINAL       = 235  // Intermediário Final OG (8*10+155)
+    const val URU_CLAUSURA_OG_OFFSET    = 250  // OG offset for Clausura (R1→260)
+    const val URU_PLAYOFF_SEMI_RODADA   = 16   // Championship Semi round in Clausura
+    const val URU_PLAYOFF_FINAL_RODADA  = 17   // Championship Final round in Clausura
+    const val URU_PLAYOFF_OG_SEMI       = 411  // Championship Semi OG
+    const val URU_PLAYOFF_OG_FINAL      = 421  // Championship Final OG
+    // URU_GRUPO_A / URU_GRUPO_B reutilizam ARG_GRUPO_A / ARG_GRUPO_B ("A"/"B")
+
+    //  Torneo Competencia – Segunda División Uruguaia
+    //  14 teams → 2 groups of 7, turno único (6 rods) + Final (R7)
+    //  OG = rodada*10 + URU_B_COMPET_OG_OFFSET (450..510); Final OG = 520
+    const val URU_B_COMPET_ROUNDS_GROUP = 6    // 7 teams per group, turno único (N-1)
+    const val URU_B_COMPET_FINAL_RODADA = 7    // Competencia Final round
+    const val URU_B_COMPET_OG_OFFSET    = 450  // OG offset for Competencia groups (R1→460)
+    const val URU_B_COMPET_OG_FINAL     = 520  // Competencia Final OG (7*10+450)
 }

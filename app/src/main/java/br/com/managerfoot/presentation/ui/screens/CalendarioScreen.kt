@@ -304,14 +304,14 @@ private val NOMES_MESES = listOf(
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 )
 
-// COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+// COPA_ORDEM_GLOBAL = intArrayOf(13, 33, 53, 83, 133, 163, 207, 233, 278, 313, 357, 383)
 private val COPA_DATAS: Map<Int, Pair<Int, Int>> = mapOf(
-    2   to (2 to 10),   7   to (2 to 25),
-    15  to (3 to 15),   35  to (4 to  5),
-    95  to (5 to 15),  115  to (6 to 10),
-    175 to (7 to 15),  195  to (8 to  5),
-    245 to (9 to 10),  265  to (10 to  8),
-    335 to (11 to 12), 355  to (12 to  3)
+    13  to (2 to 10),   33  to (2 to 25),
+    53  to (3 to 15),   83  to (4 to  5),
+    133 to (5 to 15),  163  to (6 to 10),
+    207 to (7 to 15),  233  to (8 to  5),
+    278 to (9 to 10),  313  to (10 to  8),
+    357 to (11 to 12), 383  to (12 to  3)
 )
 
 private val DIAS_MES = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)

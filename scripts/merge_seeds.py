@@ -11,6 +11,7 @@ FILES = [
     "seed_brasileirao.json",
     "seed_argentina.json",
     "seed_argentina2.json",
+    "seed_uruguay.json",
 ]
 OUT = os.path.join(ASSETS, "seed_data.json")
 

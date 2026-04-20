@@ -31,6 +31,12 @@ fun TabelaScreen(
     campeonatoArgAId: Int = -1,
     campeonatoArgBId: Int = -1,
     campeonatoArgClausuraId: Int = -1,
+    campeonatoUruAperturaId: Int = -1,
+    campeonatoUruBId: Int = -1,
+    campeonatoUruClausuraId: Int = -1,
+    campeonatoUruIntermedId: Int = -1,
+    campeonatoUruBCompetId: Int = -1,
+    copaId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -38,9 +44,17 @@ fun TabelaScreen(
     val tabela by vm.tabela.collectAsState()
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
+    val copaChampeaoTimeId by vm.copaChampeaoTimeId.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId, timeJogadorId = timeJogadorId)
+    // Posição (1-indexed) do campeão da Copa na tabela da Série A, -1 se não aplicável
+    val copaChampeaoPosSerieA = remember(tabela, copaChampeaoTimeId, divisaoSelecionada) {
+        if (divisaoSelecionada == 1 && copaChampeaoTimeId > 0)
+            tabela.indexOfFirst { it.timeId == copaChampeaoTimeId }.let { if (it >= 0) it + 1 else -1 }
+        else -1
+    }
+
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId, campeonatoUruIntermedId, campeonatoUruBCompetId, copaId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId, campUruAperturaId = campeonatoUruAperturaId, campUruBId = campeonatoUruBId, campUruClausuraId = campeonatoUruClausuraId, campUruIntermedId = campeonatoUruIntermedId, campUruBCompetId = campeonatoUruBCompetId, copaIdBrasil = copaId, timeJogadorId = timeJogadorId)
     }
 
     // Opções por país
@@ -52,22 +66,46 @@ fun TabelaScreen(
     }
     val opcoesArgentina = buildList {
         if (campeonatoArgAId > 0) add(5 to "Apertura")
-        if (campeonatoArgBId > 0) add(6 to "Segunda Div.")
         if (campeonatoArgClausuraId > 0) add(7 to "Clausura")
         if (campeonatoArgAId > 0 && campeonatoArgClausuraId > 0) add(8 to "Geral")
+        if (campeonatoArgBId > 0) add(6 to "Segunda Div.")
+    }
+    val opcoesUruguai = buildList {
+        if (campeonatoUruAperturaId > 0) add(9 to "Apertura")
+        if (campeonatoUruBId > 0) add(10 to "Segunda Div.")
+        if (campeonatoUruIntermedId > 0) add(11 to "Intermédio")
+        if (campeonatoUruClausuraId > 0) add(12 to "Clausura")
+        if (campeonatoUruAperturaId > 0 && campeonatoUruClausuraId > 0) add(13 to "Geral")
+        if (campeonatoUruBCompetId > 0) add(14 to "Competencia")
     }
 
     val paises = buildList {
         if (opcoesBrasil.isNotEmpty()) add("Brasil")
         if (opcoesArgentina.isNotEmpty()) add("Argentina")
+        if (opcoesUruguai.isNotEmpty()) add("Uruguai")
     }
+
+    fun bandeiraPais(pais: String) = when (pais) {
+        "Brasil"    -> "\uD83C\uDDE7\uD83C\uDDF7"
+        "Argentina" -> "\uD83C\uDDE6\uD83C\uDDF7"
+        "Uruguai"   -> "\uD83C\uDDFA\uD83C\uDDFE"
+        else -> ""
+    }
+
+    val paisesOrdenados = paises.sortedBy { it }
 
     // País selecionado: derivado da divisão atual
     val paisSelecionado = remember(divisaoSelecionada) {
-        if (divisaoSelecionada == 5 || divisaoSelecionada == 6 || divisaoSelecionada == 7 || divisaoSelecionada == 8) "Argentina" else "Brasil"
+        if (divisaoSelecionada in 5..8) "Argentina"
+        else if (divisaoSelecionada in 9..14) "Uruguai"
+        else "Brasil"
     }
 
-    val opcoesDivisaoPais = if (paisSelecionado == "Argentina") opcoesArgentina else opcoesBrasil
+    val opcoesDivisaoPais = when (paisSelecionado) {
+        "Argentina" -> opcoesArgentina
+        "Uruguai" -> opcoesUruguai
+        else -> opcoesBrasil
+    }
 
     val labelSelecionado = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoPais.firstOrNull()?.second ?: ""
@@ -105,7 +143,7 @@ fun TabelaScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         OutlinedTextField(
-                            value = paisSelecionado,
+                            value = "${bandeiraPais(paisSelecionado)} $paisSelecionado",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("País") },
@@ -116,14 +154,15 @@ fun TabelaScreen(
                             expanded = expandidoPais,
                             onDismissRequest = { expandidoPais = false }
                         ) {
-                            paises.forEach { pais ->
+                            paisesOrdenados.forEach { pais ->
                                 DropdownMenuItem(
-                                    text = { Text(pais) },
+                                    text = { Text("${bandeiraPais(pais)} $pais") },
                                     onClick = {
-                                        val primeiraDivisao = if (pais == "Argentina")
-                                            opcoesArgentina.firstOrNull()?.first ?: 5
-                                        else
-                                            opcoesBrasil.firstOrNull()?.first ?: 1
+                                        val primeiraDivisao = when (pais) {
+                                        "Argentina" -> opcoesArgentina.firstOrNull()?.first ?: 5
+                                        "Uruguai" -> opcoesUruguai.firstOrNull()?.first ?: 9
+                                        else -> opcoesBrasil.firstOrNull()?.first ?: 1
+                                    }
                                         vm.selecionarDivisao(primeiraDivisao)
                                         expandidoPais = false
                                         expandido = false
@@ -167,7 +206,7 @@ fun TabelaScreen(
                 }
             }
 
-            val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7
+            val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 || divisaoSelecionada == 14
             val gruposArgentina = remember(tabela, ehGrupos) {
                 if (ehGrupos) tabela.groupBy { it.grupo ?: "?" }.entries.sortedBy { it.key }
                 else emptyList()
@@ -202,7 +241,8 @@ fun TabelaScreen(
                             val nomeTime = time?.nome ?: "Time ${item.timeId}"
                             val escudoRes = time?.escudoRes ?: ""
                             val ehJogador = item.timeId == timeJogadorId
-                            val zona = if (index < 8) Color(0xFF1565C0) else null
+                            val classificadosPorGrupo = if (divisaoSelecionada == 14) 1 else 8
+                            val zona = if (index < classificadosPorGrupo) Color(0xFF1565C0) else null
                             TabelaRow(
                                 posicao = index + 1,
                                 nomeTime = nomeTime,
@@ -221,7 +261,7 @@ fun TabelaScreen(
                         val nomeTime = time?.nome ?: "Time ${item.timeId}"
                         val escudoRes = time?.escudoRes ?: ""
                         val ehJogador = item.timeId == timeJogadorId
-                        val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
+                        val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
                         TabelaRow(
                             posicao = index + 1,
                             nomeTime = nomeTime,
@@ -236,7 +276,7 @@ fun TabelaScreen(
             }
 
             // Legenda de zonas
-            LegendaZonas(divisaoSelecionada)
+            LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
         }
     }
 }
@@ -258,11 +298,17 @@ private fun TabelaHeader() {
 }
 
 // Retorna a cor da zona baseado na posição e divisão
+// copaChampeaoPosSerieA: posição (1-indexed) do campeão da Copa do Brasil na Série A,
+//   -1 se Copa não encerrada ou não aplicável.
 @Composable
-private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao) {
+private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: Int = -1): Color? = when (divisao) {
     1 -> when {
+        // Copa campeão já está no top-6 → 7º também entra para Libertadores
+        copaChampeaoPosSerieA in 1..6 && posicao == 7 -> Color(0xFF1565C0) // Libertadores (vaga Copa)
         posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
         posicao <= 6  -> Color(0xFF4CAF50)  // Sul-Americana
+        // Copa campeão fora do top-6 → sua posição fica azul (vaga Copa)
+        copaChampeaoPosSerieA >= 7 && posicao == copaChampeaoPosSerieA -> Color(0xFF1565C0) // Libertadores (vaga Copa)
         posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento
         else          -> null
     }
@@ -284,6 +330,12 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao)
         posicao == 1  -> Color(0xFFFFD700)  // Campeão Geral
         else          -> null
     }
+    10 -> when {
+        posicao <= 2  -> Color(0xFF1565C0)  // Acesso direto à Primera
+        posicao <= 6  -> Color(0xFFFF6F00)  // Playoff de acesso
+        posicao >= 13 -> Color(0xFFE53935)  // Rebaixamento
+        else          -> null
+    }
     else -> when {
         posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série C
         else          -> null
@@ -291,13 +343,20 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao)
 }
 
 @Composable
-private fun LegendaZonas(divisao: Int) {
+private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
     val itens = when (divisao) {
-        1 -> listOf(
-            Color(0xFF1565C0) to "1-4: Libertadores",
-            Color(0xFF4CAF50) to "5-6: Sul-Americana",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
-        )
+        1 -> buildList {
+            if (copaChampeaoPosSerieA in 1..6) {
+                add(Color(0xFF1565C0) to "1-7: Libertadores (incl. Copa)")
+            } else {
+                add(Color(0xFF1565C0) to "1-4: Libertadores")
+            }
+            add(Color(0xFF4CAF50) to "5-6: Sul-Americana")
+            if (copaChampeaoPosSerieA >= 7) {
+                add(Color(0xFF1565C0) to "${copaChampeaoPosSerieA}º: Libertadores (Copa)")
+            }
+            add(Color(0xFFE53935) to "17-20: Rebaixamento")
+        }
         2 -> listOf(
             Color(0xFF1565C0) to "1-4: Acesso à Série A",
             Color(0xFFE53935) to "17-20: Rebaixamento"
@@ -311,6 +370,14 @@ private fun LegendaZonas(divisao: Int) {
         )
         8 -> listOf(
             Color(0xFFFFD700) to "1º: Campeão Geral"
+        )
+        10 -> listOf(
+            Color(0xFF1565C0) to "1-2: Acesso direto",
+            Color(0xFFFF6F00) to "3-6: Playoff",
+            Color(0xFFE53935) to "13-14: Rebaixamento"
+        )
+        14 -> listOf(
+            Color(0xFF1565C0) to "1º: Classifica para a Final"
         )
         else -> listOf(
             Color(0xFF1565C0) to "1-4: Acesso à Série C"

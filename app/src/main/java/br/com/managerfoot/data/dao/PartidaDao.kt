@@ -26,6 +26,35 @@ interface PartidaDao {
     @Query("SELECT * FROM partidas WHERE campeonatoId = :campeonatoId AND jogada = 1 AND fase IS NULL")
     suspend fun buscarPartidasJogadasDeLiga(campeonatoId: Int): List<PartidaEntity>
 
+    /**
+     * Migração: corrige os ordemGlobal de jogos da Copa do Brasil criados com os valores
+     * antigos (2, 7, 15, 35, ...) para os novos valores que se intercalam corretamente
+     * entre as rodadas do Brasileirão.
+     * Filtra apenas campeonatos do tipo COPA_NACIONAL para não afetar a Copa Argentina.
+     */
+    @Query("""
+        UPDATE partidas SET ordemGlobal = CASE ordemGlobal
+            WHEN 2   THEN 13
+            WHEN 7   THEN 33
+            WHEN 15  THEN 53
+            WHEN 35  THEN 83
+            WHEN 95  THEN 133
+            WHEN 115 THEN 163
+            WHEN 175 THEN 207
+            WHEN 195 THEN 233
+            WHEN 245 THEN 278
+            WHEN 265 THEN 313
+            WHEN 335 THEN 357
+            WHEN 355 THEN 383
+            ELSE ordemGlobal
+        END
+        WHERE ordemGlobal IN (2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+          AND campeonatoId IN (
+              SELECT id FROM campeonatos WHERE tipo = 'COPA_NACIONAL' AND (pais IS NULL OR pais != 'Argentina')
+          )
+    """)
+    suspend fun migrarOrdemGlobalCopaBrasil()
+
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0

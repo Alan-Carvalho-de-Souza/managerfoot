@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.presentation.viewmodel.HallDaFamaViewModel
@@ -25,22 +26,48 @@ fun HallDaFamaScreen(
     val hallDaFama by vm.hallDaFama.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    // Opções de competição — expansível para novas copas sem mudar o ViewModel
-    val opcoes = listOf(
-        0 to "Todas as competições",
-        1 to "Série A",
-        2 to "Série B",
-        3 to "Série C",
-        4 to "Série D",
-        5 to "Copa do Brasil",
-        6 to "Supercopa Rei",
-        7 to "Apertura Argentina",
-        8 to "Clausura Argentina",
-        9 to "Copa Argentina"
+    // Opções por país
+    val opcoesBrasil = listOf(
+        100 to "Todas",
+        1 to "Série A", 2 to "Série B", 3 to "Série C", 4 to "Série D",
+        5 to "Copa do Brasil", 6 to "Supercopa Rei"
     )
-    val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
-        ?: opcoes.first().second
-    var expandido by remember { mutableStateOf(false) }
+    val opcoesArgentina = listOf(
+        200 to "Todas",
+        7 to "Apertura", 8 to "Clausura", 9 to "Copa Argentina", 10 to "Segunda Div."
+    )
+    val opcoesUruguai = listOf(
+        300 to "Todas",
+        14 to "Campeão Uruguaio",
+        11 to "Apertura", 12 to "Intermediário", 13 to "Clausura",
+        15 to "Segunda Divisão", 16 to "Competencia"
+    )
+
+    val paisDaDivisao = remember(divisaoSelecionada) {
+        when (divisaoSelecionada) {
+            in 7..10, 200  -> "Argentina"
+            in 11..16, 300 -> "Uruguai"
+            0              -> "Todos"
+            else           -> "Brasil"
+        }
+    }
+    var paisSelecionado by remember(divisaoSelecionada) { mutableStateOf(paisDaDivisao) }
+
+    val opcoesDaDiv = when (paisSelecionado) {
+        "Argentina" -> opcoesArgentina
+        "Uruguai"   -> opcoesUruguai
+        "Brasil"    -> opcoesBrasil
+        else        -> emptyList()
+    }
+
+    fun bandeiraPais(pais: String) = when (pais) {
+        "Brasil"    -> "\uD83C\uDDE7\uD83C\uDDF7"
+        "Argentina" -> "\uD83C\uDDE6\uD83C\uDDF7"
+        "Uruguai"   -> "\uD83C\uDDFA\uD83C\uDDFE"
+        else -> ""
+    }
+
+    var expandidoComp by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -59,36 +86,67 @@ fun HallDaFamaScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Seletor de competição (dropdown)
-            ExposedDropdownMenuBox(
-                expanded = expandido,
-                onExpandedChange = { expandido = it },
+            // Chips de país
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                OutlinedTextField(
-                    value = labelSelecionado,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Competição") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = expandido,
-                    onDismissRequest = { expandido = false }
-                ) {
-                    opcoes.forEach { (div, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                vm.selecionarDivisao(div)
-                                expandido = false
+                val paises = listOf("Todos", "Argentina", "Brasil", "Uruguai")
+                paises.forEach { pais ->
+                    FilterChip(
+                        selected = paisSelecionado == pais,
+                        onClick = {
+                            paisSelecionado = pais
+                            val div = when (pais) {
+                                "Argentina" -> 200; "Brasil" -> 100; "Uruguai" -> 300; else -> 0
                             }
-                        )
+                            vm.selecionarDivisao(div)
+                            expandidoComp = false
+                        },
+                        label = {
+                            Text(
+                                if (pais == "Todos") pais else "${bandeiraPais(pais)} $pais",
+                                fontSize = 12.sp
+                            )
+                        }
+                    )
+                }
+            }
+
+            // Dropdown de competição (só quando país específico selecionado)
+            if (paisSelecionado != "Todos") {
+                val labelComp = opcoesDaDiv.firstOrNull { it.first == divisaoSelecionada }?.second
+                    ?: opcoesDaDiv.firstOrNull()?.second ?: ""
+                ExposedDropdownMenuBox(
+                    expanded = expandidoComp,
+                    onExpandedChange = { expandidoComp = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    OutlinedTextField(
+                        value = labelComp,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Competição") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoComp) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandidoComp,
+                        onDismissRequest = { expandidoComp = false }
+                    ) {
+                        opcoesDaDiv.forEach { (div, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    vm.selecionarDivisao(div)
+                                    expandidoComp = false
+                                }
+                            )
+                        }
                     }
                 }
             }

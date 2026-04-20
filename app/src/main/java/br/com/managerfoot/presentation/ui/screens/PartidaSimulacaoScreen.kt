@@ -150,7 +150,7 @@ fun PartidaSimulacaoScreen(
                 timeId = ev.timeId,
                 nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora,
                 jogadorId = ev.jogadorId,
-                pularExibicao = ev.tipo == TipoEvento.DEFESA_GOLEIRO
+                pularExibicao = ev.tipo == TipoEvento.PARTICIPOU
             )
         }
     }
@@ -779,10 +779,23 @@ fun PartidaSimulacaoScreen(
         }
 
         // ── Botão de encerrar ────────────────────────────────────
-        // Spinner enquanto dadosPenaltisAdversario ainda não chegou
+        // Spinner enquanto dadosPenaltisAdversario ainda não chegou (caso raro de delay).
+        // Se dadosPenaltisAdversario for null (falha ao buscar dados de pênaltis), exibe
+        // o botão "Voltar ao painel" diretamente para não bloquear o usuário.
         if (simulacaoEncerrada && resultado.precisaPenaltis && !penaltisInterativoConcluido && penaltisResultado == null) {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            if (dadosPenaltisAdversario == null) {
+                Button(
+                    onClick = onSimulacaoFinalizada,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Voltar ao painel")
+                }
+            } else {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
@@ -2433,6 +2446,8 @@ fun EventoCard(evento: EventoExibicao, nomeTimeCasa: String) {
             "↑" to Color(0xFF1565C0).copy(alpha = 0.12f)
         TipoEvento.SUBSTITUICAO_SAI ->
             "↓" to Color(0xFF1565C0).copy(alpha = 0.08f)
+        TipoEvento.DEFESA_GOLEIRO ->
+            "🧤" to Color(0xFF00695C).copy(alpha = 0.12f)
         else -> "📋" to MaterialTheme.colorScheme.surfaceVariant
     }
 

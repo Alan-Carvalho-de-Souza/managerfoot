@@ -2,6 +2,7 @@
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,10 +14,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.com.managerfoot.data.database.entities.StatusProposta
+import br.com.managerfoot.data.database.entities.TipoProposta
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.DashboardUiState
 import br.com.managerfoot.presentation.viewmodel.DashboardViewModel
@@ -59,6 +63,8 @@ fun DashboardScreen(
     val penaltisInterativoConcluido by vm.penaltisInterativoConcluido.collectAsStateWithLifecycle()
     val posicaoNaTabela by vm.posicaoNaTabela.collectAsStateWithLifecycle()
     val precisaEscolherPatrocinador by vm.precisaEscolherPatrocinador.collectAsStateWithLifecycle()
+    val notificacoesContador by vm.notificacoesContador.collectAsStateWithLifecycle()
+    val notificacoes by vm.notificacoes.collectAsStateWithLifecycle()
 
     var abaAtual by rememberSaveable { mutableIntStateOf(0) }
 
@@ -104,10 +110,11 @@ fun DashboardScreen(
     Scaffold(
         bottomBar = {
             DashboardBottomBar(
-                abaAtual          = abaAtual,
-                onAbaChanged      = { abaAtual = it },
-                onIrParaEscalacao = onIrParaEscalacao,
-                onIrParaTabela    = onIrParaTabela
+                abaAtual               = abaAtual,
+                onAbaChanged           = { abaAtual = it },
+                onIrParaEscalacao      = onIrParaEscalacao,
+                onIrParaTabela         = onIrParaTabela,
+                notificacoesContador   = notificacoesContador
             )
         }
     ) { ip ->
@@ -305,6 +312,14 @@ fun DashboardScreen(
         }
 
         } // end LazyColumn
+        } else if (abaAtual == 1) {
+            NotificacoesAba(
+                padding       = ip,
+                notificacoes  = notificacoes,
+                todosOsTimes  = todosOsTimes,
+                onMarcarLida  = { vm.marcarNotificacaoLida(it) },
+                onMarcarTodas = { vm.marcarTodasNotificacoesLidas() }
+            )
         } else {
             MenuAba(
                 padding                  = ip,
@@ -335,7 +350,8 @@ private fun DashboardBottomBar(
     abaAtual: Int,
     onAbaChanged: (Int) -> Unit,
     onIrParaEscalacao: () -> Unit,
-    onIrParaTabela: () -> Unit
+    onIrParaTabela: () -> Unit,
+    notificacoesContador: Int = 0
 ) {
     NavigationBar(tonalElevation = 0.dp) {
         NavigationBarItem(
@@ -359,6 +375,18 @@ private fun DashboardBottomBar(
         NavigationBarItem(
             selected = abaAtual == 1,
             onClick  = { onAbaChanged(1) },
+            icon     = {
+                BadgedBox(badge = {
+                    if (notificacoesContador > 0) Badge { Text(notificacoesContador.toString()) }
+                }) {
+                    Icon(Icons.Filled.Notifications, contentDescription = "Notificações")
+                }
+            },
+            label    = { Text("Notif.") }
+        )
+        NavigationBarItem(
+            selected = abaAtual == 2,
+            onClick  = { onAbaChanged(2) },
             icon     = { Icon(Icons.Filled.Menu, contentDescription = "Menu") },
             label    = { Text("Menu") }
         )
@@ -415,16 +443,128 @@ private fun MenuAba(
         item { OutlinedButton(onClick = onIrParaTreinamento,      modifier = Modifier.fillMaxWidth()) { Text("Treinamento") } }
     }
 }
+
+// ─────────────────────────────────────────────
+//  Aba de Notificações
+// ─────────────────────────────────────────────
+@Composable
+private fun NotificacoesAba(
+    padding: PaddingValues,
+    notificacoes: List<br.com.managerfoot.data.database.entities.PropostaIAEntity>,
+    todosOsTimes: List<br.com.managerfoot.domain.model.Time>,
+    onMarcarLida: (Int) -> Unit,
+    onMarcarTodas: () -> Unit
+) {
+    val temEncerradas = notificacoes.any {
+        (it.status == StatusProposta.ACEITA || it.status == StatusProposta.RECUSADA) && !it.lida
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp,
+            top = 12.dp,
+            bottom = padding.calculateBottomPadding() + 32.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (notificacoes.isEmpty()) {
+            item {
+                Text(
+                    text = "Nenhuma notificação no momento.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            if (temEncerradas) {
+                item {
+                    TextButton(onClick = onMarcarTodas, modifier = Modifier.fillMaxWidth()) {
+                        Text("Marcar todas como lidas")
+                    }
+                }
+            }
+            items(notificacoes, key = { it.id }) { notif ->
+                val nomeTime = todosOsTimes.find { it.id == notif.timeCompradorId }?.nome
+                    ?: "Time ${notif.timeCompradorId}"
+                val encerrada = notif.status == StatusProposta.ACEITA || notif.status == StatusProposta.RECUSADA
+                val containerColor = when {
+                    !encerrada -> MaterialTheme.colorScheme.primaryContainer
+                    notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.tertiaryContainer
+                    else -> MaterialTheme.colorScheme.errorContainer
+                }
+                val onContainerColor = when {
+                    !encerrada -> MaterialTheme.colorScheme.onPrimaryContainer
+                    notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.onTertiaryContainer
+                    else -> MaterialTheme.colorScheme.onErrorContainer
+                }
+                val tipoLabel = if (notif.tipoProposta == TipoProposta.EMPRESTIMO) "empréstimo" else "compra"
+                val valorFmt = "R$ %,.0f".format(notif.valorOfertado / 100.0)
+                val titulo: String
+                val descricao: String
+                when (notif.status) {
+                    StatusProposta.PENDENTE -> {
+                        titulo = "Proposta de $nomeTime"
+                        descricao = "Oferta de $tipoLabel: $valorFmt. Acesse o Mercado para responder."
+                    }
+                    StatusProposta.AGUARDANDO_RESPOSTA_IA -> {
+                        titulo = "Aguardando resposta — $nomeTime"
+                        descricao = "A IA está avaliando sua contra-oferta de $tipoLabel."
+                    }
+                    StatusProposta.ACEITA -> {
+                        titulo = "Negociação aceita — $nomeTime"
+                        val valorAceito = if (notif.valorSolicitadoJogador > 0)
+                            "R$ %,.0f".format(notif.valorSolicitadoJogador / 100.0)
+                        else valorFmt
+                        descricao = "A IA aceitou a proposta de $tipoLabel por $valorAceito."
+                    }
+                    StatusProposta.RECUSADA -> {
+                        titulo = "Negociação encerrada — $nomeTime"
+                        descricao = "A IA recusou a proposta de $tipoLabel."
+                    }
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = containerColor)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(titulo,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = onContainerColor)
+                            Spacer(Modifier.height(4.dp))
+                            Text(descricao,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = onContainerColor)
+                        }
+                        if (encerrada && !notif.lida) {
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { onMarcarLida(notif.id) }) {
+                                Text("OK", color = onContainerColor)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────
 //  Utilitário de data para o card da próxima partida
 // ─────────────────────────────────────────────
 private val DASH_COPA_DATAS: Map<Int, Pair<Int, Int>> = mapOf(
-    2 to (2 to 10),  7 to (2 to 25),
-    15 to (3 to 15), 35 to (4 to  5),
-    95 to (5 to 15), 115 to (6 to 10),
-    175 to (7 to 15),195 to (8 to  5),
-    245 to (9 to 10),265 to (10 to  8),
-    335 to (11 to 12),355 to (12 to  3)
+    13 to (2 to 10),  33 to (2 to 25),
+    53 to (3 to 15),  83 to (4 to  5),
+    133 to (5 to 15), 163 to (6 to 10),
+    207 to (7 to 15), 233 to (8 to  5),
+    278 to (9 to 10), 313 to (10 to  8),
+    357 to (11 to 12),383 to (12 to  3)
 )
 private val DASH_DIAS_MES = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 private fun dashDiaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {

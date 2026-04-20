@@ -614,10 +614,12 @@ fun MatchCard(
 
 fun formatarSaldo(centavos: Long): String {
     val reais = centavos / 100.0
+    val sign = if (reais < 0) "-" else ""
+    val abs = kotlin.math.abs(reais)
     return when {
-        reais >= 1_000_000_000 -> "R$ %.2f bi".format(reais / 1_000_000_000)
-        reais >= 1_000_000     -> "R$ %.1f M".format(reais / 1_000_000)
-        reais >= 1_000         -> "R$ %.0f mil".format(reais / 1_000)
-        else                   -> "R$ %.0f".format(reais)
+        abs >= 1_000_000_000 -> "${sign}R$ %.2f bi".format(abs / 1_000_000_000)
+        abs >= 1_000_000     -> "${sign}R$ %.1f M".format(abs / 1_000_000)
+        abs >= 1_000         -> "${sign}R$ %.0f mil".format(abs / 1_000)
+        else                 -> "${sign}R$ %.0f".format(abs)
     }
 }

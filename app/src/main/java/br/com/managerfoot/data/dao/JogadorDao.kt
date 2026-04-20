@@ -150,4 +150,20 @@ interface JogadorDao {
     /** Retorna todos os jogadores ativos (sênior + base) de um time. */
     @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
     suspend fun buscarElencoCompletoDoTime(timeId: Int): List<JogadorEntity>
+
+    /** Atualiza o flag de disponível para venda. */
+    @Query("UPDATE jogadores SET disponívelParaVenda = :flag WHERE id = :jogadorId")
+    suspend fun atualizarDisponibilidadeVenda(jogadorId: Int, flag: Boolean)
+
+    /** Atualiza o flag de disponível para empréstimo. */
+    @Query("UPDATE jogadores SET disponívelParaEmprestimo = :flag WHERE id = :jogadorId")
+    suspend fun atualizarDisponibilidadeEmprestimo(jogadorId: Int, flag: Boolean)
+
+    /** Retorna jogadores de um time listados para venda ou empréstimo pelo usuário. */
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND (disponívelParaVenda = 1 OR disponívelParaEmprestimo = 1) AND categoriaBase = 0 AND aposentado = 0")
+    suspend fun buscarListadosParaTransferencia(timeId: Int): List<JogadorEntity>
+
+    /** Todos os jogadores de times da IA listados (venda ou empréstimo) excetuando o time do jogador. */
+    @Query("SELECT * FROM jogadores WHERE timeId != :playerTimeId AND timeId IS NOT NULL AND (disponívelParaVenda = 1 OR disponívelParaEmprestimo = 1) AND categoriaBase = 0 AND aposentado = 0")
+    suspend fun buscarListadosPorTimeIA(playerTimeId: Int): List<JogadorEntity>
 }

@@ -1,4 +1,4 @@
-package br.com.managerfoot.presentation.ui.screens
+﻿package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +31,11 @@ fun ArtilheirosScreen(
     campeonatoArgAId: Int = -1,
     campeonatoArgBId: Int = -1,
     campeonatoArgClausuraId: Int = -1,
+    campeonatoUruAperturaId: Int = -1,
+    campeonatoUruIntermedId: Int = -1,
+    campeonatoUruClausuraId: Int = -1,
+    campeonatoUruBId: Int = -1,
+    campeonatoUruBCompetId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -40,30 +45,93 @@ fun ArtilheirosScreen(
     val assistentesTotal  by vm.assistentesAllTime.collectAsState()
     val artilheirosHist   by vm.artilheirosHistorico.collectAsState()
     val assistentesHist   by vm.assistentesHistorico.collectAsState()
-    val divisaoSelecionada        by vm.divisaoSelecionada.collectAsState()
+    val divisaoSelecionada          by vm.divisaoSelecionada.collectAsState()
     val divisaoHistoricoSelecionada by vm.divisaoHistoricoSelecionada.collectAsState()
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId) {
-        // Para times argentinos, abre direto na competição ativa:
-        // Clausura (div=9) se disponível, senão Apertura (div=8), senão Série A (div=1)
-        val divisaoInicial = when {
-            campeonatoArgClausuraId > 0 -> 9
-            campeonatoArgAId > 0 -> 8
-            else -> 1
-        }
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, divisaoInicial)
+    val temArgentina = campeonatoArgAId > 0 || campeonatoArgBId > 0 || campeonatoArgClausuraId > 0
+    val temUruguai   = campeonatoUruAperturaId > 0 || campeonatoUruBId > 0
+
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
+                   campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
+                   campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
+                   campeonatoUruBId, campeonatoUruBCompetId) {
+        vm.carregar(
+            campAId           = campeonatoAId,
+            campBId           = campeonatoBId,
+            campCId           = campeonatoCId,
+            campDId           = campeonatoDId,
+            copaId            = copaId,
+            copaArgId         = copaArgId,
+            campArgAId        = campeonatoArgAId,
+            campArgBId        = campeonatoArgBId,
+            campArgClausuraId = campeonatoArgClausuraId,
+            campUruApertId    = campeonatoUruAperturaId,
+            campUruInterId    = campeonatoUruIntermedId,
+            campUruClausId    = campeonatoUruClausuraId,
+            campUruBId        = campeonatoUruBId,
+            campUruBCompetId  = campeonatoUruBCompetId,
+            divisaoInicial    = 0
+        )
     }
 
-    // Escopo: 0 = temporada atual, 1 = histórico total
+    // Escopo: 0 = temporada atual, 1 = historico total
     var escopoSelecionado by remember { mutableIntStateOf(0) }
-    // Aba: 0 = artilharia, 1 = assistências
+    // Aba: 0 = artilharia, 1 = assistencias
     var abaSelecionada by remember { mutableIntStateOf(0) }
-    val abas = listOf("Artilharia", "Assistências")
+    val abas = listOf("Artilharia", "Assistencias")
+
+    // Opcoes por pais
+    val opcoesBrasil = buildList<Pair<Int, String>> {
+        add(100 to "Todas")
+        add(1 to "Serie A"); add(2 to "Serie B")
+        if (campeonatoCId > 0) add(3 to "Serie C")
+        if (campeonatoDId > 0) add(4 to "Serie D")
+        if (copaId > 0) add(5 to "Copa do Brasil")
+    }
+    val opcoesArgentina = buildList<Pair<Int, String>> {
+        add(200 to "Todas")
+        if (campeonatoArgAId > 0 || campeonatoArgClausuraId > 0) add(6 to "Primera (Combinado)")
+        if (campeonatoArgAId > 0) add(8 to "Apertura")
+        if (campeonatoArgClausuraId > 0) add(9 to "Clausura")
+        if (campeonatoArgBId > 0) add(7 to "Segunda Div.")
+        if (copaArgId > 0) add(10 to "Copa Argentina")
+    }
+    val opcoesUruguai = buildList<Pair<Int, String>> {
+        add(300 to "Todas")
+        val temPrimera = campeonatoUruAperturaId > 0 || campeonatoUruClausuraId > 0
+        if (temPrimera) add(25 to "Primera (Combinado)")
+        if (campeonatoUruAperturaId > 0) add(20 to "Apertura")
+        if (campeonatoUruIntermedId > 0) add(21 to "Intermedio")
+        if (campeonatoUruClausuraId > 0) add(22 to "Clausura")
+        val temSegunda = campeonatoUruBId > 0 || campeonatoUruBCompetId > 0
+        if (temSegunda) add(26 to "Segunda (Combinado)")
+        if (campeonatoUruBId > 0) add(23 to "Segunda Div.")
+        if (campeonatoUruBCompetId > 0) add(24 to "Competencia")
+    }
+
+    val paisDaDivisao = remember(divisaoSelecionada) {
+        when (divisaoSelecionada) {
+            in 6..10, 200 -> "Argentina"
+            in 20..26, 300 -> "Uruguai"
+            else -> "Brasil"
+        }
+    }
+    var paisSelecionado by remember(divisaoSelecionada) { mutableStateOf(paisDaDivisao) }
+
+    val opcoesDaDiv = when (paisSelecionado) {
+        "Argentina" -> opcoesArgentina
+        "Uruguai"   -> opcoesUruguai
+        else        -> opcoesBrasil
+    }
+
+    fun divisaoDoFiltroPais(pais: String) = when (pais) {
+        "Argentina" -> 200; "Uruguai" -> 300; else -> 100
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Artilharia & Assistências") },
+                title = { Text("Artilharia & Assistencias") },
                 navigationIcon = {
                     IconButton(onClick = onVoltar) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
@@ -77,14 +145,14 @@ fun ArtilheirosScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Seletor de escopo (Temporada / Histórico)
+            // Seletor de escopo (Temporada / Historico)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Temporada atual", "Histórico total").forEachIndexed { idx, label ->
+                listOf("Temporada atual", "Historico total").forEachIndexed { idx, label ->
                     FilterChip(
                         selected = escopoSelecionado == idx,
                         onClick  = { escopoSelecionado = idx },
@@ -94,96 +162,74 @@ fun ArtilheirosScreen(
                 }
             }
 
-            // Seletor de competição (dropdown) — visível em ambos os escopos
-            val opcoesBase = buildList {
-                add(0 to "Todas as competições")
-                add(1 to "Série A")
-                add(2 to "Série B")
-                if (campeonatoCId > 0) add(3 to "Série C")
-                if (campeonatoDId > 0) add(4 to "Série D")
-                if (copaId > 0) add(5 to "Copa do Brasil")
-                if (copaArgId > 0) add(10 to "Copa da Argentina")
-                if (campeonatoArgAId > 0 || campeonatoArgClausuraId > 0) add(6 to "Primera Div. (Combinado)")
-                if (campeonatoArgAId > 0) add(8 to "Apertura")
-                if (campeonatoArgClausuraId > 0) add(9 to "Clausura")
-                if (campeonatoArgBId > 0) add(7 to "Segunda Div.")
+            // Chips de pais
+            val paises = buildList {
+                add("Todos"); add("Brasil")
+                if (temArgentina) add("Argentina")
+                if (temUruguai) add("Uruguai")
             }
-
-            // Seletor de competição (dropdown) — só visível em "Temporada atual"
-            if (escopoSelecionado == 0) {
-                val opcoes = opcoesBase
-                val labelSelecionado = opcoes.firstOrNull { it.first == divisaoSelecionada }?.second
-                    ?: opcoes.first().second
-                var expandido by remember { mutableStateOf(false) }
-
-                ExposedDropdownMenuBox(
-                    expanded = expandido,
-                    onExpandedChange = { expandido = it },
+            if (paises.size > 1) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedTextField(
-                        value = labelSelecionado,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Competição") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expandido,
-                        onDismissRequest = { expandido = false }
-                    ) {
-                        opcoes.forEach { (div, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    vm.selecionarDivisao(div)
-                                    expandido = false
+                    paises.forEach { pais ->
+                        val divAtualScope = if (escopoSelecionado == 0) divisaoSelecionada else divisaoHistoricoSelecionada
+                        FilterChip(
+                            selected = if (pais == "Todos") divAtualScope == 0
+                                       else paisSelecionado == pais && divAtualScope != 0,
+                            onClick = {
+                                if (pais == "Todos") {
+                                    paisSelecionado = "Brasil"
+                                    if (escopoSelecionado == 0) vm.selecionarDivisao(0)
+                                    else vm.selecionarDivisaoHistorico(0)
+                                } else {
+                                    paisSelecionado = pais
+                                    val divPais = divisaoDoFiltroPais(pais)
+                                    if (escopoSelecionado == 0) vm.selecionarDivisao(divPais)
+                                    else vm.selecionarDivisaoHistorico(divPais)
                                 }
-                            )
-                        }
+                            },
+                            label = { Text(pais, fontSize = 12.sp) }
+                        )
                     }
                 }
             }
 
-            // Seletor de competição (dropdown) — só visível em "Histórico total"
-            if (escopoSelecionado == 1) {
-                val opcoes = opcoesBase
-                val labelSelecionado = opcoes.firstOrNull { it.first == divisaoHistoricoSelecionada }?.second
-                    ?: opcoes.first().second
-                var expandido by remember { mutableStateOf(false) }
-
+            // Dropdown de competicao (so quando pais especifico selecionado)
+            val divAtualGlobal = if (escopoSelecionado == 0) divisaoSelecionada else divisaoHistoricoSelecionada
+            if (divAtualGlobal != 0) {
+                val labelComp = opcoesDaDiv.firstOrNull { it.first == divAtualGlobal }?.second
+                    ?: opcoesDaDiv.firstOrNull()?.second ?: ""
+                var expandidoComp by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
-                    expanded = expandido,
-                    onExpandedChange = { expandido = it },
+                    expanded = expandidoComp,
+                    onExpandedChange = { expandidoComp = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .padding(horizontal = 16.dp, vertical = 2.dp)
                 ) {
                     OutlinedTextField(
-                        value = labelSelecionado,
+                        value = labelComp,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Competição") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
+                        label = { Text("Competicao") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoComp) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
                     ExposedDropdownMenu(
-                        expanded = expandido,
-                        onDismissRequest = { expandido = false }
+                        expanded = expandidoComp,
+                        onDismissRequest = { expandidoComp = false }
                     ) {
-                        opcoes.forEach { (div, label) ->
+                        opcoesDaDiv.forEach { (div, label) ->
                             DropdownMenuItem(
                                 text = { Text(label) },
                                 onClick = {
-                                    vm.selecionarDivisaoHistorico(div)
-                                    expandido = false
+                                    if (escopoSelecionado == 0) vm.selecionarDivisao(div)
+                                    else vm.selecionarDivisaoHistorico(div)
+                                    expandidoComp = false
                                 }
                             )
                         }
@@ -204,11 +250,10 @@ fun ArtilheirosScreen(
             val lista = when {
                 escopoSelecionado == 0 && abaSelecionada == 0 -> artilheiros
                 escopoSelecionado == 0 && abaSelecionada == 1 -> assistentes
-                // histórico: se div=0 usa AllTime completo; se filtrado e não vazio usa filtrado; senão AllTime
                 escopoSelecionado == 1 && abaSelecionada == 0 ->
-                    if (divisaoHistoricoSelecionada == 0) artilheirosTotal else artilheirosHist
+                    if (divisaoHistoricoSelecionada in listOf(0, 100, 200, 300)) artilheirosTotal else artilheirosHist
                 else ->
-                    if (divisaoHistoricoSelecionada == 0) assistentesTotal else assistentesHist
+                    if (divisaoHistoricoSelecionada in listOf(0, 100, 200, 300)) assistentesTotal else assistentesHist
             }
             val colTitulo = if (abaSelecionada == 0) "G" else "A"
 
@@ -221,17 +266,16 @@ fun ArtilheirosScreen(
                     )
                 }
             } else {
-                // Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("#",          modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Text("Jogador",    modifier = Modifier.weight(1f),   fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("Clube",      modifier = Modifier.weight(0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text(colTitulo,    modifier = Modifier.width(32.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text("#",       modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text("Jogador", modifier = Modifier.weight(1f),   fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Clube",   modifier = Modifier.weight(0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(colTitulo, modifier = Modifier.width(32.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 }
                 HorizontalDivider()
 

@@ -84,7 +84,7 @@ class SeedDataSource @Inject constructor(
                 defesa          = o.getInt("defesa"),
                 fisico          = o.getInt("fisico"),
                 salario         = o.getLong("salario"),
-                contratoAnos    = o.getInt("contrato"),
+                contratoAnos    = if (o.has("contrato")) o.getInt("contrato") else o.optInt("contrato_restante", 2),
                 valorMercado    = o.getLong("valor_mercado")
             )
         }

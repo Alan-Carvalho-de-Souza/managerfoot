@@ -73,7 +73,11 @@ data class JogadorEntity(
 
     // Contador de partidas que o jogador ainda não pode disputar por lesão.
     // Decrementado após cada jogo; quando chega a 0, lesionado volta a false.
-    val partidasSemJogar: Int = 0
+    val partidasSemJogar: Int = 0,
+
+    // Flags de janela de transferência (definidas pelo usuário)
+    val disponívelParaVenda: Boolean = false,
+    val disponívelParaEmprestimo: Boolean = false
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

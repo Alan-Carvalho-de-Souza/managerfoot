@@ -25,8 +25,9 @@ import br.com.managerfoot.data.database.entities.*
         HallDaFamaEntity::class,
         RankingGeralEntity::class,
         EstadioEntity::class,
+        PropostaIAEntity::class,
     ],
-    version = 18,
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun hallDaFamaDao(): HallDaFamaDao
     abstract fun rankingGeralDao(): RankingGeralDao
     abstract fun estadioDao(): EstadioDao
+    abstract fun propostaIADao(): PropostaIADao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -78,6 +80,12 @@ class Converters {
 
     @TypeConverter fun tipoCampToString(t: TipoCampeonato): String = t.name
     @TypeConverter fun stringToTipoCamp(s: String): TipoCampeonato = TipoCampeonato.valueOf(s)
+
+    @TypeConverter fun statusPropostaToString(s: StatusProposta): String = s.name
+    @TypeConverter fun stringToStatusProposta(s: String): StatusProposta = StatusProposta.valueOf(s)
+
+    @TypeConverter fun tipoPropostaToString(t: TipoProposta): String = t.name
+    @TypeConverter fun stringToTipoProposta(s: String): TipoProposta = TipoProposta.valueOf(s)
 
     @TypeConverter fun formatoToString(f: FormatoCampeonato): String = f.name
     @TypeConverter fun stringToFormato(s: String): FormatoCampeonato = FormatoCampeonato.valueOf(s)

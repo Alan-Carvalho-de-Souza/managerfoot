@@ -199,16 +199,21 @@ private fun TimeItemRow(time: Time, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(time.nome, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            val subtitulo = if (time.pais == "Argentina" || time.pais == "Uruguay")
+                "${time.cidade} · ${time.pais}"
+            else "${time.cidade} - ${time.estado}"
             Text(
-                "${time.cidade} - ${time.estado}",
+                subtitulo,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val chipLabel = if (time.pais == "Argentina") {
-                when (time.divisao) { 6 -> "Segunda Div."; else -> "Primera Div." }
-            } else { val l = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }; "Série $l" }
+            val chipLabel = when (time.pais) {
+                "Argentina" -> when (time.divisao) { 6 -> "Segunda Div."; else -> "Primera Div." }
+                "Uruguay"   -> when (time.divisao) { 10 -> "Segunda Div."; else -> "Primera Div." }
+                else        -> { val l = when (time.divisao) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> time.divisao.toString() }; "Série $l" }
+            }
             InfoChip(chipLabel, MaterialTheme.colorScheme.primaryContainer)
             Text(formatarSaldo(time.saldo), style = MaterialTheme.typography.labelSmall)
         }

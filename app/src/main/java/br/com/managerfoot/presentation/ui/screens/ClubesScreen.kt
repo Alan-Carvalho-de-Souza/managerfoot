@@ -247,7 +247,7 @@ private fun ClubeRow(time: Time, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(time.nome, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            val localInfo = if (time.pais == "Argentina") "${time.pais} · ${nomeDivisao(time.divisao)}"
+            val localInfo = if (time.pais == "Argentina" || time.pais == "Uruguay") "${time.pais} · ${nomeDivisao(time.divisao)}"
                             else "${nomeDivisao(time.divisao)} · ${time.estado}"
             Text(
                 localInfo,
@@ -270,6 +270,8 @@ private fun nomeDivisao(divisao: Int): String = when (divisao) {
     4 -> "Série D"
     5 -> "Primera División"
     6 -> "Primera Nacional"
+    9 -> "Primera División Uruguaia"
+    10 -> "Segunda División Uruguaia"
     else -> "Divisão $divisao"
 }
 

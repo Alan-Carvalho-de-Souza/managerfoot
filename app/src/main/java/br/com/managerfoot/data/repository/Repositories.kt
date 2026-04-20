@@ -123,6 +123,25 @@ class JogadorRepository @Inject constructor(
     suspend fun buscarDisponiveis(timeId: Int): List<Jogador> =
         jogadorDao.buscarDisponiveisPorTime(timeId).map { it.toDomain() }
 
+    suspend fun buscarPorId(id: Int): Jogador? =
+        jogadorDao.buscarPorId(id)?.toDomain()
+
+    suspend fun atualizarDisponibilidadeVenda(jogadorId: Int, flag: Boolean) =
+        jogadorDao.atualizarDisponibilidadeVenda(jogadorId, flag)
+
+    suspend fun atualizarDisponibilidadeEmprestimo(jogadorId: Int, flag: Boolean) =
+        jogadorDao.atualizarDisponibilidadeEmprestimo(jogadorId, flag)
+
+    suspend fun buscarListadosParaTransferencia(timeId: Int): List<Jogador> =
+        jogadorDao.buscarListadosParaTransferencia(timeId).map { it.toDomain() }
+
+    suspend fun buscarListadosPorTimeIA(playerTimeId: Int): List<Jogador> =
+        jogadorDao.buscarListadosPorTimeIA(playerTimeId).map { it.toDomain() }
+
+    /** Retorna todos os jogadores sênior do time (incluindo lesionados/suspensos) — usado para folha salarial. */
+    suspend fun buscarSeniores(timeId: Int): List<Jogador> =
+        jogadorDao.buscarSenioresDoTime(timeId).map { it.toDomain() }
+
     suspend fun buscarMercado(
         posicao: Posicao? = null,
         forcaMin: Int = 1,
@@ -734,7 +753,9 @@ class JogadorRepository @Inject constructor(
         categoriaBase = categoriaBase,
         fadiga = fadiga,
         treinouNestaCiclo = treinouNestaCiclo,
-        partidasSemJogar = partidasSemJogar
+        partidasSemJogar = partidasSemJogar,
+        disponívelParaVenda = disponívelParaVenda,
+        disponívelParaEmprestimo = disponívelParaEmprestimo
     )
 }
 

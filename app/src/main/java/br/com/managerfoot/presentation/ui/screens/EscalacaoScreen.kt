@@ -34,12 +34,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Posicao
 import br.com.managerfoot.data.database.entities.Setor
+import br.com.managerfoot.data.database.entities.StatusProposta
+import br.com.managerfoot.data.database.entities.TipoProposta
 import br.com.managerfoot.domain.model.Jogador
+import br.com.managerfoot.domain.model.PropostaIATransferencia
 import br.com.managerfoot.domain.engine.CalculadoraForca
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.EscalacaoViewModel
 import br.com.managerfoot.presentation.viewmodel.MercadoViewModel
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.MaterialTheme
 
 // ═══════════════════════════════════════════════════════════
@@ -1021,6 +1026,7 @@ fun MercadoScreen(
     val saldo     by vm.saldo.collectAsState()
     val mensagem  by vm.mensagem.collectAsState()
     val transferencias by vm.transferencias.collectAsState()
+    val propostas by vm.propostas.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -1060,6 +1066,19 @@ fun MercadoScreen(
             Tab(selected = abaAtiva == 0, onClick = { abaAtiva = 0 }, text = { Text("Mercado livre") })
             Tab(selected = abaAtiva == 1, onClick = { abaAtiva = 1 }, text = { Text("Meu elenco") })
             Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Transferências") })
+            Tab(
+                selected = abaAtiva == 3,
+                onClick  = { abaAtiva = 3 },
+                text     = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Propostas")
+                        if (propostas.any { it.status == StatusProposta.PENDENTE }) {
+                            Spacer(Modifier.width(4.dp))
+                            Badge { Text(propostas.count { it.status == StatusProposta.PENDENTE }.toString()) }
+                        }
+                    }
+                }
+            )
         }
 
         when (abaAtiva) {
@@ -1095,11 +1114,22 @@ fun MercadoScreen(
                         JogadorRow(
                             jogador = jogador,
                             trailing = {
-                                OutlinedButton(
-                                    onClick = { vm.venderJogador(jogador) },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Text("Vender", style = MaterialTheme.typography.labelSmall)
+                                    // Chip: À venda
+                                    FilterChip(
+                                        selected  = jogador.disponívelParaVenda,
+                                        onClick   = { vm.marcarParaVenda(jogador, !jogador.disponívelParaVenda) },
+                                        label     = { Text("💲 À venda", style = MaterialTheme.typography.labelSmall) },
+                                    )
+                                    // Chip: Empréstimo
+                                    FilterChip(
+                                        selected  = jogador.disponívelParaEmprestimo,
+                                        onClick   = { vm.marcarParaEmprestimo(jogador, !jogador.disponívelParaEmprestimo) },
+                                        label     = { Text("🤝 Empréstimo", style = MaterialTheme.typography.labelSmall) },
+                                    )
                                 }
                             }
                         )
@@ -1120,8 +1150,270 @@ fun MercadoScreen(
                     }
                 }
             }
+            3 -> {
+                PropostasTab(
+                    propostas = propostas,
+                    onAceitar  = { vm.aceitarProposta(it) },
+                    onRecusar  = { vm.recusarProposta(it.id) },
+                    onNegociar = { proposta, valor -> vm.negociarProposta(proposta.id, valor) }
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun PropostasTab(
+    propostas: List<PropostaIATransferencia>,
+    onAceitar:  (PropostaIATransferencia) -> Unit,
+    onRecusar:  (PropostaIATransferencia) -> Unit,
+    onNegociar: (PropostaIATransferencia, Long) -> Unit
+) {
+    if (propostas.isEmpty()) {
+        EmptyState("Nenhuma proposta recebida no momento")
+        return
+    }
+    LazyColumn {
+        item {
+            SecaoHeader("${propostas.size} proposta${if (propostas.size != 1) "s" else ""} recebida${if (propostas.size != 1) "s" else ""}")
+        }
+        items(propostas) { proposta ->
+            PropostaCard(
+                proposta   = proposta,
+                onAceitar  = { onAceitar(proposta) },
+                onRecusar  = { onRecusar(proposta) },
+                onNegociar = { valor -> onNegociar(proposta, valor) }
+            )
+            HorizontalDivider(thickness = 0.5.dp)
+        }
+    }
+}
+
+@Composable
+private fun PropostaCard(
+    proposta:   PropostaIATransferencia,
+    onAceitar:  () -> Unit,
+    onRecusar:  () -> Unit,
+    onNegociar: (Long) -> Unit
+) {
+    var mostrarDialogoNegociacao by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        // Cabeçalho: clube comprador + badge de status
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Clube comprador + badge de tipo de proposta
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    proposta.nomeTimeComprador,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                val (tipoLabel, tipoCor) = when (proposta.tipoProposta) {
+                    TipoProposta.EMPRESTIMO -> "Empréstimo" to MaterialTheme.colorScheme.secondary
+                    else                   -> "Compra" to MaterialTheme.colorScheme.tertiary
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.extraSmall,
+                    color = tipoCor.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        tipoLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tipoCor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            val (statusLabel, statusColor) = when (proposta.status) {
+                StatusProposta.PENDENTE                -> "Aguardando decisão" to MaterialTheme.colorScheme.tertiary
+                StatusProposta.AGUARDANDO_RESPOSTA_IA  -> "Aguardando resposta do clube" to MaterialTheme.colorScheme.secondary
+                else                                   -> proposta.status.name to MaterialTheme.colorScheme.outline
+            }
+            Text(
+                statusLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        // Dados do jogador
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${proposta.posicao.abreviacao} · ${proposta.jogadorNome}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // Valores
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Oferta", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline)
+                Text(
+                    formatarSaldo(proposta.valorOfertado),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (proposta.valorOfertado >= proposta.valorMercadoJogador)
+                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("Valor de mercado", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline)
+                Text(
+                    formatarSaldo(proposta.valorMercadoJogador),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+
+        // Exibe o valor solicitado se estiver em negociação
+        if (proposta.status == StatusProposta.AGUARDANDO_RESPOSTA_IA && proposta.valorSolicitadoJogador > 0L) {
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Seu valor solicitado", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline)
+                Text(
+                    formatarSaldo(proposta.valorSolicitadoJogador),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            val tentativasRestantes = 3 - proposta.tentativasNegociacao
+            Text(
+                "Tentativas restantes: $tentativasRestantes",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        // Botões de ação (só exibidos quando proposta está PENDENTE)
+        if (proposta.status == StatusProposta.PENDENTE) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onAceitar,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("Aceitar", style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(
+                    onClick = { mostrarDialogoNegociacao = true },
+                    modifier = Modifier.weight(1f),
+                    enabled = proposta.tentativasNegociacao < 3,
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("Negociar", style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(
+                    onClick = onRecusar,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("Recusar", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+
+    // Diálogo de negociação
+    if (mostrarDialogoNegociacao) {
+        NegociacaoDialog(
+            valorOfertado       = proposta.valorOfertado,
+            valorMercado        = proposta.valorMercadoJogador,
+            tentativasRestantes = 3 - proposta.tentativasNegociacao,
+            onConfirmar         = { valorReais ->
+                // Converte de reais para centavos (padrão interno do jogo)
+                val valorCentavos = (valorReais * 100L).toLong().coerceAtLeast(proposta.valorOfertado + 1L)
+                onNegociar(valorCentavos)
+                mostrarDialogoNegociacao = false
+            },
+            onDismiss = { mostrarDialogoNegociacao = false }
+        )
+    }
+}
+
+@Composable
+private fun NegociacaoDialog(
+    valorOfertado: Long,
+    valorMercado: Long,
+    tentativasRestantes: Int,
+    onConfirmar: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // Valores em reais (sem centavos) para exibição no campo
+    val ofertaReais  = valorOfertado / 100L
+    val mercadoReais = valorMercado / 100L
+    // Sugestão inicial: +10% sobre a oferta
+    var textoValor by remember { mutableStateOf(((ofertaReais * 1.10).toLong()).toString()) }
+    val valorLong = textoValor.toLongOrNull() ?: 0L
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title   = { Text("Solicitar valor") },
+        text    = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Informe o valor que deseja receber pela venda (em R$).",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Oferta do clube:", style = MaterialTheme.typography.labelSmall)
+                    Text(formatarSaldo(valorOfertado), style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Valor de mercado:", style = MaterialTheme.typography.labelSmall)
+                    Text(formatarSaldo(valorMercado), style = MaterialTheme.typography.labelSmall)
+                }
+                Text(
+                    "Tentativas restantes: $tentativasRestantes",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value  = textoValor,
+                    onValueChange = { textoValor = it.filter { c -> c.isDigit() } },
+                    label  = { Text("Valor solicitado (R$)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = { if (valorLong > ofertaReais) onConfirmar(valorLong) },
+                enabled  = valorLong > ofertaReais
+            ) {
+                Text("Enviar proposta")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 @Composable

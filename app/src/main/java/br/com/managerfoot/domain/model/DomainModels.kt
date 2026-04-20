@@ -56,7 +56,9 @@ data class Jogador(
     val categoriaBase: Boolean = false, // true = jogador da base de juniores
     val fadiga: Float = 1.0f,           // 0.0–1.0: energia física disponível
     val treinouNestaCiclo: Boolean = false, // true = já treinou entre os dois últimos jogos
-    val partidasSemJogar: Int = 0       // jogos restantes de afastamento por lesão
+    val partidasSemJogar: Int = 0,       // jogos restantes de afastamento por lesão
+    val disponívelParaVenda: Boolean = false,      // listado para venda pelo usuário
+    val disponívelParaEmprestimo: Boolean = false  // listado para empréstimo pelo usuário
 ) {
     // Força efetiva: penaliza improvisos, considera morale e fadiga
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {
@@ -216,6 +218,27 @@ data class OfertaTransferencia(
     val valor: Long,
     val salarioProposto: Long,
     val contratoAnos: Int
+)
+
+/**
+ * Proposta de compra emitida por um time da IA para um jogador do time do usuário.
+ * Modelo rico de domínio para exibição na aba Propostas do Mercado de Transferências.
+ */
+data class PropostaIATransferencia(
+    val id: Int,
+    val jogadorId: Int,
+    val jogadorNome: String,
+    val jogadorNomeAbrev: String,
+    val posicao: br.com.managerfoot.data.database.entities.Posicao,
+    val timeCompradorId: Int,
+    val nomeTimeComprador: String,
+    val escudoTimeComprador: String,
+    val valorOfertado: Long,
+    val valorMercadoJogador: Long,
+    val status: br.com.managerfoot.data.database.entities.StatusProposta,
+    val tentativasNegociacao: Int,
+    val valorSolicitadoJogador: Long,
+    val tipoProposta: br.com.managerfoot.data.database.entities.TipoProposta = br.com.managerfoot.data.database.entities.TipoProposta.VENDA
 )
 
 data class SaldoFinanceiro(
