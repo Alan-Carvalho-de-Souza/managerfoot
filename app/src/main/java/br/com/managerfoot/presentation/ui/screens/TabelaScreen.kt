@@ -72,11 +72,11 @@ fun TabelaScreen(
     }
     val opcoesUruguai = buildList {
         if (campeonatoUruAperturaId > 0) add(9 to "Apertura")
-        if (campeonatoUruBId > 0) add(10 to "Segunda Div.")
         if (campeonatoUruIntermedId > 0) add(11 to "Intermédio")
         if (campeonatoUruClausuraId > 0) add(12 to "Clausura")
         if (campeonatoUruAperturaId > 0 && campeonatoUruClausuraId > 0) add(13 to "Geral")
         if (campeonatoUruBCompetId > 0) add(14 to "Competencia")
+        if (campeonatoUruBId > 0) add(10 to "Segunda Div.")
     }
 
     val paises = buildList {
@@ -214,7 +214,7 @@ fun TabelaScreen(
 
             // Header row (só para visualização plana)
             if (!ehGrupos) {
-                TabelaHeader()
+                TabelaHeader(showDivCol = divisaoSelecionada == 13)
                 HorizontalDivider()
             }
 
@@ -262,13 +262,19 @@ fun TabelaScreen(
                         val escudoRes = time?.escudoRes ?: ""
                         val ehJogador = item.timeId == timeJogadorId
                         val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
+                        val divLabel = if (divisaoSelecionada == 13) when (time?.divisao) {
+                            9 -> "A"
+                            10 -> "B"
+                            else -> null
+                        } else null
                         TabelaRow(
                             posicao = index + 1,
                             nomeTime = nomeTime,
                             escudoRes = escudoRes,
                             item = item,
                             destaque = ehJogador,
-                            zonaColor = zona
+                            zonaColor = zona,
+                            divLabel = divLabel
                         )
                         HorizontalDivider(thickness = 0.5.dp)
                     }
@@ -282,7 +288,7 @@ fun TabelaScreen(
 }
 
 @Composable
-private fun TabelaHeader() {
+private fun TabelaHeader(showDivCol: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,6 +297,9 @@ private fun TabelaHeader() {
     ) {
         Text("#",  modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text("Time", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        if (showDivCol) {
+            Text("Div", modifier = Modifier.width(16.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
         listOf("J", "V", "E", "D", "GP", "GC", "SG", "Pts").forEach { col ->
             Text(col, modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
@@ -330,6 +339,7 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao == 1  -> Color(0xFFFFD700)  // Campeão Geral
         else          -> null
     }
+    13 -> null  // Geral Uruguai: sem zona (ranking informativo)
     10 -> when {
         posicao <= 2  -> Color(0xFF1565C0)  // Acesso direto à Primera
         posicao <= 6  -> Color(0xFFFF6F00)  // Playoff de acesso
@@ -371,6 +381,7 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
         8 -> listOf(
             Color(0xFFFFD700) to "1º: Campeão Geral"
         )
+        13 -> emptyList()  // Geral Uruguai: ranking informativo, sem legenda de zonas
         10 -> listOf(
             Color(0xFF1565C0) to "1-2: Acesso direto",
             Color(0xFFFF6F00) to "3-6: Playoff",
@@ -403,7 +414,8 @@ private fun TabelaRow(
     escudoRes: String = "",
     item: ClassificacaoEntity,
     destaque: Boolean,
-    zonaColor: Color? = null
+    zonaColor: Color? = null,
+    divLabel: String? = null
 ) {
     val bg = if (destaque) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val textColorPrimary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
@@ -443,6 +455,16 @@ private fun TabelaRow(
             overflow = TextOverflow.Ellipsis,
             color = textColorPrimary
         )
+        if (divLabel != null) {
+            Text(
+                divLabel,
+                modifier = Modifier.width(16.dp),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = if (divLabel == "A") Color(0xFF1565C0) else Color(0xFFFF6F00)
+            )
+        }
         listOf(
             item.jogos, item.vitorias, item.empates, item.derrotas,
             item.golsPro, item.golsContra, item.saldoGols, item.pontos

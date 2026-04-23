@@ -343,8 +343,64 @@ class JogadorRepository @Inject constructor(
                 }
             }
         }
-        jogadorDao.atualizarTodos(atualizados)
+        // Recalcula o valor de mercado de cada jogador com base na força e idade atualizadas.
+        // Feito em passe separado para usar os atributos já computados acima.
+        val comValoresMercado = atualizados.map { j ->
+            if (j.aposentado) j
+            else j.copy(valorMercado = calcularValorMercado(j.forca, j.idade))
+        }
+        jogadorDao.atualizarTodos(comValoresMercado)
     }
+
+    /**
+     * Calcula o valor de mercado de um jogador em centavos com base em força e idade.
+     *
+     * A base é calculada por interpolação linear por faixa de força (piecewise),
+     * garantindo os seguintes valores de referência no pico etário (fator 1.0):
+     *   F60 → R$1,4M | F70 → R$5,4M | F80 → R$10,6M | F90 → R$35,2M | F99 → R$80M
+     *
+     * O fator etário é multiplicado sobre a base:
+     *  - até 29 anos: crescente (valorização progressiva)
+     *  - 30–32 anos:  estável no pico (fator 1.00)
+     *  - 33+ anos:    decrescente conforme o declínio
+     */
+    private fun calcularValorMercado(forca: Int, idade: Int): Long {
+        // Interpolação linear entre os breakpoints de força (valores em centavos no pico)
+        val baseCentavos: Long = when {
+            forca >= 90 -> lerpLong(3_520_000_000L, 8_000_000_000L, (forca - 90).toFloat() / 9f)
+            forca >= 80 -> lerpLong(1_060_000_000L, 3_520_000_000L, (forca - 80).toFloat() / 10f)
+            forca >= 70 -> lerpLong(  540_000_000L, 1_060_000_000L, (forca - 70).toFloat() / 10f)
+            forca >= 60 -> lerpLong(  140_000_000L,   540_000_000L, (forca - 60).toFloat() / 10f)
+            forca >= 50 -> lerpLong(   30_000_000L,   140_000_000L, (forca - 50).toFloat() / 10f)
+            else        -> lerpLong(    5_000_000L,    30_000_000L,  (forca -  1).toFloat() / 49f)
+        }
+
+        val fatorIdade = when {
+            idade <= 16 -> 0.50f
+            idade <= 17 -> 0.56f
+            idade <= 18 -> 0.62f
+            idade <= 19 -> 0.68f
+            idade <= 20 -> 0.74f
+            idade <= 21 -> 0.80f
+            idade <= 22 -> 0.85f
+            idade <= 23 -> 0.90f
+            idade <= 24 -> 0.93f
+            idade <= 25 -> 0.96f
+            idade <= 26 -> 0.98f
+            idade <= 32 -> 1.00f  // pico de mercado — estabilizado 26-32
+            idade <= 33 -> 0.90f
+            idade <= 34 -> 0.80f
+            idade <= 35 -> 0.68f
+            idade <= 36 -> 0.56f
+            idade <= 37 -> 0.46f
+            else        -> 0.36f
+        }
+
+        return (baseCentavos * fatorIdade).toLong().coerceAtLeast(5_000_000L)
+    }
+
+    private fun lerpLong(from: Long, to: Long, t: Float): Long =
+        (from + (to - from) * t.coerceIn(0f, 1f)).toLong()
 
     private fun atributosPrincipais(posicao: Posicao): Set<String> = when (posicao) {
         Posicao.GOLEIRO            -> setOf("defesa", "fisico", "tecnica")
@@ -567,6 +623,12 @@ class JogadorRepository @Inject constructor(
                 )
             }
             jogadorDao.atualizarTodos(atualizados)
+
+            // Também libera o treinamento dos juniores para o próximo ciclo
+            val juniores = jogadorDao.buscarJunioresDoTime(timeId)
+            if (juniores.isNotEmpty()) {
+                jogadorDao.atualizarTodos(juniores.map { it.copy(treinouNestaCiclo = false) })
+            }
         }
     }
 
@@ -713,13 +775,30 @@ class JogadorRepository @Inject constructor(
 
     suspend fun limparEscalacaoTime(timeId: Int) = jogadorDao.limparEscalacaoTime(timeId)
 
-    suspend fun processarExpiracaoContratos(timeId: Int) {
+    /**
+     * Decrementa contratos de todos os jogadores sênior com clube ao final da temporada.
+     * Jogadores de times da IA com contrato expirado (contratoAnos = 0) são liberados
+     * automaticamente para o mercado livre.
+     * Jogadores do time do usuário com contrato expirado permanecem no elenco —
+     * o usuário decide via UI se renova ou dispensa.
+     */
+    suspend fun processarExpiracaoContratos(timeJogadorId: Int) {
         jogadorDao.decrementarContratos()
         val expirados = jogadorDao.buscarComContratoExpirado()
-            .filter { it.timeId == timeId }
-        expirados.forEach {
-            jogadorDao.transferirJogador(it.id, null) // libera o jogador
-        }
+        expirados
+            .filter { it.timeId != null && it.timeId != timeJogadorId }
+            .forEach { jogadorDao.transferirJogador(it.id, null) }
+    }
+
+    /** Renova o contrato de um jogador com novo salário e duração. */
+    suspend fun renovarContrato(jogadorId: Int, novoSalario: Long, novosAnos: Int) {
+        val j = jogadorDao.buscarPorId(jogadorId) ?: return
+        jogadorDao.atualizar(j.copy(salario = novoSalario, contratoAnos = novosAnos))
+    }
+
+    /** Dispensa o jogador para o mercado livre sem transferência financeira. */
+    suspend fun dispensarParaMercado(jogadorId: Int) {
+        jogadorDao.transferirJogador(jogadorId, null)
     }
 
     // Mapeamento Entity -> Domain

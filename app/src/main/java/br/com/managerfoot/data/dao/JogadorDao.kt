@@ -40,6 +40,8 @@ interface JogadorDao {
     @Query("""
         SELECT * FROM jogadores
         WHERE timeId IS NULL
+          AND aposentado = 0
+          AND categoriaBase = 0
           AND (:posicao IS NULL OR posicao = :posicao)
           AND forca BETWEEN :forcaMin AND :forcaMax
         ORDER BY forca DESC
@@ -71,10 +73,10 @@ interface JogadorDao {
     @Query("UPDATE jogadores SET lesionado = 1, partidasSemJogar = :partidas WHERE id = :jogadorId")
     suspend fun aplicarLesao(jogadorId: Int, partidas: Int)
 
-    @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND contratoAnos > 0")
+    @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND categoriaBase = 0 AND contratoAnos > 0")
     suspend fun decrementarContratos()
 
-    @Query("SELECT * FROM jogadores WHERE timeId IS NOT NULL AND contratoAnos = 0")
+    @Query("SELECT * FROM jogadores WHERE timeId IS NOT NULL AND categoriaBase = 0 AND contratoAnos = 0")
     suspend fun buscarComContratoExpirado(): List<JogadorEntity>
 
     @Delete
@@ -130,6 +132,9 @@ interface JogadorDao {
     /** Retorna os jogadores da base de juniores de um clube. */
     @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 1 ORDER BY posicao, forca DESC")
     fun observeJuniores(timeId: Int): Flow<List<JogadorEntity>>
+
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 1")
+    suspend fun buscarJunioresDoTime(timeId: Int): List<JogadorEntity>
 
     /** Promove um jogador da base para o elenco principal. */
     @Query("UPDATE jogadores SET categoriaBase = 0 WHERE id = :jogadorId")

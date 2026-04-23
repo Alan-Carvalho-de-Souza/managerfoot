@@ -7,6 +7,7 @@ import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.PartidaDao
+import br.com.managerfoot.data.dao.PropostaClubeDao
 import br.com.managerfoot.data.dao.PropostaIADao
 import br.com.managerfoot.data.dao.RankingGeralDao
 import br.com.managerfoot.data.database.AppDatabase
@@ -30,7 +31,8 @@ class GameRepository @Inject constructor(
     private val hallDaFamaDao: HallDaFamaDao,
     private val rankingGeralDao: RankingGeralDao,
     private val estadioDao: EstadioDao,
-    private val propostaIADao: PropostaIADao
+    private val propostaIADao: PropostaIADao,
+    private val propostaClubeDao: PropostaClubeDao
 ) {
     private val simulador = SimuladorPartida()
 
@@ -86,6 +88,7 @@ class GameRepository @Inject constructor(
         rankingGeralDao.deleteAll()
         estadioDao.deleteAll()
         propostaIADao.limparTodas()
+        propostaClubeDao.limparTodas()
     }
 
     suspend fun criarCampeonato(
@@ -716,6 +719,8 @@ class GameRepository @Inject constructor(
         // ── Helper: registra Hall da Fama para uma divisão ────────
         suspend fun registrarHallDaFama(campId: Int, div: Int) {
             if (campId <= 0) return
+            // Evita duplicatas: pula se já existe entrada para este ano + divisão
+            if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div) != null) return
             val tabTop2    = classificacaoDao.buscarTop2(campId)
             val campeao    = tabTop2.getOrNull(0) ?: return
             val vice       = tabTop2.getOrNull(1)
@@ -752,12 +757,38 @@ class GameRepository @Inject constructor(
         registrarHallDaFama(campeonatoBId, 2)
         registrarHallDaFama(campeonatoCId, 3)
         registrarHallDaFama(campeonatoDId, 4)
-        // Apertura e Clausura ARG já tiveram Hall da Fama registrado ao encerrar o torneio
+        // ── Garante conclusão dos torneios estrangeiros ───────────────────────
+        // Quando o usuário controla um time brasileiro os torneios Argentino Clausura
+        // e Uruguaio Clausura/Intermediário podem não ter terminado. Forçamos a
+        // simulação completa antes de registrar o Hall da Fama e fazer promoções.
+        if (campeonatoArgAId > 0 && campeonatoDao.buscarPorId(campeonatoArgAId)?.encerrado == false) {
+            simularProximaFaseArgentinaSeNecessario(campeonatoArgAId, -1, ano, temporadaId)
+        }
+        if (campeonatoArgClausuraId > 0 && campeonatoDao.buscarPorId(campeonatoArgClausuraId)?.encerrado == false) {
+            simularProximaFaseArgentinaSeNecessario(campeonatoArgClausuraId, -1, ano, temporadaId)
+        }
+        // Uruguai: simula cadeia Apertura → Intermediário → Clausura em loop (1 rodada por iteração)
+        var itrUru = 100
+        while (itrUru-- > 0) {
+            val algumUruAberto = listOf(campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId)
+                .any { it > 0 && campeonatoDao.buscarPorId(it)?.encerrado == false }
+            if (!algumUruAberto) break
+            simularUruguaiSeNecessario(
+                aperturaId    = campeonatoUruAperturaId,
+                clausuraId    = campeonatoUruClausuraId,
+                intermedidId  = campeonatoUruIntermedId,
+                competBId     = campeonatoUruBCompetId,
+                timeJogadorId = -1,
+                anoAtual      = ano,
+                temporadaId   = temporadaId
+            )
+        }
+        // Argentine Segunda Div. e Uruguayan Apertura/Segunda Div./Competencia
+        // são PONTOS_CORRIDOS — registra via tabela de classificação normalmente.
         registrarHallDaFama(campeonatoArgBId, 10)  // 10 = Segunda Div. Argentina
-        // Uruguai: Apertura e Clausura já registrados; registra a Segunda Div.
+        // Uruguai: Apertura (11), Segunda Div. (15) e Competencia B (16)
         registrarHallDaFama(campeonatoUruAperturaId, 11)  // 11 = Apertura Uruguaio (PONTOS_CORRIDOS)
         registrarHallDaFama(campeonatoUruBId, 15)         // 15 = Segunda Div. Uruguaia
-        registrarHallDaFama(campeonatoUruBCompetId, 16)  // 16 = Competencia URU B
         registrarHallDaFama(campeonatoUruBCompetId, 16)   // 16 = Competencia URU B
 
         // ── Bônus de reputação por título de divisão ──────────────
@@ -854,6 +885,7 @@ class GameRepository @Inject constructor(
             .filter { it > 0 }.forEach { campeonatoDao.encerrar(it) }
 
         jogadorRepository.processarDesenvolvimentoAnual()
+        jogadorRepository.processarExpiracaoContratos(timeJogadorId)
 
         val novoAno         = ano + 1
         val novoTemporadaId = temporadaId + 1
@@ -3865,4 +3897,182 @@ class GameRepository @Inject constructor(
             jogadoresMovidos.add(alvo.id)
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Propostas de trabalho (clube → treinador)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Fluxo reativo de notificações de proposta de clube (pendentes + encerradas não lidas). */
+    fun observarPropostasClube(): Flow<List<PropostaClubeEntity>> =
+        propostaClubeDao.observeNotificacoes()
+
+    /** Fluxo reativo do contador de propostas de clube não lidas. */
+    fun observarContadorPropostasClube(): Flow<Int> =
+        propostaClubeDao.observeContadorNaoLidas()
+
+    /** Marca uma proposta de clube como lida. */
+    suspend fun marcarPropostaClubeComoLida(id: Int) =
+        propostaClubeDao.marcarLida(id)
+
+    /** Marca todas as encerradas como lidas de uma vez. */
+    suspend fun marcarTodasPropostasClubeLidas() =
+        propostaClubeDao.marcarTodasEncerradasLidas()
+
+    /** Recusa a proposta de clube. */
+    suspend fun recusarPropostaClube(id: Int) {
+        propostaClubeDao.atualizarStatus(id, StatusPropostaClube.RECUSADA)
+    }
+
+    /**
+     * Aceita a proposta de clube: o jogador passa a controlar [novoTimeId].
+     * Atualiza os flags controladoPorJogador em ambos os times.
+     */
+    suspend fun aceitarPropostaClube(id: Int, timeAtualId: Int, novoTimeId: Int) {
+        propostaClubeDao.atualizarStatus(id, StatusPropostaClube.ACEITA)
+        // Recusa todas as outras propostas pendentes
+        propostaClubeDao.buscarPendentes().forEach { p ->
+            if (p.id != id) propostaClubeDao.atualizarStatus(p.id, StatusPropostaClube.RECUSADA)
+        }
+        val timeAtual = db.timeDao().buscarPorId(timeAtualId)
+        if (timeAtual != null) {
+            db.timeDao().atualizar(timeAtual.copy(controladoPorJogador = false))
+        }
+        val novoTime = db.timeDao().buscarPorId(novoTimeId)
+        if (novoTime != null) {
+            db.timeDao().atualizar(novoTime.copy(controladoPorJogador = true))
+        }
+    }
+
+    /**
+     * Retorna informações detalhadas de um clube para exibição no painel de proposta.
+     * Inclui: saldo, força média do elenco, capacidade do estádio e resultados da temporada passada.
+     */
+    suspend fun buscarInfoPropostaClube(timeId: Int, temporadaEncerradaId: Int): InfoPropostaClube? {
+        val time = timeRepository.buscarPorId(timeId) ?: return null
+        val jogadores = db.jogadorDao().buscarDisponiveisPorTime(timeId)
+        val forcaMedia = if (jogadores.isNotEmpty()) jogadores.map { it.forca }.average().toFloat() else 0f
+
+        // Campeonatos da temporada recém-encerrada em que o time participou
+        val campeonatosTemporada = db.campeonatoDao().buscarPorTemporadaId(temporadaEncerradaId)
+        val resultados = mutableListOf<ResultadoTemporadaClube>()
+        for (camp in campeonatosTemporada) {
+            val participantes = db.campeonatoDao().buscarIdsParticipantes(camp.id)
+            if (timeId !in participantes) continue
+            val tabela = classificacaoDao.buscarTabelaOrdenada(camp.id)
+            val posicao = tabela.indexOfFirst { it.timeId == timeId }.takeIf { it >= 0 }?.plus(1)
+            val classif = tabela.firstOrNull { it.timeId == timeId }
+            if (classif != null) {
+                resultados.add(
+                    ResultadoTemporadaClube(
+                        nomeCampeonato = camp.nome,
+                        tipoCampeonato = camp.tipo,
+                        posicao = posicao,
+                        vitorias = classif.vitorias,
+                        empates = classif.empates,
+                        derrotas = classif.derrotas,
+                        pontos = classif.pontos,
+                        jogos = classif.jogos
+                    )
+                )
+            }
+        }
+
+        return InfoPropostaClube(
+            timeId            = time.id,
+            nomeClube         = time.nome,
+            nivel             = time.nivel,
+            divisao           = time.divisao,
+            escudoRes         = time.escudoRes,
+            saldo             = time.saldo,
+            forcaMediaElenco  = forcaMedia,
+            capacidadeEstadio = time.estadioCapacidade,
+            resultadosTemporada = resultados
+        )
+    }
+
+    /**
+     * Gera propostas de trabalho de outros clubes com base nos resultados da temporada.
+     * Chamado ao final de cada temporada, antes de criar a nova.
+     *
+     * Regras:
+     * - Campeão da copa nacional OU liga nacional → clubes nivel 8–10 podem oferecer
+     * - Top 5 na liga (sem título) → clubes nivel 6–9
+     * - 6º ao 11º na liga → clubes nivel 5–7
+     * - Fora das condições acima → clubes nivel ≤ 5
+     */
+    suspend fun gerarPropostasDeClube(
+        campeonatoLigaId: Int,
+        copaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        if (timeJogadorId <= 0) return
+        // Limpa propostas anteriores
+        propostaClubeDao.limparTodas()
+
+        // Determina posição na liga
+        val tabelaLiga = classificacaoDao.buscarTabelaOrdenada(campeonatoLigaId)
+        val posicaoLiga = tabelaLiga.indexOfFirst { it.timeId == timeJogadorId }.takeIf { it >= 0 }?.plus(1)
+
+        // Verifica se ganhou a copa nacional
+        val campeaoCopa = if (copaId > 0) classificacaoDao.buscarTop2(copaId).firstOrNull()?.timeId else null
+        val ganhouCopa = campeaoCopa == timeJogadorId
+
+        // Verifica se ganhou a liga
+        val campeaoLiga = tabelaLiga.firstOrNull()?.timeId
+        val ganhouLiga = campeaoLiga == timeJogadorId
+
+        // Define faixa de nível dos clubes que podem oferecer
+        val (nivelMin, nivelMax) = when {
+            ganhouCopa || ganhouLiga           -> 8 to 10
+            posicaoLiga != null && posicaoLiga <= 5  -> 6 to 9
+            posicaoLiga != null && posicaoLiga <= 11 -> 5 to 7
+            else                                     -> 1 to 5
+        }
+
+        val todosOsTimes = db.timeDao().buscarTodos()
+        val candidatos = todosOsTimes.filter { time ->
+            !time.controladoPorJogador &&
+            time.id != timeJogadorId &&
+            time.nivel in nivelMin..nivelMax
+        }.shuffled()
+
+        // Gera entre 1 e 2 propostas (ou 0 se não houver candidatos elegíveis)
+        val qtd = candidatos.size.coerceAtMost(kotlin.random.Random.nextInt(1, 3))
+        candidatos.take(qtd).forEach { time ->
+            propostaClubeDao.inserir(
+                PropostaClubeEntity(
+                    timeOfertanteId = time.id,
+                    temporadaId     = temporadaId
+                )
+            )
+        }
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+//  Modelos de dados para propostas de clube
+// ─────────────────────────────────────────────────────────────────────
+
+data class ResultadoTemporadaClube(
+    val nomeCampeonato: String,
+    val tipoCampeonato: br.com.managerfoot.data.database.entities.TipoCampeonato,
+    val posicao: Int?,
+    val vitorias: Int,
+    val empates: Int,
+    val derrotas: Int,
+    val pontos: Int,
+    val jogos: Int
+)
+
+data class InfoPropostaClube(
+    val timeId: Int,
+    val nomeClube: String,
+    val nivel: Int,
+    val divisao: Int,
+    val escudoRes: String,
+    val saldo: Long,
+    val forcaMediaElenco: Float,
+    val capacidadeEstadio: Int,
+    val resultadosTemporada: List<ResultadoTemporadaClube>
+)

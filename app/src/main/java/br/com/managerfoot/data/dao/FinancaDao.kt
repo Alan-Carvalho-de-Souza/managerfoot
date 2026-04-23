@@ -17,7 +17,9 @@ data class TransferenciaDetalhe(
     val jogadorNome: String,
     val posicao: String,
     val origemNome: String?,
+    val origemEscudo: String?,
     val destinoNome: String?,
+    val destinoEscudo: String?,
     val valor: Long,
     val tipo: TipoTransferencia,
     val temporadaId: Int,
@@ -50,7 +52,8 @@ interface FinancaDao {
 
     @Query("""
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
-               orig.nome AS origemNome, dest.nome AS destinoNome,
+               orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
+               dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
                t.valor, t.tipo, t.temporadaId, t.mes
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
@@ -62,7 +65,8 @@ interface FinancaDao {
 
     @Query("""
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
-               orig.nome AS origemNome, dest.nome AS destinoNome,
+               orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
+               dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
                t.valor, t.tipo, t.temporadaId, t.mes
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
@@ -78,7 +82,8 @@ interface FinancaDao {
 
     @Query("""
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
-               orig.nome AS origemNome, dest.nome AS destinoNome,
+               orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
+               dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
                t.valor, t.tipo, t.temporadaId, t.mes
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId

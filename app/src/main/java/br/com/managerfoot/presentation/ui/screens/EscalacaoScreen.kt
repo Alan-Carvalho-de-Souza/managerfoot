@@ -1445,7 +1445,13 @@ private fun TransferenciaRow(t: br.com.managerfoot.data.dao.TransferenciaDetalhe
                 append(" → ")
                 append(t.destinoNome ?: "Mercado livre")
             }
-            Text(descricao, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TeamBadge(nome = t.origemNome ?: "", escudoRes = t.origemEscudo ?: "", size = 16.dp)
+                Text(t.origemNome ?: "Mercado livre", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("→", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TeamBadge(nome = t.destinoNome ?: "", escudoRes = t.destinoEscudo ?: "", size = 16.dp)
+                Text(t.destinoNome ?: "Mercado livre", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text("Temp. ${t.temporadaId} · Mês ${t.mes}", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline)
         }

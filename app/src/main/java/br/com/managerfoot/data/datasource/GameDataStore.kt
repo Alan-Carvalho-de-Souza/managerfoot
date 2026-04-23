@@ -202,6 +202,14 @@ class GameDataStore @Inject constructor(
         }
     }
 
+    /** Atualiza apenas o time do jogador e seu campeonato ativo (ao trocar de clube). */
+    suspend fun salvarTimeDoJogador(novoTimeId: Int, novoCampeonatoId: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_TIME_ID]       = novoTimeId
+            prefs[KEY_CAMPEONATO_ID] = novoCampeonatoId
+        }
+    }
+
     suspend fun resetar() {
         context.dataStore.edit { it.clear() }
     }

@@ -366,12 +366,23 @@ class DashboardViewModel @Inject constructor(
     val posicaoNaTabela: StateFlow<Int> = _posicaoNaTabela.asStateFlow()
 
     // ── Notificações ─────────────────────────────────────────────────────────
-    val notificacoesContador: StateFlow<Int> = gameRepository.observarContadorNotificacoes()
+    // Contador combinado (propostas de transferência + propostas de clube)
+    val notificacoesContador: StateFlow<Int> = combine(
+        gameRepository.observarContadorNotificacoes(),
+        gameRepository.observarContadorPropostasClube()
+    ) { transf, clube -> transf + clube }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val notificacoes: StateFlow<List<br.com.managerfoot.data.database.entities.PropostaIAEntity>> =
         gameRepository.observarNotificacoes()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val propostasClube: StateFlow<List<br.com.managerfoot.data.database.entities.PropostaClubeEntity>> =
+        gameRepository.observarPropostasClube()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _infoPropostaClubeSelecionada = MutableStateFlow<InfoPropostaClube?>(null)
+    val infoPropostaClubeSelecionada: StateFlow<InfoPropostaClube?> = _infoPropostaClubeSelecionada.asStateFlow()
 
     fun marcarNotificacaoLida(id: Int) = viewModelScope.launch {
         gameRepository.marcarNotificacaoLida(id)
@@ -379,6 +390,39 @@ class DashboardViewModel @Inject constructor(
 
     fun marcarTodasNotificacoesLidas() = viewModelScope.launch {
         gameRepository.marcarTodasNotificacoesLidas()
+        gameRepository.marcarTodasPropostasClubeLidas()
+    }
+
+    fun carregarInfoPropostaClube(timeOfertanteId: Int) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        _infoPropostaClubeSelecionada.value =
+            gameRepository.buscarInfoPropostaClube(timeOfertanteId, save.temporadaId)
+    }
+
+    fun fecharInfoPropostaClube() {
+        _infoPropostaClubeSelecionada.value = null
+    }
+
+    fun recusarPropostaClube(id: Int) = viewModelScope.launch {
+        gameRepository.recusarPropostaClube(id)
+        _infoPropostaClubeSelecionada.value = null
+    }
+
+    fun aceitarPropostaClube(propostaId: Int, novoTimeId: Int) = viewModelScope.launch {
+        val save = gameDataStore.saveState.first()
+        gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId)
+        val novaDiv = gameRepository.buscarInfoPropostaClube(novoTimeId, save.temporadaId)?.divisao ?: 1
+        val novoCampId = when (novaDiv) {
+            1 -> save.campeonatoAId; 2 -> save.campeonatoBId
+            3 -> save.campeonatoCId; 4 -> save.campeonatoDId
+            5 -> save.campeonatoArgAId
+            6 -> save.campeonatoArgBId
+            9 -> save.campeonatoUruAperturaId
+            10 -> save.campeonatoUruBId
+            else -> save.campeonatoAId
+        }
+        gameDataStore.salvarTimeDoJogador(novoTimeId, novoCampId)
+        _infoPropostaClubeSelecionada.value = null
     }
 
     fun carregar(timeId: Int) = viewModelScope.launch {
@@ -883,6 +927,10 @@ class DashboardViewModel @Inject constructor(
         val save = gameDataStore.saveState.first()
         _uiState.value = DashboardUiState.Simulando
         try {
+            // fecharSimulacao() chama avancarMes() para dezembro, fazendo o ano avançar de 12→1
+            // antes de encerrarTemporada ser chamada. Detectamos isso: se mesAtual==1, o ano já
+            // foi incrementado antecipadamente, então usamos anoAtual-1 como o ano da temporada.
+            val anoTemporada = if (save.mesAtual == 1) save.anoAtual - 1 else save.anoAtual
             val novaInfo = gameRepository.encerrarTemporadaComHallDaFama(
                 campeonatoAId            = save.campeonatoAId,
                 campeonatoBId            = save.campeonatoBId,
@@ -897,7 +945,7 @@ class DashboardViewModel @Inject constructor(
                 campeonatoUruBId         = save.campeonatoUruBId,
                 campeonatoUruBCompetId    = save.campeonatoUruBCompetId,
                 temporadaId              = save.temporadaId,
-                ano                      = save.anoAtual,
+                ano                      = anoTemporada,
                 timeJogadorId            = save.timeIdJogador
             )
             // Determina em qual divisão o jogador estará na próxima temporada
@@ -937,6 +985,15 @@ class DashboardViewModel @Inject constructor(
                 saveAtualizado.timeIdJogador,
                 listOf(saveAtualizado.campeonatoId, saveAtualizado.copaId, saveAtualizado.copaArgId, saveAtualizado.supercopaId, saveAtualizado.campeonatoArgClausuraId).filter { it > 0 }
             )
+            // Gera propostas de trabalho de outros clubes com base nos resultados da temporada encerrada
+            if (save.timeIdJogador > 0) {
+                gameRepository.gerarPropostasDeClube(
+                    campeonatoLigaId = save.campeonatoId,
+                    copaId           = save.copaId,
+                    timeJogadorId    = save.timeIdJogador,
+                    temporadaId      = save.temporadaId
+                )
+            }
         } catch (e: Exception) {
             // Registrar erro sem travar a UI
         }
@@ -1574,11 +1631,13 @@ class TabelaViewModel @Inject constructor(
             val aId = campeonatoUruAperturaId
             val cId = campeonatoUruClausuraId
             val iId = campeonatoUruIntermedId
+            val bId = campeonatoUruBId
             val fluxoA = if (aId > 0) gameRepository.observarTabela(aId) else flowOf(emptyList())
             val fluxoC = if (cId > 0) gameRepository.observarTabela(cId) else flowOf(emptyList())
             val fluxoI = if (iId > 0) gameRepository.observarTabela(iId) else flowOf(emptyList())
-            combine(fluxoA, fluxoC, fluxoI) { apertura, clausura, intermed ->
-                (apertura + clausura + intermed)
+            val fluxoB = if (bId > 0) gameRepository.observarTabela(bId) else flowOf(emptyList())
+            combine(fluxoA, fluxoC, fluxoI, fluxoB) { apertura, clausura, intermed, segunda ->
+                (apertura + clausura + intermed + segunda)
                     .groupBy { it.timeId }
                     .map { (timeId, rows) ->
                         ClassificacaoEntity(
@@ -2726,6 +2785,16 @@ class JogadoresViewModel @Inject constructor(
             mes         = save.mesAtual
         )
         _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(jogador.valorMercado)}!"
+    }
+
+    fun renovarContrato(jogador: Jogador, novoSalario: Long, novosAnos: Int) = viewModelScope.launch {
+        jogadorRepository.renovarContrato(jogador.id, novoSalario, novosAnos)
+        _mensagem.value = "Contrato de ${jogador.nomeAbreviado} renovado por $novosAnos ano(s)."
+    }
+
+    fun dispensarJogador(jogador: Jogador) = viewModelScope.launch {
+        jogadorRepository.dispensarParaMercado(jogador.id)
+        _mensagem.value = "${jogador.nomeAbreviado} dispensado para o mercado livre."
     }
 
     private fun formatarValor(centavos: Long): String {

@@ -117,6 +117,18 @@ fun ManagerFootNavGraph() {
             val timeId = backStack.arguments!!.getInt("timeId")
             val dashVm: DashboardViewModel = hiltViewModel()
             val saveState by dashVm.saveState.collectAsState()
+
+            // Quando o jogador aceita uma proposta de clube, timeIdJogador muda no DataStore.
+            // Detectamos isso e navegamos para o dashboard do novo time.
+            val novoTimeId = saveState?.timeIdJogador
+            LaunchedEffect(novoTimeId) {
+                if (novoTimeId != null && novoTimeId > 0 && novoTimeId != timeId) {
+                    navController.navigate(Rota.Dashboard.comTimeId(novoTimeId)) {
+                        popUpTo(Rota.Dashboard.comTimeId(timeId)) { inclusive = true }
+                    }
+                }
+            }
+
             DashboardScreen(
                 timeId = timeId,
                 vm = dashVm,

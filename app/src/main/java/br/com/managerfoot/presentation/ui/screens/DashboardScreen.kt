@@ -3,6 +3,8 @@
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,7 +22,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.managerfoot.data.database.entities.StatusProposta
+import br.com.managerfoot.data.database.entities.StatusPropostaClube
+import br.com.managerfoot.data.database.entities.TipoCampeonato
 import br.com.managerfoot.data.database.entities.TipoProposta
+import br.com.managerfoot.data.repository.InfoPropostaClube
+import br.com.managerfoot.data.repository.ResultadoTemporadaClube
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.viewmodel.DashboardUiState
 import br.com.managerfoot.presentation.viewmodel.DashboardViewModel
@@ -65,6 +71,8 @@ fun DashboardScreen(
     val precisaEscolherPatrocinador by vm.precisaEscolherPatrocinador.collectAsStateWithLifecycle()
     val notificacoesContador by vm.notificacoesContador.collectAsStateWithLifecycle()
     val notificacoes by vm.notificacoes.collectAsStateWithLifecycle()
+    val propostasClube by vm.propostasClube.collectAsStateWithLifecycle()
+    val infoPropostaClubeSelecionada by vm.infoPropostaClubeSelecionada.collectAsStateWithLifecycle()
 
     var abaAtual by rememberSaveable { mutableIntStateOf(0) }
 
@@ -314,11 +322,14 @@ fun DashboardScreen(
         } // end LazyColumn
         } else if (abaAtual == 1) {
             NotificacoesAba(
-                padding       = ip,
-                notificacoes  = notificacoes,
-                todosOsTimes  = todosOsTimes,
-                onMarcarLida  = { vm.marcarNotificacaoLida(it) },
-                onMarcarTodas = { vm.marcarTodasNotificacoesLidas() }
+                padding           = ip,
+                notificacoes      = notificacoes,
+                propostasClube    = propostasClube,
+                todosOsTimes      = todosOsTimes,
+                onMarcarLida      = { vm.marcarNotificacaoLida(it) },
+                onMarcarTodas     = { vm.marcarTodasNotificacoesLidas() },
+                onVerPropostaClube = { proposta -> vm.carregarInfoPropostaClube(proposta.timeOfertanteId) },
+                onRecusarPropostaClube = { vm.recusarPropostaClube(it) }
             )
         } else {
             MenuAba(
@@ -343,6 +354,22 @@ fun DashboardScreen(
             )
         }
     } // end Scaffold
+
+    // Painel de detalhes de proposta de clube (exibido sobre a tela)
+    infoPropostaClubeSelecionada?.let { info ->
+        PropostaClubeDetalheDialog(
+            info = info,
+            onAceitar = { vm.aceitarPropostaClube(
+                propostaId  = propostasClube.firstOrNull { it.timeOfertanteId == info.timeId }?.id ?: 0,
+                novoTimeId  = info.timeId
+            )},
+            onRecusar = {
+                val id = propostasClube.firstOrNull { it.timeOfertanteId == info.timeId }?.id ?: 0
+                vm.recusarPropostaClube(id)
+            },
+            onDismiss = { vm.fecharInfoPropostaClube() }
+        )
+    }
 }
 
 @Composable
@@ -451,13 +478,22 @@ private fun MenuAba(
 private fun NotificacoesAba(
     padding: PaddingValues,
     notificacoes: List<br.com.managerfoot.data.database.entities.PropostaIAEntity>,
+    propostasClube: List<br.com.managerfoot.data.database.entities.PropostaClubeEntity>,
     todosOsTimes: List<br.com.managerfoot.domain.model.Time>,
     onMarcarLida: (Int) -> Unit,
-    onMarcarTodas: () -> Unit
+    onMarcarTodas: () -> Unit,
+    onVerPropostaClube: (br.com.managerfoot.data.database.entities.PropostaClubeEntity) -> Unit,
+    onRecusarPropostaClube: (Int) -> Unit
 ) {
-    val temEncerradas = notificacoes.any {
+    val temEncerradasTransf = notificacoes.any {
         (it.status == StatusProposta.ACEITA || it.status == StatusProposta.RECUSADA) && !it.lida
     }
+    val temEncerradasClube = propostasClube.any {
+        (it.status == StatusPropostaClube.ACEITA || it.status == StatusPropostaClube.RECUSADA) && !it.lida
+    }
+    val temEncerradas = temEncerradasTransf || temEncerradasClube
+    val tudo = notificacoes.isEmpty() && propostasClube.isEmpty()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -467,7 +503,7 @@ private fun NotificacoesAba(
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (notificacoes.isEmpty()) {
+        if (tudo) {
             item {
                 Text(
                     text = "Nenhuma notificação no momento.",
@@ -485,54 +521,47 @@ private fun NotificacoesAba(
                     }
                 }
             }
-            items(notificacoes, key = { it.id }) { notif ->
-                val nomeTime = todosOsTimes.find { it.id == notif.timeCompradorId }?.nome
-                    ?: "Time ${notif.timeCompradorId}"
-                val encerrada = notif.status == StatusProposta.ACEITA || notif.status == StatusProposta.RECUSADA
-                val containerColor = when {
-                    !encerrada -> MaterialTheme.colorScheme.primaryContainer
-                    notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.tertiaryContainer
-                    else -> MaterialTheme.colorScheme.errorContainer
+
+            // ── Propostas de trabalho de outros clubes ──────────────────────
+            if (propostasClube.isNotEmpty()) {
+                item {
+                    Text(
+                        "Propostas de trabalho",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
-                val onContainerColor = when {
-                    !encerrada -> MaterialTheme.colorScheme.onPrimaryContainer
-                    notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.onTertiaryContainer
-                    else -> MaterialTheme.colorScheme.onErrorContainer
-                }
-                val tipoLabel = if (notif.tipoProposta == TipoProposta.EMPRESTIMO) "empréstimo" else "compra"
-                val valorFmt = "R$ %,.0f".format(notif.valorOfertado / 100.0)
-                val titulo: String
-                val descricao: String
-                when (notif.status) {
-                    StatusProposta.PENDENTE -> {
-                        titulo = "Proposta de $nomeTime"
-                        descricao = "Oferta de $tipoLabel: $valorFmt. Acesse o Mercado para responder."
+                items(propostasClube, key = { "clube_${it.id}" }) { proposta ->
+                    val nomeTime = todosOsTimes.find { it.id == proposta.timeOfertanteId }?.nome
+                        ?: "Clube ${proposta.timeOfertanteId}"
+                    val encerrada = proposta.status == StatusPropostaClube.ACEITA || proposta.status == StatusPropostaClube.RECUSADA
+                    val containerColor = when {
+                        !encerrada -> MaterialTheme.colorScheme.secondaryContainer
+                        proposta.status == StatusPropostaClube.ACEITA -> MaterialTheme.colorScheme.tertiaryContainer
+                        else -> MaterialTheme.colorScheme.surfaceVariant
                     }
-                    StatusProposta.AGUARDANDO_RESPOSTA_IA -> {
-                        titulo = "Aguardando resposta — $nomeTime"
-                        descricao = "A IA está avaliando sua contra-oferta de $tipoLabel."
+                    val onContainerColor = when {
+                        !encerrada -> MaterialTheme.colorScheme.onSecondaryContainer
+                        proposta.status == StatusPropostaClube.ACEITA -> MaterialTheme.colorScheme.onTertiaryContainer
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
-                    StatusProposta.ACEITA -> {
-                        titulo = "Negociação aceita — $nomeTime"
-                        val valorAceito = if (notif.valorSolicitadoJogador > 0)
-                            "R$ %,.0f".format(notif.valorSolicitadoJogador / 100.0)
-                        else valorFmt
-                        descricao = "A IA aceitou a proposta de $tipoLabel por $valorAceito."
+                    val titulo = when (proposta.status) {
+                        StatusPropostaClube.PENDENTE -> "Proposta de $nomeTime"
+                        StatusPropostaClube.ACEITA   -> "Aceito — $nomeTime"
+                        StatusPropostaClube.RECUSADA -> "Recusado — $nomeTime"
                     }
-                    StatusProposta.RECUSADA -> {
-                        titulo = "Negociação encerrada — $nomeTime"
-                        descricao = "A IA recusou a proposta de $tipoLabel."
+                    val descricao = when (proposta.status) {
+                        StatusPropostaClube.PENDENTE -> "$nomeTime quer que você comande o clube na próxima temporada. Toque para ver detalhes."
+                        StatusPropostaClube.ACEITA   -> "Você aceitou o cargo de treinador em $nomeTime."
+                        StatusPropostaClube.RECUSADA -> "Você recusou a proposta de $nomeTime."
                     }
-                }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = containerColor)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = containerColor)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Text(titulo,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
@@ -541,11 +570,91 @@ private fun NotificacoesAba(
                             Text(descricao,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = onContainerColor)
+                            if (proposta.status == StatusPropostaClube.PENDENTE) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { onVerPropostaClube(proposta) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Ver detalhes do clube") }
+                            }
                         }
-                        if (encerrada && !notif.lida) {
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { onMarcarLida(notif.id) }) {
-                                Text("OK", color = onContainerColor)
+                    }
+                }
+            }
+
+            // ── Propostas de transferência de jogadores ─────────────────────
+            if (notificacoes.isNotEmpty()) {
+                item {
+                    Text(
+                        "Transferências",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                items(notificacoes, key = { "notif_${it.id}" }) { notif ->
+                    val nomeTime = todosOsTimes.find { it.id == notif.timeCompradorId }?.nome
+                        ?: "Time ${notif.timeCompradorId}"
+                    val encerrada = notif.status == StatusProposta.ACEITA || notif.status == StatusProposta.RECUSADA
+                    val containerColor = when {
+                        !encerrada -> MaterialTheme.colorScheme.primaryContainer
+                        notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.tertiaryContainer
+                        else -> MaterialTheme.colorScheme.errorContainer
+                    }
+                    val onContainerColor = when {
+                        !encerrada -> MaterialTheme.colorScheme.onPrimaryContainer
+                        notif.status == StatusProposta.ACEITA -> MaterialTheme.colorScheme.onTertiaryContainer
+                        else -> MaterialTheme.colorScheme.onErrorContainer
+                    }
+                    val tipoLabel = if (notif.tipoProposta == TipoProposta.EMPRESTIMO) "empréstimo" else "compra"
+                    val valorFmt = "R$ %,.0f".format(notif.valorOfertado / 100.0)
+                    val titulo: String
+                    val descricao: String
+                    when (notif.status) {
+                        StatusProposta.PENDENTE -> {
+                            titulo = "Proposta de $nomeTime"
+                            descricao = "Oferta de $tipoLabel: $valorFmt. Acesse o Mercado para responder."
+                        }
+                        StatusProposta.AGUARDANDO_RESPOSTA_IA -> {
+                            titulo = "Aguardando resposta — $nomeTime"
+                            descricao = "A IA está avaliando sua contra-oferta de $tipoLabel."
+                        }
+                        StatusProposta.ACEITA -> {
+                            titulo = "Negociação aceita — $nomeTime"
+                            val valorAceito = if (notif.valorSolicitadoJogador > 0)
+                                "R$ %,.0f".format(notif.valorSolicitadoJogador / 100.0)
+                            else valorFmt
+                            descricao = "A IA aceitou a proposta de $tipoLabel por $valorAceito."
+                        }
+                        StatusProposta.RECUSADA -> {
+                            titulo = "Negociação encerrada — $nomeTime"
+                            descricao = "A IA recusou a proposta de $tipoLabel."
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = containerColor)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(titulo,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = onContainerColor)
+                                Spacer(Modifier.height(4.dp))
+                                Text(descricao,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = onContainerColor)
+                            }
+                            if (encerrada && !notif.lida) {
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { onMarcarLida(notif.id) }) {
+                                    Text("OK", color = onContainerColor)
+                                }
                             }
                         }
                     }
@@ -554,6 +663,144 @@ private fun NotificacoesAba(
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Painel de detalhes de proposta de clube
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PropostaClubeDetalheDialog(
+    info: InfoPropostaClube,
+    onAceitar: () -> Unit,
+    onRecusar: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TeamBadge(nome = info.nomeClube, escudoRes = info.escudoRes, size = 48.dp)
+                Text(
+                    info.nomeClube,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Nível e divisão
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Nível ${info.nivel}") }
+                    )
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(nomeDivisaoClube(info.divisao)) }
+                    )
+                }
+
+                HorizontalDivider()
+
+                // Financeiro
+                InfoRow("Dinheiro em caixa", formatarSaldo(info.saldo))
+                InfoRow("Força média do elenco", "%.1f".format(info.forcaMediaElenco))
+                InfoRow("Capacidade do estádio", "%,d torcedores".format(info.capacidadeEstadio))
+
+                if (info.resultadosTemporada.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text(
+                        "Última temporada",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    info.resultadosTemporada.forEach { resultado ->
+                        ResultadoClubeRow(resultado)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onAceitar) { Text("Aceitar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onRecusar) { Text("Recusar") }
+        }
+    )
+}
+
+@Composable
+private fun InfoRow(label: String, valor: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            valor,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun ResultadoClubeRow(resultado: ResultadoTemporadaClube) {
+    val nomeComp = when (resultado.tipoCampeonato) {
+        TipoCampeonato.NACIONAL_DIVISAO1 -> "Série A"
+        TipoCampeonato.NACIONAL_DIVISAO2 -> "Série B"
+        TipoCampeonato.NACIONAL_DIVISAO3 -> "Série C"
+        TipoCampeonato.NACIONAL_DIVISAO4 -> "Série D"
+        TipoCampeonato.COPA_NACIONAL     -> "Copa do Brasil"
+        TipoCampeonato.SUPERCOPA         -> "Supercopa Rei"
+        TipoCampeonato.EXTRANGEIRO_DIVISAO1 -> "Div. 1 Estrangeiro"
+        TipoCampeonato.EXTRANGEIRO_DIVISAO2 -> "Div. 2 Estrangeiro"
+        else -> resultado.nomeCampeonato.substringBefore(" 20").trim()
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(nomeComp,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(4.dp))
+            if (resultado.posicao != null) {
+                Text("${resultado.posicao}º colocado  •  ${resultado.pontos} pts",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Text("${resultado.vitorias}V ${resultado.empates}E ${resultado.derrotas}D  (${resultado.jogos} jogos)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun nomeDivisaoClube(divisao: Int): String = when (divisao) {
+    1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"
+    5 -> "Primeira Div. Argentina (Apertura)"; 6 -> "Segunda Div. Argentina"
+    9 -> "Primeira Div. Uruguai"; 10 -> "Segunda Div. Uruguai"
+    else -> "Div. $divisao"
+}
+
+private fun formatarSaldo(saldo: Long): String =
+    "R$ %,.0f".format(saldo / 100.0)
 
 // ─────────────────────────────────────────────
 //  Utilitário de data para o card da próxima partida
