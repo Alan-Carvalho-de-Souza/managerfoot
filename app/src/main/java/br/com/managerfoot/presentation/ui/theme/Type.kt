@@ -4,35 +4,44 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
+import br.com.managerfoot.R
 
-// ── Tipografia — Tactical Dark ───────────────────────────────
-// Fontes: FontFamily.SansSerif (fallback seguro sem arquivos de fonte).
-// Para ativar Barlow: adicione os arquivos TTF em res/font/ e descomente
-// as linhas BarlowFamily / BarlowCondensedFamily abaixo.
+// ── Tipografia — Tactical Dark ──────────────────────────────
 //
-// Arquivos necessários em res/font/:
-//   barlow_regular.ttf, barlow_medium.ttf, barlow_semibold.ttf
-//   barlow_condensed_semibold.ttf, barlow_condensed_bold.ttf, barlow_condensed_black.ttf
+// Fontes via Google Fonts (downloadable):
+//   - Barlow: corpo (regular, medium, semibold)
+//   - Barlow Condensed: títulos, placares e KPIs (semibold, bold, black)
 //
-// Descomente e substitua FontFamily.SansSerif por BarlowFamily /
-// BarlowCondensedFamily após adicionar os arquivos.
+// Caso o device não tenha Google Play Services, o Compose cai para
+// o fallback (FontFamily.SansSerif = Roboto).
 
-// private val BarlowFamily = FontFamily(
-//     Font(R.font.barlow_regular,   FontWeight.Normal),
-//     Font(R.font.barlow_medium,    FontWeight.Medium),
-//     Font(R.font.barlow_semibold,  FontWeight.SemiBold),
-// )
-// private val BarlowCondensedFamily = FontFamily(
-//     Font(R.font.barlow_condensed_semibold, FontWeight.SemiBold),
-//     Font(R.font.barlow_condensed_bold,     FontWeight.Bold),
-//     Font(R.font.barlow_condensed_black,    FontWeight.Black),
-// )
+private val GoogleFontsProvider = GoogleFont.Provider(
+    providerAuthority = "com.google.android.gms.fonts",
+    providerPackage   = "com.google.android.gms",
+    certificates      = R.array.com_google_android_gms_fonts_certs
+)
 
-private val BodyFamily      = FontFamily.SansSerif   // → BarlowFamily
-private val DisplayFamily   = FontFamily.SansSerif   // → BarlowCondensedFamily
+private val BarlowGF          = GoogleFont("Barlow")
+private val BarlowCondensedGF = GoogleFont("Barlow Condensed")
+
+private val BodyFamily = FontFamily(
+    Font(googleFont = BarlowGF, fontProvider = GoogleFontsProvider, weight = FontWeight.Normal),
+    Font(googleFont = BarlowGF, fontProvider = GoogleFontsProvider, weight = FontWeight.Medium),
+    Font(googleFont = BarlowGF, fontProvider = GoogleFontsProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = BarlowGF, fontProvider = GoogleFontsProvider, weight = FontWeight.Bold)
+)
+
+private val DisplayFamily = FontFamily(
+    Font(googleFont = BarlowCondensedGF, fontProvider = GoogleFontsProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = BarlowCondensedGF, fontProvider = GoogleFontsProvider, weight = FontWeight.Bold),
+    Font(googleFont = BarlowCondensedGF, fontProvider = GoogleFontsProvider, weight = FontWeight.Black)
+)
 
 val ManagerFootTypography = Typography(
+    // Display + Headline + TitleLarge usam Barlow Condensed
     displayLarge = TextStyle(
         fontFamily   = DisplayFamily,
         fontWeight   = FontWeight.Black,
@@ -75,6 +84,7 @@ val ManagerFootTypography = Typography(
         lineHeight   = 28.sp,
         letterSpacing = 0.sp,
     ),
+    // Title médio/pequeno + body + label usam Barlow regular
     titleMedium = TextStyle(
         fontFamily   = BodyFamily,
         fontWeight   = FontWeight.SemiBold,
