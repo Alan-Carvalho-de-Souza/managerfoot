@@ -110,7 +110,7 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity, isOdd: Bool
     val saldo = entry.golsPro - entry.golsContra
     val saldoText = if (saldo > 0) "+$saldo" else "$saldo"
     val divLabel = when (entry.divisaoAtual) {
-        1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "A"; 6 -> "B"; else -> "?"
+        1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "A"; 6 -> "B"; 9 -> "A"; 10 -> "B"; else -> "?"
     }
 
     // Cores de posição: ouro / prata / bronze

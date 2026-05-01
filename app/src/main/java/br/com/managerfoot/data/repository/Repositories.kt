@@ -213,6 +213,65 @@ class JogadorRepository @Inject constructor(
     }
 
     /**
+     * Realiza o empréstimo de um jogador do time de origem para [oferta].timeCompradorId.
+     * O jogador é movido para o clube tomador, mas mantém referência ao clube de origem
+     * e à data de retorno (12 meses à frente).
+     */
+    suspend fun realizarEmprestimo(
+        oferta: OfertaTransferencia,
+        temporadaId: Int,
+        mes: Int,
+        anoRetorno: Int,
+        mesRetorno: Int
+    ) {
+        jogadorDao.transferirJogador(oferta.jogadorId, oferta.timeCompradorId)
+        jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
+        oferta.timeVendedorId?.let { origem ->
+            jogadorDao.atualizarEmprestimo(oferta.jogadorId, origem, anoRetorno, mesRetorno)
+        }
+        financaDao.inserirTransferencia(
+            TransferenciaEntity(
+                jogadorId = oferta.jogadorId,
+                timeOrigemId = oferta.timeVendedorId,
+                timeDestinoId = oferta.timeCompradorId,
+                valor = oferta.valor,
+                temporadaId = temporadaId,
+                mes = mes,
+                tipo = TipoTransferencia.EMPRESTIMO_SAIDA
+            )
+        )
+    }
+
+    /** Observa os jogadores emprestados pelo time de origem (aparecem na aba Meu elenco). */
+    fun observeEmprestadosDoTime(timeOrigemId: Int): kotlinx.coroutines.flow.Flow<List<Jogador>> =
+        jogadorDao.observeEmprestadosPorOrigem(timeOrigemId).map { lista -> lista.map { it.toDomain() } }
+
+    /**
+     * Verifica se algum empréstimo expirou no mês corrente e devolve os jogadores
+     * ao clube de origem, registrando um [TipoTransferencia.EMPRESTIMO_RETORNO].
+     */
+    suspend fun processarRetornosEmprestimo(anoAtual: Int, mesAtual: Int, temporadaId: Int) {
+        val expirados = jogadorDao.buscarEmprestadosParaRetorno(anoAtual, mesAtual)
+        for (j in expirados) {
+            val origemId = j.timeOrigemEmprestimo ?: continue
+            jogadorDao.transferirJogador(j.id, origemId)
+            jogadorDao.atualizarEscalacaoSemPosicao(j.id, 0)
+            jogadorDao.limparEmprestimo(j.id)
+            financaDao.inserirTransferencia(
+                TransferenciaEntity(
+                    jogadorId = j.id,
+                    timeOrigemId = j.timeId,
+                    timeDestinoId = origemId,
+                    valor = 0L,
+                    temporadaId = temporadaId,
+                    mes = mesAtual,
+                    tipo = TipoTransferencia.EMPRESTIMO_RETORNO
+                )
+            )
+        }
+    }
+
+    /**
      * Processa o fim de temporada de todos os jogadores:
      * - Incrementa um ano na idade
      * - Jogadores sem clube (timeId=null) e não aposentados recebem pequena regressão
@@ -834,7 +893,10 @@ class JogadorRepository @Inject constructor(
         treinouNestaCiclo = treinouNestaCiclo,
         partidasSemJogar = partidasSemJogar,
         disponívelParaVenda = disponívelParaVenda,
-        disponívelParaEmprestimo = disponívelParaEmprestimo
+        disponívelParaEmprestimo = disponívelParaEmprestimo,
+        timeOrigemEmprestimo = timeOrigemEmprestimo,
+        anoRetornoEmprestimo = anoRetornoEmprestimo,
+        mesRetornoEmprestimo = mesRetornoEmprestimo
     )
 }
 

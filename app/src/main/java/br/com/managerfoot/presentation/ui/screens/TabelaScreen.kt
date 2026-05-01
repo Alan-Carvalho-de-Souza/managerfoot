@@ -214,7 +214,7 @@ fun TabelaScreen(
 
             // Header row (só para visualização plana)
             if (!ehGrupos) {
-                TabelaHeader(showDivCol = divisaoSelecionada == 13)
+                TabelaHeader()
                 HorizontalDivider()
             }
 
@@ -262,11 +262,7 @@ fun TabelaScreen(
                         val escudoRes = time?.escudoRes ?: ""
                         val ehJogador = item.timeId == timeJogadorId
                         val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
-                        val divLabel = if (divisaoSelecionada == 13) when (time?.divisao) {
-                            9 -> "A"
-                            10 -> "B"
-                            else -> null
-                        } else null
+                        val divLabel = null
                         TabelaRow(
                             posicao = index + 1,
                             nomeTime = nomeTime,

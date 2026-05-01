@@ -28,7 +28,7 @@ import br.com.managerfoot.data.database.entities.*
         PropostaIAEntity::class,
         PropostaClubeEntity::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

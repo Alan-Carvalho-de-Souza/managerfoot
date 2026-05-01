@@ -408,6 +408,10 @@ class DashboardViewModel @Inject constructor(
         _infoPropostaClubeSelecionada.value = null
     }
 
+    fun marcarPropostaClubeComoLida(id: Int) = viewModelScope.launch {
+        gameRepository.marcarPropostaClubeComoLida(id)
+    }
+
     fun aceitarPropostaClube(propostaId: Int, novoTimeId: Int) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId)
@@ -788,7 +792,7 @@ class DashboardViewModel @Inject constructor(
                 iteracoesMes++
                 val patrocinioMensal      = save.patrocinadorValorAnual / 12L
                 val patrocinioJaCreditado = save.patrocinadorPreCreditado
-                gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, save.mesAtual, patrocinioMensal, patrocinioJaCreditado)
+                gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, save.mesAtual, patrocinioMensal, patrocinioJaCreditado, save.anoAtual)
                 gameDataStore.avancarMes()  // também zera patrocinadorPreCreditado
                 save = gameDataStore.saveState.first()
             }
@@ -1266,6 +1270,12 @@ class MercadoViewModel @Inject constructor(
     private val _transferencias = MutableStateFlow<List<TransferenciaDetalhe>>(emptyList())
     val transferencias: StateFlow<List<TransferenciaDetalhe>> = _transferencias.asStateFlow()
 
+    private val _jogadoresEmprestados = MutableStateFlow<List<Jogador>>(emptyList())
+    val jogadoresEmprestados: StateFlow<List<Jogador>> = _jogadoresEmprestados.asStateFlow()
+
+    private val _nomesTimesPorId = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val nomesTimesPorId: StateFlow<Map<Int, String>> = _nomesTimesPorId.asStateFlow()
+
     private val _propostas = MutableStateFlow<List<PropostaIATransferencia>>(emptyList())
     val propostas: StateFlow<List<PropostaIATransferencia>> = _propostas.asStateFlow()
 
@@ -1279,9 +1289,11 @@ class MercadoViewModel @Inject constructor(
             launch {
                 timeRepository.observeTodos().collect { times ->
                     _saldo.value = times.find { it.id == tId }?.saldo ?: 0L
+                    _nomesTimesPorId.value = times.associate { it.id to it.nome }
                 }
             }
             launch { jogadorRepository.observeTodasTransferencias().collect { _transferencias.value = it } }
+            launch { jogadorRepository.observeEmprestadosDoTime(tId).collect { _jogadoresEmprestados.value = it } }
             // Observa propostas ativas e enriquece com nomes de jogador e time
             launch {
                 gameRepository.observarPropostasAtivas().collect { lista ->
@@ -1389,9 +1401,16 @@ class MercadoViewModel @Inject constructor(
             ),
             playerTimeId = timeId,
             temporadaId  = save.temporadaId,
-            mes          = save.mesAtual
+            mes          = save.mesAtual,
+            anoAtual     = save.anoAtual
         )
-        _mensagem.value = "${proposta.jogadorNomeAbrev} vendido para ${proposta.nomeTimeComprador} por ${formatarValor(proposta.valorOfertado)}!"
+        val mesRetorno = save.mesAtual
+        val anoRetorno = save.anoAtual + 1
+        _mensagem.value = if (proposta.tipoProposta == TipoProposta.EMPRESTIMO) {
+            "${proposta.jogadorNomeAbrev} emprestado para ${proposta.nomeTimeComprador}. Retorna em ${mesRetorno.toString().padStart(2,'0')}/${anoRetorno}."
+        } else {
+            "${proposta.jogadorNomeAbrev} vendido para ${proposta.nomeTimeComprador} por ${formatarValor(proposta.valorOfertado)}!"
+        }
     }
 
     fun recusarProposta(propostaId: Int) = viewModelScope.launch {
@@ -1630,14 +1649,10 @@ class TabelaViewModel @Inject constructor(
         coletaJob = viewModelScope.launch {
             val aId = campeonatoUruAperturaId
             val cId = campeonatoUruClausuraId
-            val iId = campeonatoUruIntermedId
-            val bId = campeonatoUruBId
             val fluxoA = if (aId > 0) gameRepository.observarTabela(aId) else flowOf(emptyList())
             val fluxoC = if (cId > 0) gameRepository.observarTabela(cId) else flowOf(emptyList())
-            val fluxoI = if (iId > 0) gameRepository.observarTabela(iId) else flowOf(emptyList())
-            val fluxoB = if (bId > 0) gameRepository.observarTabela(bId) else flowOf(emptyList())
-            combine(fluxoA, fluxoC, fluxoI, fluxoB) { apertura, clausura, intermed, segunda ->
-                (apertura + clausura + intermed + segunda)
+            combine(fluxoA, fluxoC) { apertura, clausura ->
+                (apertura + clausura)
                     .groupBy { it.timeId }
                     .map { (timeId, rows) ->
                         ClassificacaoEntity(
@@ -1905,7 +1920,7 @@ class HallDaFamaViewModel @Inject constructor(
             when (div) {
                 0    -> lista
                 100  -> lista.filter { it.divisao in 1..6 }
-                200  -> lista.filter { it.divisao in 7..10 }
+                200  -> lista.filter { it.divisao in 7..10 || it.divisao == 17 }
                 300  -> lista.filter { it.divisao in 11..16 }
                 else -> lista.filter { it.divisao == div }
             }
@@ -2593,10 +2608,16 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoArgAId = -1
     private var campeonatoArgBId = -1
     private var campeonatoArgClausuraId = -1
+    private var campeonatoUruAperturaId = -1
+    private var campeonatoUruIntermedId = -1
+    private var campeonatoUruClausuraId = -1
+    private var campeonatoUruBId = -1
+    private var campeonatoUruBCompetId = -1
 
     private var coletarJob: Job? = null
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1,
+                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2604,6 +2625,11 @@ class RodadaViewModel @Inject constructor(
         campeonatoArgAId = campArgAId
         campeonatoArgBId = campArgBId
         campeonatoArgClausuraId = campArgClausuraId
+        campeonatoUruAperturaId = campUruApertId
+        campeonatoUruIntermedId = campUruIntermedId
+        campeonatoUruClausuraId = campUruClausId
+        campeonatoUruBId = campUruBId
+        campeonatoUruBCompetId = campUruBCompetId
         atualizarMaxEColetar()
     }
 
@@ -2657,6 +2683,11 @@ class RodadaViewModel @Inject constructor(
         5 -> campeonatoArgAId
         6 -> campeonatoArgBId
         7 -> campeonatoArgClausuraId
+        10 -> campeonatoUruAperturaId
+        11 -> campeonatoUruIntermedId
+        12 -> campeonatoUruClausuraId
+        13 -> campeonatoUruBId
+        14 -> campeonatoUruBCompetId
         else -> campeonatoArgAId
     }
 

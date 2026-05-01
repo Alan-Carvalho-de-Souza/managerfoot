@@ -327,6 +327,7 @@ fun DashboardScreen(
                 propostasClube    = propostasClube,
                 todosOsTimes      = todosOsTimes,
                 onMarcarLida      = { vm.marcarNotificacaoLida(it) },
+                onMarcarLidaClube  = { vm.marcarPropostaClubeComoLida(it) },
                 onMarcarTodas     = { vm.marcarTodasNotificacoesLidas() },
                 onVerPropostaClube = { proposta -> vm.carregarInfoPropostaClube(proposta.timeOfertanteId) },
                 onRecusarPropostaClube = { vm.recusarPropostaClube(it) }
@@ -481,6 +482,7 @@ private fun NotificacoesAba(
     propostasClube: List<br.com.managerfoot.data.database.entities.PropostaClubeEntity>,
     todosOsTimes: List<br.com.managerfoot.domain.model.Time>,
     onMarcarLida: (Int) -> Unit,
+    onMarcarLidaClube: (Int) -> Unit,
     onMarcarTodas: () -> Unit,
     onVerPropostaClube: (br.com.managerfoot.data.database.entities.PropostaClubeEntity) -> Unit,
     onRecusarPropostaClube: (Int) -> Unit
@@ -562,14 +564,27 @@ private fun NotificacoesAba(
                         colors = CardDefaults.cardColors(containerColor = containerColor)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(titulo,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = onContainerColor)
-                            Spacer(Modifier.height(4.dp))
-                            Text(descricao,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = onContainerColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(titulo,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = onContainerColor)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(descricao,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = onContainerColor)
+                                }
+                                if (encerrada && !proposta.lida) {
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = { onMarcarLidaClube(proposta.id) }) {
+                                        Text("OK", color = onContainerColor)
+                                    }
+                                }
+                            }
                             if (proposta.status == StatusPropostaClube.PENDENTE) {
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
@@ -618,18 +633,18 @@ private fun NotificacoesAba(
                         }
                         StatusProposta.AGUARDANDO_RESPOSTA_IA -> {
                             titulo = "Aguardando resposta — $nomeTime"
-                            descricao = "A IA está avaliando sua contra-oferta de $tipoLabel."
+                            descricao = "A Diretoria está avaliando sua contra-oferta de $tipoLabel."
                         }
                         StatusProposta.ACEITA -> {
                             titulo = "Negociação aceita — $nomeTime"
                             val valorAceito = if (notif.valorSolicitadoJogador > 0)
                                 "R$ %,.0f".format(notif.valorSolicitadoJogador / 100.0)
                             else valorFmt
-                            descricao = "A IA aceitou a proposta de $tipoLabel por $valorAceito."
+                            descricao = "A Diretoria aceitou a proposta de $tipoLabel por $valorAceito."
                         }
                         StatusProposta.RECUSADA -> {
                             titulo = "Negociação encerrada — $nomeTime"
-                            descricao = "A IA recusou a proposta de $tipoLabel."
+                            descricao = "A Diretoria recusou a proposta de $tipoLabel."
                         }
                     }
                     Card(

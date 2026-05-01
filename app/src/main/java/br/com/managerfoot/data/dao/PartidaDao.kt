@@ -216,6 +216,34 @@ interface PartidaDao {
     """)
     suspend fun buscarAssisteTop1(campeonatoId: Int): ArtilheiroDto?
 
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p ON ep.partidaId = p.id
+        INNER JOIN jogadores j ON ep.jogadorId = j.id
+        LEFT JOIN times t ON j.timeId = t.id
+        WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'GOL'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT 1
+    """)
+    suspend fun buscarArtilheiroTop1Multi(campeonatoIds: List<Int>): ArtilheiroDto?
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p ON ep.partidaId = p.id
+        INNER JOIN jogadores j ON ep.jogadorId = j.id
+        LEFT JOIN times t ON j.timeId = t.id
+        WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'ASSISTENCIA'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT 1
+    """)
+    suspend fun buscarAssisteTop1Multi(campeonatoIds: List<Int>): ArtilheiroDto?
+
     // ── Consultas históricas (todas as temporadas) ──
 
     @Query("""

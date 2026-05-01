@@ -58,7 +58,10 @@ data class Jogador(
     val treinouNestaCiclo: Boolean = false, // true = já treinou entre os dois últimos jogos
     val partidasSemJogar: Int = 0,       // jogos restantes de afastamento por lesão
     val disponívelParaVenda: Boolean = false,      // listado para venda pelo usuário
-    val disponívelParaEmprestimo: Boolean = false  // listado para empréstimo pelo usuário
+    val disponívelParaEmprestimo: Boolean = false, // listado para empréstimo pelo usuário
+    val timeOrigemEmprestimo: Int? = null,         // ID do clube de origem quando emprestado
+    val anoRetornoEmprestimo: Int? = null,         // Ano do retorno ao clube de origem
+    val mesRetornoEmprestimo: Int? = null          // Mês (1–12) do retorno ao clube de origem
 ) {
     // Força efetiva: penaliza improvisos, considera morale e fadiga
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {

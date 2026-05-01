@@ -1027,6 +1027,8 @@ fun MercadoScreen(
     val mensagem  by vm.mensagem.collectAsState()
     val transferencias by vm.transferencias.collectAsState()
     val propostas by vm.propostas.collectAsState()
+    val emprestados    by vm.jogadoresEmprestados.collectAsState()
+    val nomesTimesPorId by vm.nomesTimesPorId.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -1118,13 +1120,11 @@ fun MercadoScreen(
                                     horizontalAlignment = Alignment.End,
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    // Chip: À venda
                                     FilterChip(
                                         selected  = jogador.disponívelParaVenda,
                                         onClick   = { vm.marcarParaVenda(jogador, !jogador.disponívelParaVenda) },
                                         label     = { Text("💲 À venda", style = MaterialTheme.typography.labelSmall) },
                                     )
-                                    // Chip: Empréstimo
                                     FilterChip(
                                         selected  = jogador.disponívelParaEmprestimo,
                                         onClick   = { vm.marcarParaEmprestimo(jogador, !jogador.disponívelParaEmprestimo) },
@@ -1134,6 +1134,52 @@ fun MercadoScreen(
                             }
                         )
                         HorizontalDivider(thickness = 0.5.dp)
+                    }
+                    if (emprestados.isNotEmpty()) {
+                        item {
+                            SecaoHeader("${emprestados.size} jogador${if (emprestados.size != 1) "es" else ""} emprestado${if (emprestados.size != 1) "s" else ""}")
+                        }
+                        items(emprestados) { jogador ->
+                            val nomeClube = jogador.timeId?.let { nomesTimesPorId[it] } ?: "Clube desconhecido"
+                            val mes = jogador.mesRetornoEmprestimo
+                            val ano = jogador.anoRetornoEmprestimo
+                            val retorno = if (mes != null && ano != null) {
+                                "${mes.toString().padStart(2, '0')}/$ano"
+                            } else "-"
+                            JogadorRow(
+                                jogador = jogador,
+                                trailing = {
+                                    Column(
+                                        horizontalAlignment = Alignment.End,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Surface(
+                                            shape = MaterialTheme.shapes.extraSmall,
+                                            color = MaterialTheme.colorScheme.secondaryContainer
+                                        ) {
+                                            Text(
+                                                "Emprestado",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Text(
+                                            nomeClube,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            "Retorna: $retorno",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            )
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
                     }
                 }
             }

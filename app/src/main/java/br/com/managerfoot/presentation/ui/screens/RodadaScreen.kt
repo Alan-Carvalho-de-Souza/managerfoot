@@ -31,6 +31,11 @@ fun RodadaScreen(
     campeonatoArgAId: Int = -1,
     campeonatoArgBId: Int = -1,
     campeonatoArgClausuraId: Int = -1,
+    campeonatoUruAperturaId: Int = -1,
+    campeonatoUruIntermedId: Int = -1,
+    campeonatoUruClausuraId: Int = -1,
+    campeonatoUruBId: Int = -1,
+    campeonatoUruBCompetId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -42,8 +47,11 @@ fun RodadaScreen(
 
     val esMataMataDivisao = divisaoSelecionada == 8 || divisaoSelecionada == 9
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId)
+    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
+                   campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId) {
+        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId,
+                    campUruApertId = campeonatoUruAperturaId, campUruIntermedId = campeonatoUruIntermedId, campUruClausId = campeonatoUruClausuraId,
+                    campUruBId = campeonatoUruBId, campUruBCompetId = campeonatoUruBCompetId)
     }
 
     // Agrupa as fases do mata-mata disponíveis
@@ -54,12 +62,14 @@ fun RodadaScreen(
         mutableStateOf(fasesDisponiveisMM.firstOrNull() ?: "")
     }
 
-    //  — — Dropdown Série  — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
-    val opcoesDivisao = buildList {
+    //  — — Opções por país  — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+    val opcoesBrasil = buildList {
         add(1 to "Série A")
         add(2 to "Série B")
         if (campeonatoCId > 0) add(3 to "Série C")
         if (campeonatoDId > 0) add(4 to "Série D")
+    }
+    val opcoesArgentina = buildList {
         if (campeonatoArgAId > 0) {
             add(5 to "Apertura — Grupos")
             add(8 to "Apertura — Mata-Mata")
@@ -70,8 +80,45 @@ fun RodadaScreen(
             add(9 to "Clausura — Mata-Mata")
         }
     }
+    val opcoesUruguai = buildList {
+        if (campeonatoUruAperturaId > 0) add(10 to "Apertura")
+        if (campeonatoUruIntermedId > 0) add(11 to "Intermediário")
+        if (campeonatoUruClausuraId > 0) add(12 to "Clausura")
+        if (campeonatoUruBId > 0) add(13 to "Segunda Div.")
+        if (campeonatoUruBCompetId > 0) add(14 to "Competência")
+    }
+    val temArgentina = opcoesArgentina.isNotEmpty()
+    val temUruguai   = opcoesUruguai.isNotEmpty()
+    val temOutrosPaises = temArgentina || temUruguai
+
+    // País selecionado — sincroniza com a divisão atual
+    var paisSelecionado by remember {
+        mutableStateOf(
+            when {
+                divisaoSelecionada in 5..9  -> "Argentina"
+                divisaoSelecionada in 10..14 -> "Uruguai"
+                else -> "Brasil"
+            }
+        )
+    }
+    LaunchedEffect(divisaoSelecionada) {
+        paisSelecionado = when {
+            divisaoSelecionada in 5..9   -> "Argentina"
+            divisaoSelecionada in 10..14 -> "Uruguai"
+            else -> "Brasil"
+        }
+    }
+
+    val opcoesDivisaoAtual = when (paisSelecionado) {
+        "Argentina" -> opcoesArgentina
+        "Uruguai"   -> opcoesUruguai
+        else        -> opcoesBrasil
+    }
+
+    var expandidoPais  by remember { mutableStateOf(false) }
     var expandidoSerie by remember { mutableStateOf(false) }
-    val labelSerie = opcoesDivisao.firstOrNull { it.first == divisaoSelecionada }?.second ?: "Série A"
+    val labelSerie = opcoesDivisaoAtual.firstOrNull { it.first == divisaoSelecionada }?.second
+        ?: opcoesDivisaoAtual.firstOrNull()?.second ?: "Série A"
 
     //  — — Dropdown Rodada  — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
     val opcoesRodada = (1..maxRodada).toList()
@@ -94,13 +141,59 @@ fun RodadaScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            //  — — Filtro de divisão  — — — — — — — — — — — — — — — — — — — — — — — —
+            //  — — Filtro de país  — — — — — — — — — — — — — — — — — — — — — — — — —
+            if (temOutrosPaises) {
+                ExposedDropdownMenuBox(
+                    expanded = expandidoPais,
+                    onExpandedChange = { expandidoPais = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = paisSelecionado,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("País") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoPais) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandidoPais,
+                        onDismissRequest = { expandidoPais = false }
+                    ) {
+                        val paises = buildList {
+                            add("Brasil")
+                            if (temArgentina) add("Argentina")
+                            if (temUruguai)   add("Uruguai")
+                        }
+                        paises.forEach { pais ->
+                            DropdownMenuItem(
+                                text = { Text(pais) },
+                                onClick = {
+                                    paisSelecionado = pais
+                                    expandidoPais = false
+                                    // seleciona automaticamente a primeira competição do país
+                                    val primeiraOpcao = when (pais) {
+                                        "Argentina" -> opcoesArgentina
+                                        "Uruguai"   -> opcoesUruguai
+                                        else        -> opcoesBrasil
+                                    }
+                                    primeiraOpcao.firstOrNull()?.let { vm.selecionarDivisao(it.first) }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            //  — — Filtro de competição  — — — — — — — — — — — — — — — — — — — — — — —
             ExposedDropdownMenuBox(
                 expanded = expandidoSerie,
                 onExpandedChange = { expandidoSerie = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = if (temOutrosPaises) 4.dp else 8.dp)
             ) {
                 OutlinedTextField(
                     value = labelSerie,
@@ -114,7 +207,7 @@ fun RodadaScreen(
                     expanded = expandidoSerie,
                     onDismissRequest = { expandidoSerie = false }
                 ) {
-                    opcoesDivisao.forEach { (div, label) ->
+                    opcoesDivisaoAtual.forEach { (div, label) ->
                         DropdownMenuItem(
                             text = { Text(label) },
                             onClick = {

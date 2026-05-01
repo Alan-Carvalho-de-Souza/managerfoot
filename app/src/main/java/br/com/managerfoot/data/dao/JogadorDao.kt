@@ -171,4 +171,20 @@ interface JogadorDao {
     /** Todos os jogadores de times da IA listados (venda ou empréstimo) excetuando o time do jogador. */
     @Query("SELECT * FROM jogadores WHERE timeId != :playerTimeId AND timeId IS NOT NULL AND (disponívelParaVenda = 1 OR disponívelParaEmprestimo = 1) AND categoriaBase = 0 AND aposentado = 0")
     suspend fun buscarListadosPorTimeIA(playerTimeId: Int): List<JogadorEntity>
+
+    /** Define os campos de empréstimo ativo no jogador. */
+    @Query("UPDATE jogadores SET timeOrigemEmprestimo = :timeOrigemId, anoRetornoEmprestimo = :anoRetorno, mesRetornoEmprestimo = :mesRetorno, disponívelParaEmprestimo = 0 WHERE id = :jogadorId")
+    suspend fun atualizarEmprestimo(jogadorId: Int, timeOrigemId: Int, anoRetorno: Int, mesRetorno: Int)
+
+    /** Limpa os campos de empréstimo ao retornar o jogador ao clube de origem. */
+    @Query("UPDATE jogadores SET timeOrigemEmprestimo = NULL, anoRetornoEmprestimo = NULL, mesRetornoEmprestimo = NULL WHERE id = :jogadorId")
+    suspend fun limparEmprestimo(jogadorId: Int)
+
+    /** Observa jogadores emprestados de um time de origem (para exibir na aba Meu elenco). */
+    @Query("SELECT * FROM jogadores WHERE timeOrigemEmprestimo = :timeOrigemId AND aposentado = 0")
+    fun observeEmprestadosPorOrigem(timeOrigemId: Int): kotlinx.coroutines.flow.Flow<List<JogadorEntity>>
+
+    /** Retorna jogadores cujo empréstimo expirou no ano/mês informado. */
+    @Query("SELECT * FROM jogadores WHERE timeOrigemEmprestimo IS NOT NULL AND (anoRetornoEmprestimo < :anoAtual OR (anoRetornoEmprestimo = :anoAtual AND mesRetornoEmprestimo <= :mesAtual))")
+    suspend fun buscarEmprestadosParaRetorno(anoAtual: Int, mesAtual: Int): List<JogadorEntity>
 }

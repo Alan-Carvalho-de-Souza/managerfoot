@@ -727,7 +727,7 @@ class GameRepository @Inject constructor(
             val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
             val assistente = partidaDao.buscarAssisteTop1(campId)
             val campEntity = campeonatoDao.buscarPorId(campId)
-            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Copa"; 6 -> "Supercopa"; 7 -> "Apertura"; 8 -> "Clausura"; 10 -> "Segunda Div. Argentina"; 11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"; 15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"; else -> "D" }
+            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Copa"; 6 -> "Supercopa"; 7 -> "Apertura"; 8 -> "Clausura"; 10 -> "Segunda Div. Argentina"; 11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"; 15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"; 17 -> "Campeonato Argentino"; else -> "D" }
             hallDaFamaDao.inserir(HallDaFamaEntity(
                 ano = ano,
                 nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
@@ -951,7 +951,9 @@ class GameRepository @Inject constructor(
             val tabCl = if (campeonatoArgClausuraId > 0) classificacaoDao.buscarTabelaOrdenada(campeonatoArgClausuraId) else emptyList()
             val pontosCombinados = mutableMapOf<Int, Int>()
             for (cls in tabAp + tabCl) pontosCombinados[cls.timeId] = (pontosCombinados[cls.timeId] ?: 0) + cls.pontos
-            val campGeral = pontosCombinados.maxByOrNull { it.value }?.key
+            val ordenadosPontos = pontosCombinados.entries.sortedByDescending { it.value }
+            val campGeral = ordenadosPontos.getOrNull(0)?.key
+            val viceGeral = ordenadosPontos.getOrNull(1)?.key
             if (campGeral != null) {
                 val timeEnt = timeRepository.buscarEntityPorId(campGeral)
                 val rankCG = rankingGeralDao.buscarPorTime(campGeral)
@@ -962,10 +964,42 @@ class GameRepository @Inject constructor(
                     titulosNacionais = rankCG.titulosNacionais + 1,
                     pontosAcumulados = rankCG.pontosAcumulados + 10L
                 ))
+
+                // ── Hall da Fama: Campeonato Argentino geral (divisão 17) ──
+                val viceEnt = if (viceGeral != null) timeRepository.buscarEntityPorId(viceGeral) else null
+                val idsArg = listOfNotNull(
+                    campeonatoArgAId.takeIf { it > 0 },
+                    campeonatoArgClausuraId.takeIf { it > 0 }
+                )
+                val artilheiro = if (idsArg.isNotEmpty()) partidaDao.buscarArtilheiroTop1Multi(idsArg) else null
+                val assistente = if (idsArg.isNotEmpty()) partidaDao.buscarAssisteTop1Multi(idsArg) else null
+                hallDaFamaDao.inserir(HallDaFamaEntity(
+                    ano                 = ano,
+                    nomeCampeonato      = "Campeonato Argentino $ano",
+                    campeaoTimeId       = campGeral,
+                    campeaoNome         = timeEnt?.nome ?: "",
+                    campeaoEscudo       = timeEnt?.escudoRes ?: "",
+                    viceTimeId          = viceGeral ?: -1,
+                    viceNome            = viceEnt?.nome ?: "",
+                    viceEscudo          = viceEnt?.escudoRes ?: "",
+                    artilheiroId        = artilheiro?.jogadorId ?: -1,
+                    artilheiroNome      = artilheiro?.nomeJogador ?: "",
+                    artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
+                    artilheiroGols      = artilheiro?.total ?: 0,
+                    artilheiroNomeTime  = artilheiro?.nomeTime ?: "",
+                    artilheiroEscudo    = artilheiro?.escudoRes ?: "",
+                    assistenteId        = assistente?.jogadorId ?: -1,
+                    assistenteNome      = assistente?.nomeJogador ?: "",
+                    assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
+                    assistenciasTotais  = assistente?.total ?: 0,
+                    assistenteNomeTime  = assistente?.nomeTime ?: "",
+                    assistenteEscudo    = assistente?.escudoRes ?: "",
+                    divisao             = 17
+                ))
             }
         }
 
-        // ── Incrementa temporadasJogadas para a Primera División Argentina ──
+        // ── Incrementa temporadasJogadas para la Primera División Argentina ──
         // Feito a partir dos participantes do Apertura (Clausura tem os mesmos times),
         // garantindo que cada clube incremente a contagem uma única vez por temporada.
         if (campeonatoArgAId > 0) {
@@ -2695,14 +2729,14 @@ class GameRepository @Inject constructor(
             // Série A (automáticos) + top 44 do ranking geral não presentes na Série A
             val serieASet = participantesSerieA.toSet()
             val top44 = rankingGeralDao.buscarTopN(200)
-                .filter { it.timeId !in serieASet && it.divisaoAtual != 5 } // exclui times argentinos
+                .filter { it.timeId !in serieASet && it.divisaoAtual in 1..4 } // apenas times brasileiros (exclui Argentina e Uruguai)
                 .take(64 - participantesSerieA.size)
                 .map { it.timeId }
             (participantesSerieA + top44).take(64)
         }
     }
 
-    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int, patrocinioMensal: Long = 0L, patrocinioJaCreditado: Long = 0L) {
+    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int, patrocinioMensal: Long = 0L, patrocinioJaCreditado: Long = 0L, anoAtual: Int = 0) {
         val time = timeRepository.buscarPorId(timeId) ?: return
         // Usa todos os seniores (incluindo lesionados/suspensos) para calcular a folha salarial real
         val elenco = jogadorRepository.buscarSeniores(timeId)
@@ -2753,6 +2787,10 @@ class GameRepository @Inject constructor(
             timeRepository.debitarSaldo(timeId, -saldoAjuste)
         }
 
+        // Devolve ao clube de origem jogadores cujo empréstimo expirou neste mês
+        if (anoAtual > 0) {
+            jogadorRepository.processarRetornosEmprestimo(anoAtual, mes, temporadaId)
+        }
         // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
         executarContratacoesLivresIA(timeId, temporadaId, mes)
         // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
@@ -2913,30 +2951,47 @@ class GameRepository @Inject constructor(
         propostaIADao.marcarTodasEncerradasLidas()
 
     /**
-     * Aceita uma proposta: realiza a transferência imediatamente, credita o saldo ao
-     * time do jogador e debita do time comprador.
+     * Aceita uma proposta: realiza a transferência (venda ou empréstimo) imediatamente,
+     * credita o saldo ao time do jogador e debita do time comprador.
+     * Para empréstimos, [anoAtual] é usado para calcular a data de retorno (12 meses).
      */
     suspend fun aceitarProposta(
         proposta: PropostaIAEntity,
         playerTimeId: Int,
         temporadaId: Int,
-        mes: Int
+        mes: Int,
+        anoAtual: Int = 0
     ) {
         val jogador = jogadorRepository.buscarPorId(proposta.jogadorId) ?: return
         timeRepository.creditarSaldo(playerTimeId, proposta.valorOfertado)
         timeRepository.debitarSaldo(proposta.timeCompradorId, proposta.valorOfertado)
-        jogadorRepository.realizarVenda(
-            oferta = OfertaTransferencia(
-                jogadorId       = jogador.id,
-                timeCompradorId = proposta.timeCompradorId,
-                timeVendedorId  = playerTimeId,
-                valor           = proposta.valorOfertado,
-                salarioProposto = jogador.salario,
-                contratoAnos    = 3
-            ),
-            temporadaId = temporadaId,
-            mes         = mes
+
+        val oferta = OfertaTransferencia(
+            jogadorId       = jogador.id,
+            timeCompradorId = proposta.timeCompradorId,
+            timeVendedorId  = playerTimeId,
+            valor           = proposta.valorOfertado,
+            salarioProposto = jogador.salario,
+            contratoAnos    = 3
         )
+
+        if (proposta.tipoProposta == TipoProposta.EMPRESTIMO) {
+            val anoRetorno = anoAtual + 1
+            val mesRetorno = mes
+            jogadorRepository.realizarEmprestimo(
+                oferta      = oferta,
+                temporadaId = temporadaId,
+                mes         = mes,
+                anoRetorno  = anoRetorno,
+                mesRetorno  = mesRetorno
+            )
+        } else {
+            jogadorRepository.realizarVenda(
+                oferta      = oferta,
+                temporadaId = temporadaId,
+                mes         = mes
+            )
+        }
         propostaIADao.atualizarStatus(proposta.id, StatusProposta.ACEITA)
     }
 
@@ -4031,15 +4086,38 @@ class GameRepository @Inject constructor(
         }
 
         val todosOsTimes = db.timeDao().buscarTodos()
-        val candidatos = todosOsTimes.filter { time ->
+
+        // Determina as divisões do mesmo país do jogador
+        val timeJogador = db.timeDao().buscarPorId(timeJogadorId)
+        val divisoesDoMesmoPais: IntRange = when (timeJogador?.divisao) {
+            in 1..4  -> 1..4    // Brasil
+            in 5..6  -> 5..6    // Argentina
+            in 9..10 -> 9..10   // Uruguai
+            else     -> 1..4
+        }
+
+        // Candidatos da mesma liga do jogador
+        val candidatosMesmaLiga = todosOsTimes.filter { time ->
             !time.controladoPorJogador &&
             time.id != timeJogadorId &&
-            time.nivel in nivelMin..nivelMax
+            time.nivel in nivelMin..nivelMax &&
+            time.divisao in divisoesDoMesmoPais
         }.shuffled()
 
-        // Gera entre 1 e 2 propostas (ou 0 se não houver candidatos elegíveis)
-        val qtd = candidatos.size.coerceAtMost(kotlin.random.Random.nextInt(1, 3))
-        candidatos.take(qtd).forEach { time ->
+        // Candidatos de outras ligas/países
+        val candidatosOutrasLigas = todosOsTimes.filter { time ->
+            !time.controladoPorJogador &&
+            time.id != timeJogadorId &&
+            time.nivel in nivelMin..nivelMax &&
+            time.divisao !in divisoesDoMesmoPais
+        }.shuffled()
+
+        // Garante ao menos 1 proposta da própria liga e 1 de outra liga
+        val propostasParaInserir = mutableListOf<TimeEntity>()
+        candidatosMesmaLiga.firstOrNull()?.let { propostasParaInserir.add(it) }
+        candidatosOutrasLigas.firstOrNull()?.let { propostasParaInserir.add(it) }
+
+        propostasParaInserir.forEach { time ->
             propostaClubeDao.inserir(
                 PropostaClubeEntity(
                     timeOfertanteId = time.id,

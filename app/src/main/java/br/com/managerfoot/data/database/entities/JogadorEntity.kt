@@ -77,7 +77,12 @@ data class JogadorEntity(
 
     // Flags de janela de transferência (definidas pelo usuário)
     val disponívelParaVenda: Boolean = false,
-    val disponívelParaEmprestimo: Boolean = false
+    val disponívelParaEmprestimo: Boolean = false,
+
+    // Empréstimo ativo: preenchido quando o jogador está emprestado para outro clube
+    val timeOrigemEmprestimo: Int? = null,   // ID do clube de origem (quem emprestou)
+    val anoRetornoEmprestimo: Int? = null,   // Ano calendário do retorno
+    val mesRetornoEmprestimo: Int? = null    // Mês (1–12) do retorno
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {
