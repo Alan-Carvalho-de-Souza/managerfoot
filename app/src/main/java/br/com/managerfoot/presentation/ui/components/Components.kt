@@ -7,13 +7,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -25,8 +30,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.managerfoot.data.database.entities.ClassificacaoEntity
+import br.com.managerfoot.data.database.entities.PartidaEntity
+import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.domain.model.Time
+import br.com.managerfoot.presentation.ui.theme.SetorAtaque
+import br.com.managerfoot.presentation.ui.theme.SetorDefesa
+import br.com.managerfoot.presentation.ui.theme.SetorGoleiro
+import br.com.managerfoot.presentation.ui.theme.SetorMeio
+import br.com.managerfoot.presentation.ui.theme.Radius
+import br.com.managerfoot.presentation.ui.theme.Spacing
 
 // ─── Escudo do time ─────────────────────────────────────────
 // Carrega o drawable cujo nome está em escudoRes.
@@ -106,6 +119,10 @@ private val NOMES_MESES_HEADER = listOf(
     "Jul", "Ago", "Set", "Out", "Nov", "Dez"
 )
 
+/**
+ * Header dramático do clube: escudo grande, série + período, KPIs em cards.
+ * Forma é opcional (lista de últimos 5 resultados V/E/D do clube do jogador).
+ */
 @Composable
 fun TimeHeaderCard(
     time: Time,
@@ -113,84 +130,147 @@ fun TimeHeaderCard(
     posicao: Int = 0,
     rodadaAtual: Int = 0,
     mes: Int = 0,
-    ano: Int = 0
+    ano: Int = 0,
+    forma: List<Resultado> = emptyList()
 ) {
-    val serieLabel = when (time.divisao) { 1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; else -> "Série" }
+    val serieLabel = when (time.divisao) {
+        1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; 5 -> "Primera Div."; else -> "Série"
+    }
+    val periodoLabel = if (mes in 1..12 && ano > 0) "${NOMES_MESES_HEADER[mes]} $ano" else ""
     val subtitle = buildString {
         append(serieLabel)
-        if (rodadaAtual > 0) append(" · Rodada $rodadaAtual")
+        if (posicao > 0) append(" · ${posicao}º")
+        if (rodadaAtual > 0) append(" · R$rodadaAtual")
+        if (periodoLabel.isNotEmpty()) append(" · $periodoLabel")
     }
-    val periodoLabel = if (mes in 1..12 && ano > 0) "${NOMES_MESES_HEADER[mes]}. $ano" else ""
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(Radius.lg)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 56.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = time.nome,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (periodoLabel.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
+        Box {
+            // Watermark do escudo no canto direito (sutil)
+            TeamBadge(
+                nome = time.nome,
+                escudoRes = time.escudoRes,
+                size = 160.dp,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .offset(x = 32.dp)
+                    .alpha(0.08f)
+            )
+            Column(Modifier.padding(Spacing.lg)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 64.dp)
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            periodoLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            text = time.nome,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                KpiItem(label = "Saldo", value = formatarSaldo(time.saldo))
-                Box(Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline))
-                KpiItem(label = "Reputação", value = "%.1f".format(time.reputacao))
-                Box(Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline))
-                KpiItem(label = "Posição", value = if (posicao > 0) "${posicao}º" else "—")
+                Spacer(Modifier.height(Spacing.lg))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    KpiCard(
+                        label = "Saldo",
+                        valor = formatarSaldo(time.saldo),
+                        accent = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    KpiCard(
+                        label = "Reputação",
+                        valor = "%.1f".format(time.reputacao),
+                        accent = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (forma.isNotEmpty()) {
+                        KpiCardForma(
+                            label = "Forma",
+                            forma = forma,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        KpiCard(
+                            label = "Posição",
+                            valor = if (posicao > 0) "${posicao}º" else "—",
+                            accent = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+// ─── KPI Card (label + valor) ───────────────────────────────
 @Composable
-private fun KpiItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun KpiCard(
+    label: String,
+    valor: String,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
+    ) {
         Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
         )
         Text(
-            text = label,
+            text = valor,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// ─── KPI Card especializado em "Forma" ──────────────────────
+@Composable
+fun KpiCardForma(
+    label: String,
+    forma: List<Resultado>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        Text(
+            text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        FormaIndicator(forma = forma, dotSize = 12.dp)
     }
 }
 
@@ -499,7 +579,7 @@ fun EmptyState(mensagem: String, modifier: Modifier = Modifier) {
     }
 }
 
-// ─── Card para próxima partida ───────────────────────────────
+// ─── Card para próxima partida (versão polida) ──────────────
 @Composable
 fun MatchCard(
     nomeCasa: String,
@@ -513,93 +593,744 @@ fun MatchCard(
     onEscalacao: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val infoLinha = buildString {
+        if (competicao.isNotBlank()) append(competicao)
+        if (rodada > 0) {
+            if (isNotEmpty()) append(" · ")
+            append("Rodada $rodada")
+        }
+    }
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(Radius.lg),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = if (competicao.isNotBlank()) "$competicao · Rodada $rodada" else "Rodada $rodada",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(12.dp))
+        Column {
+            // Faixa superior com competição (acento verde)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
+            ) {
+                Text(
+                    text = infoLinha.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 1.sp
+                )
+            }
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.lg),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                MatchTeamColumn(
+                    nome = nomeCasa,
+                    escudo = escudoCasa,
                     modifier = Modifier.weight(1f)
-                ) {
-                    TeamBadge(nome = nomeCasa, escudoRes = escudoCasa, size = 48.dp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = nomeCasa,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Text(
-                    text = "VS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.padding(horizontal = Spacing.md)
                 ) {
-                    TeamBadge(nome = nomeFora, escudoRes = escudoFora, size = 48.dp)
-                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = nomeFora,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
+                        text = "VS",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "casa",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                MatchTeamColumn(
+                    nome = nomeFora,
+                    escudo = escudoFora,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            // Ações
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                if (onEscalacao != null) {
+                    OutlinedButton(
+                        onClick = onEscalacao,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(Radius.md),
+                        enabled = enabled
+                    ) {
+                        Text("Escalar")
+                    }
+                }
+                Button(
+                    onClick = onSimular,
+                    modifier = Modifier.weight(1f),
+                    enabled = enabled,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor   = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(Radius.md)
+                ) {
+                    if (!enabled) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("▶ Simular", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatchTeamColumn(
+    nome: String,
+    escudo: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        TeamBadge(nome = nome, escudoRes = escudo, size = 64.dp)
+        Spacer(Modifier.height(Spacing.sm))
+        Text(
+            text = nome,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// ─── Forma (V/E/D) ──────────────────────────────────────────
+enum class Resultado { V, E, D }
+
+/**
+ * Calcula V/E/D dos últimos 5 jogos do clube nas partidas dadas.
+ * Espera-se que `partidas` venha já filtrada para o time do jogador
+ * (como faz `GameRepository.buscarUltimosResultados`).
+ * A lista vem ordenada do mais recente para o mais antigo; invertemos
+ * para exibir em ordem cronológica (mais antigo à esquerda → mais recente à direita).
+ */
+fun derivarFormaUltimos5(partidas: List<PartidaEntity>, meuTimeId: Int): List<Resultado> {
+    return partidas
+        .asSequence()
+        .filter { it.golsCasa != null && it.golsFora != null }
+        .filter { it.timeCasaId == meuTimeId || it.timeForaId == meuTimeId }
+        .take(5)
+        .toList()
+        .reversed()
+        .map { p ->
+            val gols    = if (p.timeCasaId == meuTimeId) p.golsCasa!! else p.golsFora!!
+            val golsAdv = if (p.timeCasaId == meuTimeId) p.golsFora!! else p.golsCasa!!
+            when {
+                gols >  golsAdv -> Resultado.V
+                gols == golsAdv -> Resultado.E
+                else            -> Resultado.D
+            }
+        }
+}
+
+@Composable
+fun FormaIndicator(
+    forma: List<Resultado>,
+    dotSize: Dp = 14.dp,
+    modifier: Modifier = Modifier
+) {
+    val empty = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val win   = MaterialTheme.colorScheme.primary
+    val draw  = MaterialTheme.colorScheme.secondary
+    val loss  = MaterialTheme.colorScheme.error
+    val slots = 5
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        repeat(slots) { i ->
+            val r = forma.getOrNull(i)
+            val color = when (r) {
+                Resultado.V -> win
+                Resultado.E -> draw
+                Resultado.D -> loss
+                null        -> empty
+            }
+            Box(
+                modifier = Modifier
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
+    }
+}
+
+// ─── Tile de gestão (grid do dashboard) ─────────────────────
+@Composable
+fun ManagementTile(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(Radius.md),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = Spacing.md, horizontal = Spacing.sm),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ─── Chip de competição (atalho) ────────────────────────────
+@Composable
+fun CompetitionChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(Radius.pill),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+// ─── Título de seção polido (substitui SecaoHeader) ─────────
+@Composable
+fun SectionTitle(
+    titulo: String,
+    modifier: Modifier = Modifier,
+    acao: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 3.dp, height = 14.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Radius.sm))
+        )
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = titulo.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            letterSpacing = 1.sp,
+            modifier = Modifier.weight(1f)
+        )
+        if (acao != null) acao()
+    }
+}
+
+@Composable
+fun SectionLink(text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Componentes utilitários da Fase 1
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Card padrão "seção com header" — wrapper consistente para conteúdos
+ * agrupados (estatísticas, listas, etc.).
+ */
+@Composable
+fun SectionCard(
+    titulo: String? = null,
+    acaoTrailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(br.com.managerfoot.presentation.ui.theme.Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column {
+            if (titulo != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 3.dp, height = 14.dp)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Radius.sm))
+                    )
+                    Spacer(Modifier.width(Spacing.sm))
+                    Text(
+                        text = titulo.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (acaoTrailing != null) acaoTrailing()
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+            content()
+        }
+    }
+}
+
+/**
+ * TopBar padrão para telas com 2 linhas (título + subtítulo opcional).
+ * Mantém consistência visual em todas as telas com botão "Voltar".
+ */
+@Composable
+fun ScreenTopBar(
+    titulo: String,
+    subtitulo: String? = null,
+    onVoltar: (() -> Unit)? = null,
+    acoes: (@Composable RowScope.() -> Unit)? = null
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onVoltar != null) {
+                IconButton(onClick = onVoltar) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(Spacing.md))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = titulo,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!subtitulo.isNullOrBlank()) {
+                    Text(
+                        text = subtitulo,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = onSimular,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor   = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (!enabled) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("▶ Próxima Partida", fontWeight = FontWeight.SemiBold)
-                }
+            if (acoes != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) { acoes() }
             }
-            if (onEscalacao != null) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onEscalacao,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+        }
+    }
+}
+
+/**
+ * Exibe um valor monetário com cor por sinal:
+ *  - positivo / zero → MoneyPositive (verde)
+ *  - negativo → MoneyNegative (vermelho)
+ *
+ * Usado em telas de finanças, mercado, etc.
+ */
+@Composable
+fun MoneyDelta(
+    centavos: Long,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    fontWeight: FontWeight = FontWeight.SemiBold,
+    mostrarSinal: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    val positivo = centavos >= 0
+    val cor = if (positivo) br.com.managerfoot.presentation.ui.theme.MoneyPositive
+             else br.com.managerfoot.presentation.ui.theme.MoneyNegative
+    val abs = formatarSaldo(kotlin.math.abs(centavos))
+    val texto = if (mostrarSinal) {
+        if (positivo) "+$abs" else "−${abs.removePrefix("R$ ").let { "R$ $it" }}"
+    } else {
+        if (positivo) abs else "-$abs"
+    }
+    Text(
+        text = texto,
+        style = style,
+        fontWeight = fontWeight,
+        color = cor,
+        modifier = modifier
+    )
+}
+
+/**
+ * Barra horizontal de atributo de jogador (força, técnica, finalização, etc.).
+ * - 0..99 → 0..100% de preenchimento
+ * - cor por faixa: ≥80 verde, ≥65 azul, ≥50 âmbar, demais cinza
+ */
+@Composable
+fun StatBar(
+    label: String,
+    valor: Int,
+    max: Int = 99,
+    modifier: Modifier = Modifier
+) {
+    val pct = (valor.toFloat() / max).coerceIn(0f, 1f)
+    val cor = when {
+        valor >= 80 -> MaterialTheme.colorScheme.primary
+        valor >= 65 -> Color(0xFF42A5F5)
+        valor >= 50 -> Color(0xFFFFB300)
+        else        -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = modifier.fillMaxWidth().padding(vertical = Spacing.xxs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(80.dp)
+        )
+        Box(
+            Modifier
+                .weight(1f)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(pct)
+                    .fillMaxHeight()
+                    .background(cor)
+            )
+        }
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = valor.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = cor,
+            modifier = Modifier.width(28.dp),
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+/**
+ * Linha de tabela de classificação polida — substitui ClassificacaoRow no
+ * TabelaScreen. Tem faixa lateral colorida indicando zona (G4/Z4/etc.).
+ */
+@Composable
+fun StandingsRow(
+    posicao: Int,
+    nomeTime: String,
+    escudoRes: String = "",
+    pontos: Int,
+    jogos: Int,
+    vitorias: Int,
+    empates: Int,
+    derrotas: Int,
+    saldoGols: Int,
+    forma: List<Resultado> = emptyList(),
+    zonaColor: Color = Color.Transparent,
+    destaque: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .background(
+                if (destaque) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else if (posicao % 2 == 0) MaterialTheme.colorScheme.surface
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Faixa lateral indicando zona da tabela
+        Box(
+            Modifier
+                .width(if (destaque) 4.dp else 3.dp)
+                .fillMaxHeight()
+                .background(if (destaque) MaterialTheme.colorScheme.primary else zonaColor)
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = posicao.toString(),
+                modifier = Modifier.width(24.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (destaque) FontWeight.Bold else FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TeamBadge(nome = nomeTime, escudoRes = escudoRes, size = 24.dp)
+            Spacer(Modifier.width(Spacing.xs))
+            Text(
+                text = nomeTime,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (destaque) FontWeight.Bold else FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            StandingsCell(pontos.toString(), bold = true)
+            StandingsCell(jogos.toString())
+            StandingsCell(vitorias.toString())
+            StandingsCell(empates.toString())
+            StandingsCell(derrotas.toString())
+            StandingsCell(
+                text = if (saldoGols >= 0) "+$saldoGols" else saldoGols.toString(),
+                color = when {
+                    saldoGols > 0 -> MaterialTheme.colorScheme.primary
+                    saldoGols < 0 -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+            )
+            if (forma.isNotEmpty()) {
+                Spacer(Modifier.width(Spacing.xs))
+                FormaIndicator(forma = forma, dotSize = 8.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StandingsCell(
+    text: String,
+    bold: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Text(
+        text = text,
+        modifier = Modifier.width(28.dp),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+        color = color,
+        textAlign = TextAlign.Center,
+        maxLines = 1
+    )
+}
+
+/**
+ * Pílula de filtro selecionável — usado em filtros horizontais de país,
+ * divisão, posição, competição, etc. Substitui dropdowns Material onde
+ * cabe.
+ */
+@Composable
+fun FilterChipPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(Radius.pill),
+        color = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            width = 0.5.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/**
+ * Abas em formato pill — alternativa ao TabRow Material para casos onde
+ * as abas são poucas e queremos identidade do app (não do Material).
+ */
+@Composable
+fun TabRowPill(
+    abas: List<String>,
+    selecionada: Int,
+    onSelecionar: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(Radius.pill))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(Radius.pill)
+    ) {
+        Row(
+            modifier = Modifier.padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            abas.forEachIndexed { idx, label ->
+                val sel = idx == selecionada
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.pill))
+                        .background(
+                            if (sel) MaterialTheme.colorScheme.primary
+                            else Color.Transparent
+                        )
+                        .clickable { onSelecionar(idx) }
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Escalação")
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
+                        color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
+    }
+}
+
+/**
+ * Cor semântica de cada setor (GOLEIRO, DEFESA, MEIO, ATAQUE).
+ * Usada em badges de posição em Escalação, Jogadores, Finanças, etc.
+ */
+fun corSetor(setor: Setor): Color = when (setor) {
+    Setor.GOLEIRO -> SetorGoleiro
+    Setor.DEFESA  -> SetorDefesa
+    Setor.MEIO    -> SetorMeio
+    Setor.ATAQUE  -> SetorAtaque
+}
+
+/**
+ * Badge retangular colorido com a abreviação da posição. Padrão visual
+ * compartilhado entre Escalação, Jogadores, Finanças e painéis modais.
+ */
+@Composable
+fun PosicaoBadge(
+    abreviacao: String,
+    setor: Setor,
+    modifier: Modifier = Modifier
+) {
+    val cor = corSetor(setor)
+    Box(
+        modifier = modifier
+            .size(width = 36.dp, height = 26.dp)
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(cor.copy(alpha = 0.18f))
+            .border(0.5.dp, cor.copy(alpha = 0.55f), RoundedCornerShape(Radius.sm)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = abreviacao,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = cor
+        )
     }
 }
 

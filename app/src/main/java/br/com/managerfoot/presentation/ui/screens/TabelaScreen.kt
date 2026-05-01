@@ -1,27 +1,35 @@
 package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import br.com.managerfoot.data.database.entities.ClassificacaoEntity
+import br.com.managerfoot.presentation.ui.components.FilterChipPill
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
+import br.com.managerfoot.presentation.ui.components.StandingsRow
+import br.com.managerfoot.presentation.ui.theme.LibertadoresBlue
+import br.com.managerfoot.presentation.ui.theme.PromotionGreen
+import br.com.managerfoot.presentation.ui.theme.Radius
+import br.com.managerfoot.presentation.ui.theme.RelegationRed
+import br.com.managerfoot.presentation.ui.theme.Spacing
+import br.com.managerfoot.presentation.ui.theme.SulAmericanaTeal
 import br.com.managerfoot.presentation.viewmodel.TabelaViewModel
-import br.com.managerfoot.presentation.ui.components.TeamBadge
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TabelaScreen(
     campeonatoAId: Int,
@@ -57,282 +65,235 @@ fun TabelaScreen(
         if (opcoesArgentina.isNotEmpty()) add("Argentina")
     }
 
-    // País selecionado: derivado da divisão atual
     val paisSelecionado = remember(divisaoSelecionada) {
         if (divisaoSelecionada == 5) "Argentina" else "Brasil"
     }
-
     val opcoesDivisaoPais = if (paisSelecionado == "Argentina") opcoesArgentina else opcoesBrasil
-
-    val labelSelecionado = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
+    val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoPais.firstOrNull()?.second ?: ""
-    var expandidoPais by remember { mutableStateOf(false) }
-    var expandido by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Tabela de Classificação") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+    // Posição do clube do jogador (se na divisão atual)
+    val posicaoJogador = remember(tabela, timeJogadorId) {
+        val idx = tabela.indexOfFirst { it.timeId == timeJogadorId }
+        if (idx >= 0) idx + 1 else null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        ScreenTopBar(
+            titulo = "Classificação",
+            subtitulo = buildString {
+                append(labelDivisaoAtual)
+                if (posicaoJogador != null) append(" · seu time em ${posicaoJogador}º")
+            },
+            onVoltar = onVoltar
+        )
+
+        // Filtro de país (chips horizontais) — só aparece se houver mais de um país
+        if (paises.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(bottom = Spacing.sm)
             ) {
-                // Filtro de país (dropdown — só exibe se houver mais de um)
-                if (paises.size > 1) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandidoPais,
-                        onExpandedChange = { expandidoPais = it },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = paisSelecionado,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("País") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoPais) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandidoPais,
-                            onDismissRequest = { expandidoPais = false }
-                        ) {
-                            paises.forEach { pais ->
-                                DropdownMenuItem(
-                                    text = { Text(pais) },
-                                    onClick = {
-                                        val primeiraDivisao = if (pais == "Argentina")
-                                            opcoesArgentina.firstOrNull()?.first ?: 5
-                                        else
-                                            opcoesBrasil.firstOrNull()?.first ?: 1
-                                        vm.selecionarDivisao(primeiraDivisao)
-                                        expandidoPais = false
-                                        expandido = false
-                                    }
-                                )
-                            }
+                items(paises) { pais ->
+                    FilterChipPill(
+                        label = pais,
+                        selected = pais == paisSelecionado,
+                        onClick = {
+                            val primeiraDivisao = if (pais == "Argentina")
+                                opcoesArgentina.firstOrNull()?.first ?: 5
+                            else
+                                opcoesBrasil.firstOrNull()?.first ?: 1
+                            vm.selecionarDivisao(primeiraDivisao)
                         }
-                    }
-                }
-
-                // Seletor de divisão (dropdown — só exibe se houver mais de uma divisão no país)
-                if (opcoesDivisaoPais.size > 1) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandido,
-                        onExpandedChange = { expandido = it },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = labelSelecionado,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Divisão") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandido,
-                            onDismissRequest = { expandido = false }
-                        ) {
-                            opcoesDivisaoPais.forEach { (div, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        vm.selecionarDivisao(div)
-                                        expandido = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Header row
-            TabelaHeader()
-            HorizontalDivider()
-
-            LazyColumn {
-                itemsIndexed(tabela) { index, item ->
-                    val time = times.find { it.id == item.timeId }
-                    val nomeTime = time?.nome ?: "Time ${item.timeId}"
-                    val escudoRes = time?.escudoRes ?: ""
-                    val ehJogador = item.timeId == timeJogadorId
-                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
-                    TabelaRow(
-                        posicao = index + 1,
-                        nomeTime = nomeTime,
-                        escudoRes = escudoRes,
-                        item = item,
-                        destaque = ehJogador,
-                        zonaColor = zona
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
                 }
             }
-
-            // Legenda de zonas
-            LegendaZonas(divisaoSelecionada)
         }
+
+        // Filtro de divisão (chips horizontais) — só aparece se houver mais de uma divisão no país
+        if (opcoesDivisaoPais.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(bottom = Spacing.md)
+            ) {
+                items(opcoesDivisaoPais) { (div, label) ->
+                    FilterChipPill(
+                        label = label,
+                        selected = div == divisaoSelecionada,
+                        onClick = { vm.selecionarDivisao(div) }
+                    )
+                }
+            }
+        } else {
+            Spacer(Modifier.height(Spacing.sm))
+        }
+
+        TabelaColunasHeader()
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            itemsIndexed(tabela) { index, item ->
+                val time = times.find { it.id == item.timeId }
+                val nomeTime = time?.nome ?: "Time ${item.timeId}"
+                val escudoRes = time?.escudoRes ?: ""
+                val ehJogador = item.timeId == timeJogadorId
+                val zona = zonaParaDivisao(index + 1, divisaoSelecionada)
+
+                StandingsRow(
+                    posicao = index + 1,
+                    nomeTime = nomeTime,
+                    escudoRes = escudoRes,
+                    pontos = item.pontos,
+                    jogos = item.jogos,
+                    vitorias = item.vitorias,
+                    empates = item.empates,
+                    derrotas = item.derrotas,
+                    saldoGols = item.saldoGols,
+                    zonaColor = zona ?: Color.Transparent,
+                    destaque = ehJogador
+                )
+            }
+            item { Spacer(Modifier.height(Spacing.sm)) }
+        }
+
+        LegendaZonas(divisaoSelecionada)
     }
 }
 
+/** Linha de cabeçalho das colunas — alinhada com `StandingsRow`. */
 @Composable
-private fun TabelaHeader() {
+private fun TabelaColunasHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(vertical = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("#",  modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Text("Time", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        listOf("J", "V", "E", "D", "GP", "GC", "SG", "Pts").forEach { col ->
-            Text(col, modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        // Espaço pra faixa lateral colorida (3dp) que a StandingsRow tem
+        Spacer(Modifier.width(3.dp))
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Largura combinando: posição (24dp) + escudo (24dp) + spacer xs (4dp)
+            Spacer(Modifier.width(24.dp + 24.dp + Spacing.xs))
+            Text(
+                "TIME",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
+            )
+            listOf("P", "J", "V", "E", "D", "SG").forEach { col ->
+                Text(
+                    col,
+                    modifier = Modifier.width(28.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
-// Retorna a cor da zona baseado na posição e divisão
-@Composable
+/** Cor da zona pela posição na tabela (G4, Sul-Americana, Z4). */
 private fun zonaParaDivisao(posicao: Int, divisao: Int): Color? = when (divisao) {
     1 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
-        posicao <= 6  -> Color(0xFF4CAF50)  // Sul-Americana
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento
+        posicao <= 4  -> LibertadoresBlue
+        posicao <= 6  -> SulAmericanaTeal
+        posicao >= 17 -> RelegationRed
         else          -> null
     }
     2 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série A
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série C
+        posicao <= 4  -> PromotionGreen
+        posicao >= 17 -> RelegationRed
         else          -> null
     }
     3 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série B
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série D
+        posicao <= 4  -> PromotionGreen
+        posicao >= 17 -> RelegationRed
         else          -> null
     }
     5 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
+        posicao <= 4  -> LibertadoresBlue
         else          -> null
     }
     else -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série C
+        posicao <= 4  -> PromotionGreen
         else          -> null
     }
 }
 
+/** Legenda compacta no rodapé com chips de cada zona da divisão atual. */
 @Composable
 private fun LegendaZonas(divisao: Int) {
     val itens = when (divisao) {
         1 -> listOf(
-            Color(0xFF1565C0) to "1-4: Libertadores",
-            Color(0xFF4CAF50) to "5-6: Sul-Americana",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
+            LibertadoresBlue to "G4 Libertadores",
+            SulAmericanaTeal to "G6 Sul-Americana",
+            RelegationRed   to "Z4 Rebaixamento"
         )
         2 -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série A",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
+            PromotionGreen to "G4 Acesso",
+            RelegationRed  to "Z4 Rebaixamento"
         )
         3 -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série B",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
+            PromotionGreen to "G4 Acesso",
+            RelegationRed  to "Z4 Rebaixamento"
         )
         5 -> listOf(
-            Color(0xFF1565C0) to "1-4: Libertadores"
+            LibertadoresBlue to "G4 Libertadores"
         )
         else -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série C"
+            PromotionGreen to "G4 Acesso"
         )
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp
     ) {
-        itens.forEach { (cor, label) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.size(10.dp).background(cor))
-                Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            itens.forEach { (cor, label) ->
+                ZonaLegendaChip(cor, label)
             }
         }
     }
 }
 
 @Composable
-private fun TabelaRow(
-    posicao: Int,
-    nomeTime: String,
-    escudoRes: String = "",
-    item: ClassificacaoEntity,
-    destaque: Boolean,
-    zonaColor: Color? = null
-) {
-    val bg = if (destaque) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val textColorPrimary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    val textColorSecondary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
-
+private fun ZonaLegendaChip(cor: Color, label: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bg)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        // Indicador de zona (barra colorida à esquerda)
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(24.dp)
-                .background(zonaColor ?: Color.Transparent)
+                .size(width = 3.dp, height = 14.dp)
+                .clip(RoundedCornerShape(Radius.sm))
+                .background(cor)
         )
-        Spacer(Modifier.width(4.dp))
         Text(
-            "$posicao",
-            modifier = Modifier.width(24.dp),
-            fontSize = 12.sp,
-            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
-            textAlign = TextAlign.Center,
-            color = textColorPrimary
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TeamBadge(nome = nomeTime, escudoRes = escudoRes, size = 22.dp)
-        Spacer(Modifier.width(4.dp))
-        Text(
-            nomeTime,
-            modifier = Modifier.weight(1f),
-            fontSize = 12.sp,
-            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = textColorPrimary
-        )
-        listOf(
-            item.jogos, item.vitorias, item.empates, item.derrotas,
-            item.golsPro, item.golsContra, item.saldoGols, item.pontos
-        ).forEachIndexed { idx, value ->
-            val isSaldo = idx == 6  // saldoGols can be negative
-            val isBold = idx == 7   // pontos
-            Text(
-                if (isSaldo && value > 0) "+$value" else "$value",
-                modifier = Modifier.width(28.dp),
-                fontSize = 12.sp,
-                fontWeight = if (isBold || destaque) FontWeight.Bold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                color = if (isBold) textColorPrimary else textColorSecondary
-            )
-        }
     }
 }

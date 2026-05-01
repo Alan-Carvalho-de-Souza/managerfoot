@@ -1,7 +1,10 @@
 ﻿package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +14,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,8 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.managerfoot.data.database.entities.EstiloJogo
@@ -33,7 +47,12 @@ import br.com.managerfoot.domain.model.InfoSubstituicao
 import br.com.managerfoot.domain.model.ResultadoPartida
 import br.com.managerfoot.domain.model.ResultadoPenaltis
 import br.com.managerfoot.domain.model.EstatisticasTime
+import br.com.managerfoot.presentation.ui.components.PosicaoBadge
+import br.com.managerfoot.presentation.ui.components.SectionTitle
 import br.com.managerfoot.presentation.ui.components.TeamBadge
+import br.com.managerfoot.presentation.ui.components.corSetor
+import br.com.managerfoot.presentation.ui.theme.Radius
+import br.com.managerfoot.presentation.ui.theme.Spacing
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.platform.LocalConfiguration
 import br.com.managerfoot.domain.model.DadosPenaltiAdversario
@@ -553,163 +572,28 @@ fun PartidaSimulacaoScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // ── Placar ──────────────────────────────────────────────
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Fase da partida
-                Text(
-                    text = if (minutoAtual > 0 && !simulacaoEncerrada)
-                        "$faseAtual  ${minutoAtual}'"
-                    else faseAtual,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                // Times e placar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Time da casa
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        TeamBadge(
-                            nome = nomeTimeCasa,
-                            escudoRes = escudoTimeCasa,
-                            size = 44.dp
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = nomeTimeCasa,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
-                        )
-                        Text(
-                            text = "Casa",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Placar central
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        AnimatedContent(
-                            targetState = golsCasaAtual,
-                            transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
-                            label = "gols_casa"
-                        ) { gols ->
-                            Text(
-                                text = gols.toString(),
-                                fontSize = scoreFontSize,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Text(
-                            text = "x",
-                            fontSize = 24.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        AnimatedContent(
-                            targetState = golsForaAtual,
-                            transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
-                            label = "gols_fora"
-                        ) { gols ->
-                            Text(
-                                text = gols.toString(),
-                                fontSize = scoreFontSize,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    // Time visitante
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        TeamBadge(
-                            nome = nomeTimeFora,
-                            escudoRes = escudoTimeFora,
-                            size = 44.dp
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = nomeTimeFora,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
-                        )
-                        Text(
-                            text = "Visitante",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Barra de progresso da partida
-                Spacer(Modifier.height(12.dp))
-                val progresso = (minutoAtual / (90f + acrescimo2Tempo)).coerceIn(0f, 1f)
-                LinearProgressIndicator(
-                    progress = { progresso },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("0'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("45'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("90'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                // Público presente
-                if (resultado.torcedores > 0) {
-                    Spacer(Modifier.height(4.dp))
-                    val estadioLabel = if (nomeEstadio.isNotBlank()) " · $nomeEstadio" else ""
-                    Text(
-                        text = "\uD83D\uDC65 ${"%,d".format(resultado.torcedores)} torcedores$estadioLabel",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
+        // ── Placar (scoreboard polido) ──────────────────────────
+        MatchScoreboard(
+            nomeTimeCasa       = nomeTimeCasa,
+            nomeTimeFora       = nomeTimeFora,
+            escudoTimeCasa     = escudoTimeCasa,
+            escudoTimeFora     = escudoTimeFora,
+            faseAtual          = faseAtual,
+            minutoAtual        = minutoAtual,
+            golsCasaAtual      = golsCasaAtual,
+            golsForaAtual      = golsForaAtual,
+            scoreFontSize      = scoreFontSize,
+            progresso          = (minutoAtual / (90f + acrescimo2Tempo)).coerceIn(0f, 1f),
+            eventosTimeline    = eventosExibidos.toList(),
+            timeCasaId         = resultado.timeCasaId,
+            simulacaoEncerrada = simulacaoEncerrada,
+            torcedores         = resultado.torcedores,
+            nomeEstadio        = nomeEstadio,
+            modifier           = Modifier.padding(Spacing.lg)
+        )
 
         // ── Feed de eventos ──────────────────────────────────────
-        // ── Botão Mexer no Time ─────────────────────────────────────
+        // ── Botão Mexer no Time ─────────────────────────────────
         if (escalacaoJogador != null && !simulacaoEncerrada && !pausadoNoIntervalo
             && faseAtual in listOf("1º TEMPO", "2º TEMPO")
         ) {
@@ -723,18 +607,20 @@ fun PartidaSimulacaoScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                shape = RoundedCornerShape(Radius.md)
             ) {
+                Icon(
+                    imageVector = Icons.Filled.SwapHoriz,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(Spacing.sm))
                 Text("Mexer no Time")
             }
         }
 
-        Text(
-            text = "Eventos da partida",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
+        SectionTitle(titulo = "Eventos da partida")
 
         LazyColumn(
             state = listState,
@@ -770,9 +656,17 @@ fun PartidaSimulacaoScreen(
                         onClick = onSimulacaoFinalizada,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(Spacing.lg),
+                        shape = RoundedCornerShape(Radius.md),
+                        contentPadding = PaddingValues(vertical = Spacing.md)
                     ) {
-                        Text("Voltar ao painel")
+                        Text("Voltar ao painel", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(Spacing.sm))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -800,40 +694,46 @@ private fun EstatisticasTab(
     nomeTimeCasa: String,
     nomeTimeFora: String
 ) {
+    val corCasa = MaterialTheme.colorScheme.primary
+    val corFora = MaterialTheme.colorScheme.error
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
     ) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            Modifier.fillMaxWidth().padding(bottom = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 nomeTimeCasa,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1565C0),
-                textAlign = TextAlign.Center,
-                maxLines = 1
+                color = corCasa,
+                textAlign = TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.width(72.dp))
+            Text(
+                "VS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.sm)
+            )
             Text(
                 nomeTimeFora,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFC62828),
-                textAlign = TextAlign.Center,
-                maxLines = 1
+                color = corFora,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        HorizontalDivider()
-        Spacer(Modifier.height(4.dp))
         EstatisticaRow("Finalizações",       estatisticasCasa.chutes,          estatisticasFora.chutes)
         EstatisticaRow("No alvo",            estatisticasCasa.chutesNoGol,     estatisticasFora.chutesNoGol)
         EstatisticaRow("Defesas do goleiro", estatisticasCasa.defesasGoleiro,  estatisticasFora.defesasGoleiro)
@@ -851,37 +751,33 @@ private fun EstatisticaRow(
     valorCasa: Int,
     valorFora: Int,
     sufixo: String = "",
-    invertido: Boolean = false  // true = menos é melhor (faltas, passes errados)
+    invertido: Boolean = false
 ) {
+    val corCasa = MaterialTheme.colorScheme.primary
+    val corFora = MaterialTheme.colorScheme.error
     val total = valorCasa + valorFora
-    val fracCasa = if (total > 0) (valorCasa.toFloat() / total).coerceAtLeast(0.001f) else 0.5f
-    val fracFora = if (total > 0) (valorFora.toFloat() / total).coerceAtLeast(0.001f) else 0.5f
-    val colorNeutro = MaterialTheme.colorScheme.onSurface
+    val fracCasa = if (total > 0) (valorCasa.toFloat() / total).coerceIn(0.02f, 0.98f) else 0.5f
+    val fracFora = 1f - fracCasa
 
-    fun colorFor(isHome: Boolean): Color {
-        if (total == 0) return Color.Gray
-        val isBetter = if (invertido) {
-            if (isHome) valorCasa < valorFora else valorFora < valorCasa
-        } else {
-            if (isHome) valorCasa > valorFora else valorFora > valorCasa
-        }
-        val isSame = valorCasa == valorFora
-        return if (isSame) colorNeutro
-               else if (isBetter) Color(0xFF2E7D32)
-               else Color(0xFFC62828)
-    }
+    val casaMelhor = if (invertido) valorCasa < valorFora else valorCasa > valorFora
+    val foraMelhor = if (invertido) valorFora < valorCasa else valorFora > valorCasa
+    val empate = valorCasa == valorFora && total > 0
 
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "${valorCasa}${sufixo}",
-                modifier = Modifier.width(44.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = colorFor(true)
+                "$valorCasa$sufixo",
+                modifier = Modifier.width(48.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (casaMelhor) FontWeight.Bold else FontWeight.Medium,
+                color = when {
+                    empate    -> MaterialTheme.colorScheme.onSurface
+                    casaMelhor -> corCasa
+                    else      -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
             Text(
                 label,
@@ -891,35 +787,37 @@ private fun EstatisticaRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "${valorFora}${sufixo}",
-                modifier = Modifier.width(44.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = colorFor(false),
+                "$valorFora$sufixo",
+                modifier = Modifier.width(48.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (foraMelhor) FontWeight.Bold else FontWeight.Medium,
+                color = when {
+                    empate    -> MaterialTheme.colorScheme.onSurface
+                    foraMelhor -> corFora
+                    else      -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 textAlign = TextAlign.End
             )
         }
-        // Barra proporcional
-        Box(
+        Spacer(Modifier.height(Spacing.xxs))
+        Row(
             Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
         ) {
-            Row(Modifier.fillMaxSize()) {
-                Box(
-                    Modifier
-                        .weight(fracCasa)
-                        .fillMaxHeight()
-                        .background(Color(0xFF1565C0))
-                )
-                Box(
-                    Modifier
-                        .weight(fracFora)
-                        .fillMaxHeight()
-                        .background(Color(0xFFC62828))
-                )
-            }
+            Box(
+                Modifier
+                    .weight(fracCasa)
+                    .fillMaxHeight()
+                    .background(corCasa.copy(alpha = if (casaMelhor) 1f else 0.55f))
+            )
+            Box(
+                Modifier
+                    .weight(fracFora)
+                    .fillMaxHeight()
+                    .background(corFora.copy(alpha = if (foraMelhor) 1f else 0.55f))
+            )
         }
     }
 }
@@ -1083,40 +981,70 @@ private fun ResultadoFinalCard(
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
 
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        Column {
-            TabRow(selectedTabIndex = abaAtiva) {
-                Tab(
-                    selected = abaAtiva == 0,
-                    onClick  = { abaAtiva = 0 },
-                    text     = { Text("Estatísticas") }
-                )
-                Tab(
-                    selected = abaAtiva == 1,
-                    onClick  = { abaAtiva = 1 },
-                    text     = { Text("Notas") }
-                )
-            }
-            when (abaAtiva) {
-                0 -> EstatisticasTab(
-                    estatisticasCasa = estatisticasCasa,
-                    estatisticasFora = estatisticasFora,
-                    nomeTimeCasa     = nomeTimeCasa,
-                    nomeTimeFora     = nomeTimeFora
-                )
-                1 -> NotasConteudo(
-                    resultado           = resultado,
-                    escalacaoJogador    = escalacaoJogador,
-                    escalacaoAdversario = escalacaoAdversario,
-                    isTimeCasaOJogador  = isTimeCasaOJogador,
-                    nomeTimeFora        = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa
-                )
+        ManOfTheMatchCard(
+            resultado = resultado,
+            escalacaoJogador = escalacaoJogador,
+            isTimeCasaOJogador = isTimeCasaOJogador
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(Radius.lg),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Column {
+                TabRow(
+                    selectedTabIndex = abaAtiva,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Tab(
+                        selected = abaAtiva == 0,
+                        onClick  = { abaAtiva = 0 },
+                        text     = {
+                            Text(
+                                "ESTATÍSTICAS",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = abaAtiva == 1,
+                        onClick  = { abaAtiva = 1 },
+                        text     = {
+                            Text(
+                                "NOTAS",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    )
+                }
+                when (abaAtiva) {
+                    0 -> EstatisticasTab(
+                        estatisticasCasa = estatisticasCasa,
+                        estatisticasFora = estatisticasFora,
+                        nomeTimeCasa     = nomeTimeCasa,
+                        nomeTimeFora     = nomeTimeFora
+                    )
+                    1 -> NotasConteudo(
+                        resultado           = resultado,
+                        escalacaoJogador    = escalacaoJogador,
+                        escalacaoAdversario = escalacaoAdversario,
+                        isTimeCasaOJogador  = isTimeCasaOJogador,
+                        nomeTimeFora        = if (isTimeCasaOJogador) nomeTimeFora else nomeTimeCasa
+                    )
+                }
             }
         }
     }
@@ -1202,7 +1130,7 @@ private fun NotasTimeConteudo(
 
     if (notasDoTime.isEmpty()) {
         Box(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(Spacing.xl),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -1221,34 +1149,40 @@ private fun NotasTimeConteudo(
         .map { it.jogadorId }
         .toSet()
 
-    Column(modifier = Modifier.padding(12.dp)) {
+    Column(modifier = Modifier.padding(Spacing.md)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Notas da Partida",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = corTitulo
+                "NOTAS DA PARTIDA",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = corTitulo,
+                letterSpacing = 1.sp
             )
-            Text(
-                "Média: ${"%.1f".format(mediaTime)}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = notaColor(mediaTime)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Média ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                NotaPill(mediaTime)
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        HorizontalDivider()
-        notasDoTime.forEach { (jogadorId, nota) ->
+        Spacer(Modifier.height(Spacing.sm))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        Spacer(Modifier.height(Spacing.xs))
+
+        notasDoTime.forEachIndexed { idx, (jogadorId, nota) ->
             val j = jogadoresInfoMap[jogadorId]
             val ehSub = jogadorId in substitutosQueEntraram
+            val ehTop3 = idx < 3
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = Spacing.xs),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1256,6 +1190,25 @@ private fun NotasTimeConteudo(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (ehTop3) notaColor(nota).copy(alpha = 0.2f)
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "${idx + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (ehTop3) notaColor(nota)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(Spacing.sm))
                     Text(
                         j?.posicao?.abreviacao ?: "?",
                         style = MaterialTheme.typography.labelSmall,
@@ -1264,28 +1217,43 @@ private fun NotasTimeConteudo(
                     )
                     Text(
                         j?.nomeAbreviado ?: "#$jogadorId",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (ehTop3) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (ehSub) {
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            "↑ Sub",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
+                        Spacer(Modifier.width(Spacing.xs))
+                        Icon(
+                            imageVector = Icons.Filled.ArrowUpward,
+                            contentDescription = "Substituto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
                         )
                     }
                 }
-                Text(
-                    "%.1f".format(nota),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = notaColor(nota)
-                )
+                NotaPill(nota)
             }
         }
+    }
+}
+
+@Composable
+private fun NotaPill(nota: Float) {
+    val cor = notaColor(nota)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(cor.copy(alpha = 0.18f))
+            .border(0.5.dp, cor.copy(alpha = 0.5f), RoundedCornerShape(Radius.sm))
+            .padding(horizontal = Spacing.sm, vertical = 2.dp)
+    ) {
+        Text(
+            text = "%.1f".format(nota),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = cor
+        )
     }
 }
 // ─────────────────────────────────────────────
@@ -1323,9 +1291,8 @@ private fun PenaltiInterativoPainel(
 
     val allCobradorIds = remember(cobradorElegiveis) { cobradorElegiveis.map { it.jogador.id }.toSet() }
 
-    // Jogadores elegíveis neste ciclo
     val eligiveis = if (jaCobraramIds.containsAll(allCobradorIds)) {
-        cobradorElegiveis   // ciclo completo: mostra todos para o próximo ciclo
+        cobradorElegiveis
     } else {
         cobradorElegiveis.filter { it.jogador.id !in jaCobraramIds }
     }
@@ -1391,81 +1358,65 @@ private fun PenaltiInterativoPainel(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
-            Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-        ) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    if (isSuddenDeath) "MORTE SÚBITA" else "DISPUTA DE PÊNALTIS",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "$nomeTimeJogador $agregadoJogador × $agregadoAdversario $nomeAdversario (agg.)",
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        nomeTimeJogador,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        "$golsJogador – $golsAdversario",
-                        fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Text(
-                        nomeAdversario,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (isSuddenDeath) "Cobrança ${numRodadas + 1} (morte súbita)"
-                    else "Cobrança ${numRodadas + 1} de 5",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
+        // Header dramático com placar gigante e tracker
+        PenaltiPlacardCard(
+            nomeTimeCasa     = nomeTimeJogador,
+            nomeTimeFora     = nomeAdversario,
+            golsCasa         = golsJogador,
+            golsFora         = golsAdversario,
+            cobrancasCasa    = cobrancasJogador.toList(),
+            cobrancasFora    = cobrancasAdversario.toList(),
+            isSuddenDeath    = isSuddenDeath,
+            tituloRodada     = if (isSuddenDeath) "MORTE SÚBITA · COBRANÇA ${numRodadas + 1}"
+                               else "COBRANÇA ${numRodadas + 1} DE 5",
+            agregadoCasa     = agregadoJogador,
+            agregadoFora     = agregadoAdversario,
+            destaqueVencedor = fase == FasePenalti.FINALIZADO,
+            timeJogadorEhCasa = true
+        )
 
         when (fase) {
             FasePenalti.SELECAO -> {
                 Text(
-                    "Escolha o próximo batedor:",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    "ESCOLHA O PRÓXIMO BATEDOR",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md)
                 )
                 LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
                     items(eligiveis) { jne ->
-                        ListItem(
-                            headlineContent = { Text(jne.jogador.nome) },
-                            supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Fin: ${jne.jogador.finalizacao}") },
-                            trailingContent = {
-                                Button(
-                                    onClick = { onJogadorSelecionado(jne) },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                ) { Text("Cobrar") }
+                        JogadorLinhaIntervalo(
+                            jne = jne,
+                            trailing = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "FIN ${jne.jogador.finalizacao}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.width(Spacing.sm))
+                                    Button(
+                                        onClick = { onJogadorSelecionado(jne) },
+                                        shape = RoundedCornerShape(Radius.sm),
+                                        contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.SportsSoccer,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(Spacing.xs))
+                                        Text("COBRAR", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         )
-                        HorizontalDivider(thickness = 0.5.dp)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                     }
                 }
             }
@@ -1475,9 +1426,16 @@ private fun PenaltiInterativoPainel(
                     Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
+                    Text(
+                        "RESULTADO DA COBRANÇA",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 1.sp
+                    )
                     ultimoJogador?.let { ev ->
                         PenaltiCobrancaCard(nomeTime = nomeTimeJogador, evento = ev)
                     }
@@ -1485,20 +1443,39 @@ private fun PenaltiInterativoPainel(
                         PenaltiCobrancaCard(nomeTime = nomeAdversario, evento = ev)
                     }
                 }
-                Button(
-                    onClick = { fase = FasePenalti.SELECAO },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) { Text("Próxima cobrança") }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Button(
+                        onClick = { fase = FasePenalti.SELECAO },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.lg),
+                        shape = RoundedCornerShape(Radius.md),
+                        contentPadding = PaddingValues(vertical = Spacing.md)
+                    ) {
+                        Text("Próxima cobrança", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(Spacing.sm))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
 
             FasePenalti.FINALIZADO -> {
                 val timVenc = if (golsJogador > golsAdversario) nomeTimeJogador else nomeAdversario
+                val jogadorVenceu = timVenc == nomeTimeJogador
                 Column(
                     Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
                     ultimoJogador?.let { ev ->
                         PenaltiCobrancaCard(nomeTime = nomeTimeJogador, evento = ev)
@@ -1506,31 +1483,35 @@ private fun PenaltiInterativoPainel(
                     ultimoAdversario?.let { ev ->
                         PenaltiCobrancaCard(nomeTime = nomeAdversario, evento = ev)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    Spacer(Modifier.height(Spacing.sm))
+                    PenaltiVencedorCard(
+                        nomeVencedor = timVenc,
+                        placar = "$golsJogador – $golsAdversario",
+                        jogadorVenceu = jogadorVenceu
+                    )
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Button(
+                        onClick = { onConcluir(construirResultado()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.lg),
+                        shape = RoundedCornerShape(Radius.md),
+                        contentPadding = PaddingValues(vertical = Spacing.md)
                     ) {
-                        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "🏆 $timVenc avança!",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (timVenc == nomeTimeJogador) Color(0xFF2E7D32)
-                                        else MaterialTheme.colorScheme.error
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "$golsJogador – $golsAdversario nos pênaltis",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                        Text("Concluir", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(Spacing.sm))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
-                Button(
-                    onClick = { onConcluir(construirResultado()) },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) { Text("Concluir") }
             }
         }
     }
@@ -1541,27 +1522,61 @@ private fun PenaltiInterativoPainel(
 // ─────────────────────────────────────────────────────────────
 @Composable
 private fun PenaltiCobrancaCard(nomeTime: String, evento: EventoPenalti) {
-    val cor = if (evento.convertido) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+    val cor = if (evento.convertido) Color(0xFF00E676) else MaterialTheme.colorScheme.error
+    val labelTexto = if (evento.convertido) "CONVERTEU" else "PERDEU"
     Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cor.copy(alpha = 0.12f))
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = cor.copy(alpha = 0.10f)),
+        border = BorderStroke(1.dp, cor.copy(alpha = 0.5f))
     ) {
-        Row(
-            Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(if (evento.convertido) "⚽" else "❌", fontSize = 28.sp)
-            Column(Modifier.weight(1f)) {
-                Text(evento.nomeAbrev, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(nomeTime, style = MaterialTheme.typography.bodySmall)
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(Modifier.width(4.dp).fillMaxHeight().background(cor))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(cor.copy(alpha = 0.20f))
+                        .border(1.dp, cor.copy(alpha = 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (evento.convertido) Icons.Filled.SportsSoccer else Icons.Filled.Cancel,
+                        contentDescription = null,
+                        tint = cor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        evento.nomeAbrev,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        nomeTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = labelTexto,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = cor,
+                    letterSpacing = 1.sp
+                )
             }
-            Text(
-                if (evento.convertido) "Gol!" else "Defendido",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = cor
-            )
         }
     }
 }
@@ -1585,87 +1600,119 @@ private fun PenaltiSelecaoPainel(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
-            Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-        ) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "DISPUTA DE PÊNALTIS",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "$nomeTimeJogador $agregadoJogador × $agregadoAdversario $nomeAdversario",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Agregado empatado — decisão nos pênaltis",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
-                )
+        // Header dramático
+        PainelHeader(
+            titulo = "Disputa de pênaltis",
+            subtitulo = "$nomeTimeJogador $agregadoJogador × $agregadoAdversario $nomeAdversario · agregado empatado",
+            accent = MaterialTheme.colorScheme.error,
+            icone = Icons.Filled.SportsSoccer,
+            chipDireita = {
+                val cor = if (selecionados.size >= 5) MaterialTheme.colorScheme.primary
+                          else MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(cor.copy(alpha = 0.18f))
+                        .border(0.5.dp, cor.copy(alpha = 0.5f), RoundedCornerShape(Radius.sm))
+                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
+                ) {
+                    Text(
+                        "${selecionados.size}/5",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = cor
+                    )
+                }
             }
-        }
-
-        Text(
-            "Escolha os 5 cobradores (em ordem):",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
-        ) {
+        Text(
+            "ESCOLHA OS 5 COBRADORES (EM ORDEM)",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md)
+        )
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(titulares) { jne ->
                 val ordem = selecionados.indexOf(jne) + 1
                 val selecionado = ordem > 0
-                ListItem(
-                    headlineContent = { Text(jne.jogador.nome) },
-                    supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Fin: ${jne.jogador.finalizacao}") },
-                    trailingContent = {
-                        if (selecionado) {
-                            OutlinedButton(
-                                onClick = { selecionados.remove(jne) },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text("#$ordem  ✕", style = MaterialTheme.typography.labelMedium)
-                            }
-                        } else if (selecionados.size < 5) {
-                            Button(
-                                onClick = { selecionados.add(jne) },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("+", style = MaterialTheme.typography.labelMedium)
+                JogadorLinhaIntervalo(
+                    jne = jne,
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "FIN ${jne.jogador.finalizacao}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.width(Spacing.sm))
+                            if (selecionado) {
+                                FilledTonalButton(
+                                    onClick = { selecionados.remove(jne) },
+                                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                ) {
+                                    Text(
+                                        "#$ordem",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.width(Spacing.xs))
+                                    Icon(
+                                        Icons.Filled.Cancel,
+                                        contentDescription = "Remover",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            } else if (selecionados.size < 5) {
+                                OutlinedButton(
+                                    onClick = { selecionados.add(jne) },
+                                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                    shape = RoundedCornerShape(Radius.sm)
+                                ) {
+                                    Text(
+                                        "ADICIONAR",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
                 )
-                HorizontalDivider(thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
             }
         }
 
-        Text(
-            "${selecionados.size}/5 selecionados",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selecionados.size >= 5) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        Spacer(Modifier.height(4.dp))
-        Button(
-            onClick = { onConfirmar(selecionados.toList()) },
-            enabled = selecionados.size >= 5,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
         ) {
-            Text("Confirmar e disputar pênaltis")
+            Button(
+                onClick = { onConfirmar(selecionados.toList()) },
+                enabled = selecionados.size >= 5,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.lg),
+                shape = RoundedCornerShape(Radius.md),
+                contentPadding = PaddingValues(vertical = Spacing.md)
+            ) {
+                Text("Confirmar e disputar pênaltis", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(Spacing.sm))
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
@@ -1682,8 +1729,9 @@ private fun PenaltiResultadoPainel(
     onConcluir: () -> Unit
 ) {
     data class ItemCobranca(val ehCasa: Boolean, val evento: br.com.managerfoot.domain.model.EventoPenalti)
-    val penaltiScoreFontSize = if (LocalConfiguration.current.screenWidthDp < 400) 32.sp else 40.sp
     val cobrancasExibidas  = remember { mutableStateListOf<ItemCobranca>() }
+    val cobrancasCasaShown = remember { mutableStateListOf<br.com.managerfoot.domain.model.EventoPenalti>() }
+    val cobrancasForaShown = remember { mutableStateListOf<br.com.managerfoot.domain.model.EventoPenalti>() }
     var animacaoFinalizada by remember { mutableStateOf(false) }
     var golsCasaAtual      by remember { mutableIntStateOf(0) }
     var golsForaAtual      by remember { mutableIntStateOf(0) }
@@ -1703,8 +1751,13 @@ private fun PenaltiResultadoPainel(
     LaunchedEffect(penaltis) {
         delay(500)
         cobrancasIntercaladas.forEach { (ehCasa, ev) ->
-            if (ehCasa) { if (ev.convertido) golsCasaAtual++ }
-            else         { if (ev.convertido) golsForaAtual++ }
+            if (ehCasa) {
+                if (ev.convertido) golsCasaAtual++
+                cobrancasCasaShown.add(ev)
+            } else {
+                if (ev.convertido) golsForaAtual++
+                cobrancasForaShown.add(ev)
+            }
             cobrancasExibidas.add(ItemCobranca(ehCasa, ev))
             scope.launch { listState.animateScrollToItem(cobrancasExibidas.size - 1) }
             delay(900)
@@ -1712,135 +1765,69 @@ private fun PenaltiResultadoPainel(
         animacaoFinalizada = true
     }
 
+    val isJogadorCasa = penaltis.timeCasaId == timeJogadorId
+
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
-            Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "DISPUTA DE PÊNALTIS",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        nomeTimeCasa,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                    AnimatedContent(
-                        targetState = golsCasaAtual,
-                        transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
-                        label = "pc"
-                    ) { g ->
-                        Text(
-                            g.toString(), fontSize = penaltiScoreFontSize, fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Text(
-                        " – ",
-                        fontSize = 24.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
-                    )
-                    AnimatedContent(
-                        targetState = golsForaAtual,
-                        transitionSpec = { slideInVertically { -it } togetherWith slideOutVertically { it } },
-                        label = "pf"
-                    ) { g ->
-                        Text(
-                            g.toString(), fontSize = penaltiScoreFontSize, fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Text(
-                        nomeTimeFora,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-                if (animacaoFinalizada) {
-                    Spacer(Modifier.height(8.dp))
-                    val vencedorNome = if (penaltis.vencedorId == penaltis.timeCasaId) nomeTimeCasa else nomeTimeFora
-                    Text(
-                        "🏆 $vencedorNome avança!",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (penaltis.vencedorId == timeJogadorId)
-                            Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        }
+        PenaltiPlacardCard(
+            nomeTimeCasa     = nomeTimeCasa,
+            nomeTimeFora     = nomeTimeFora,
+            golsCasa         = golsCasaAtual,
+            golsFora         = golsForaAtual,
+            cobrancasCasa    = cobrancasCasaShown.toList(),
+            cobrancasFora    = cobrancasForaShown.toList(),
+            isSuddenDeath    = (cobrancasCasaShown.size > 5 || cobrancasForaShown.size > 5),
+            tituloRodada     = if (animacaoFinalizada) "DISPUTA ENCERRADA" else "DISPUTA EM ANDAMENTO",
+            agregadoCasa     = 0,
+            agregadoFora     = 0,
+            destaqueVencedor = animacaoFinalizada,
+            timeJogadorEhCasa = isJogadorCasa,
+            mostrarVencedor  = animacaoFinalizada,
+            vencedorNome     = if (animacaoFinalizada) {
+                if (penaltis.vencedorId == penaltis.timeCasaId) nomeTimeCasa else nomeTimeFora
+            } else null,
+            jogadorVenceu    = penaltis.vencedorId == timeJogadorId
+        )
 
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             items(cobrancasExibidas) { item ->
                 AnimatedVisibility(visible = true, enter = slideInVertically { -it } + fadeIn()) {
-                    val icone    = if (item.evento.convertido) "✅" else "❌"
                     val nomeTime = if (item.ehCasa) nomeTimeCasa else nomeTimeFora
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                if (item.evento.convertido) Color(0xFF1B5E20).copy(alpha = 0.12f)
-                                else Color(0xFFC62828).copy(alpha = 0.10f)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = if (item.ehCasa) Arrangement.Start else Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (item.ehCasa) {
-                            Text(icone, fontSize = 20.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(item.evento.nomeAbrev, style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium)
-                                Text(nomeTime, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        } else {
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(item.evento.nomeAbrev, style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium)
-                                Text(nomeTime, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(icone, fontSize = 20.sp)
-                        }
-                    }
+                    PenaltiCobrancaCard(nomeTime = nomeTime, evento = item.evento)
                 }
             }
         }
 
         if (animacaoFinalizada) {
-            Button(
-                onClick = onConcluir,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp
             ) {
-                Text("Voltar ao painel")
+                Button(
+                    onClick = onConcluir,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(Spacing.lg),
+                    shape = RoundedCornerShape(Radius.md),
+                    contentPadding = PaddingValues(vertical = Spacing.md)
+                ) {
+                    Text("Voltar ao painel", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(Spacing.sm))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -1869,7 +1856,6 @@ private fun IntervaloPainel(
     titularesAdversarioAtuais: List<JogadorNaEscalacao> = escalacaoAdversario?.titulares ?: emptyList()
 ) {
     var abaAtiva by remember { mutableIntStateOf(0) }
-    // Titular selecionado aguardando escolha do reserva
     var titularSelecionado by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
 
     Column(
@@ -1877,43 +1863,66 @@ private fun IntervaloPainel(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Cabeçalho
-        Card(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(
-                Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(tituloHeader, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    subtituloHeader,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "${substituicoes.size}/6 substituições realizadas",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (substituicoes.size >= 6) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+        // Header com chip de substituições restantes
+        PainelHeader(
+            titulo = tituloHeader,
+            subtitulo = subtituloHeader,
+            accent = MaterialTheme.colorScheme.primary,
+            chipDireita = {
+                val limiteAtingido = substituicoes.size >= 6
+                val cor = if (limiteAtingido) MaterialTheme.colorScheme.error
+                          else MaterialTheme.colorScheme.primary
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(cor.copy(alpha = 0.18f))
+                        .border(0.5.dp, cor.copy(alpha = 0.5f), RoundedCornerShape(Radius.sm))
+                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
+                ) {
+                    Text(
+                        "${substituicoes.size}/6 subs",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = cor
+                    )
+                }
             }
-        }
+        )
 
-        TabRow(selectedTabIndex = abaAtiva) {
-            Tab(selected = abaAtiva == 0, onClick = { abaAtiva = 0; titularSelecionado = null }, text = { Text("Substituições") })
-            Tab(selected = abaAtiva == 1, onClick = { abaAtiva = 1 }, text = { Text("Tática") })
-            Tab(selected = abaAtiva == 2, onClick = { abaAtiva = 2 }, text = { Text("Posições") })
-            Tab(selected = abaAtiva == 3, onClick = { abaAtiva = 3 }, text = { Text("Banco") })
-            Tab(selected = abaAtiva == 4, onClick = { abaAtiva = 4 }, text = { Text("Stats") })
+        // Tabs scrolláveis pra caber 5–6 abas confortavelmente
+        ScrollableTabRow(
+            selectedTabIndex = abaAtiva,
+            edgePadding = Spacing.md,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        ) {
+            val labelStyle = MaterialTheme.typography.labelMedium
+            Tab(
+                selected = abaAtiva == 0,
+                onClick = { abaAtiva = 0; titularSelecionado = null },
+                text = { Text("SUBS", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+            )
+            Tab(
+                selected = abaAtiva == 1, onClick = { abaAtiva = 1 },
+                text = { Text("TÁTICA", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+            )
+            Tab(
+                selected = abaAtiva == 2, onClick = { abaAtiva = 2 },
+                text = { Text("POSIÇÕES", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+            )
+            Tab(
+                selected = abaAtiva == 3, onClick = { abaAtiva = 3 },
+                text = { Text("BANCO", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+            )
+            Tab(
+                selected = abaAtiva == 4, onClick = { abaAtiva = 4 },
+                text = { Text("STATS", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+            )
             if (escalacaoAdversario != null) {
-                Tab(selected = abaAtiva == 5, onClick = { abaAtiva = 5 }, text = { Text("Adversário") })
+                Tab(
+                    selected = abaAtiva == 5, onClick = { abaAtiva = 5 },
+                    text = { Text("ADVERSÁRIO", style = labelStyle, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) }
+                )
             }
         }
 
@@ -1953,22 +1962,44 @@ private fun IntervaloPainel(
                     }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Estatísticas não disponíveis", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Estatísticas não disponíveis",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
                 5 -> if (escalacaoAdversario != null) {
-                    EscalacaoAdversarioTab(escalacao = escalacaoAdversario, titularesAtuais = titularesAdversarioAtuais)
+                    EscalacaoAdversarioTab(
+                        escalacao = escalacaoAdversario,
+                        titularesAtuais = titularesAdversarioAtuais
+                    )
                 }
             }
         }
 
-        Button(
-            onClick = onContinuar,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+        // Botão final destacado
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
         ) {
-            Text(rotuloBotao)
+            Button(
+                onClick = onContinuar,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.lg),
+                shape = RoundedCornerShape(Radius.md),
+                contentPadding = PaddingValues(vertical = Spacing.md)
+            ) {
+                Text(rotuloBotao, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(Spacing.sm))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
@@ -1991,82 +2022,126 @@ private fun SubstituicoesTab(
             { it.posicaoUsada.ordinal }
         ))
     }
-    val reservasOrdenadas = remember(reservas) {
-        reservas.sortedWith(compareBy(
+    val reservasOrdenadas = remember(reservas, titularSelecionado) {
+        // Quando há titular selecionado, prioriza reservas do mesmo setor
+        val byPos = compareBy<JogadorNaEscalacao>(
             { posOrder[it.posicaoUsada.setor] ?: 2 },
             { it.posicaoUsada.ordinal }
-        ))
+        )
+        if (titularSelecionado != null) {
+            val mesmoSetor = compareBy<JogadorNaEscalacao> {
+                if (it.posicaoUsada.setor == titularSelecionado.posicaoUsada.setor) 0 else 1
+            }
+            reservas.sortedWith(mesmoSetor.then(byPos))
+        } else {
+            reservas.sortedWith(byPos)
+        }
     }
 
     if (titularSelecionado == null) {
         // Fase 1: Escolher quem sai
         Column(Modifier.fillMaxSize()) {
             Text(
-                text = if (podeFazerMais) "Escolha quem vai sair:" else "Limite de 6 substituições atingido",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-                color = if (podeFazerMais) MaterialTheme.colorScheme.onSurface
+                text = if (podeFazerMais) "ESCOLHA QUEM VAI SAIR"
+                       else "LIMITE DE 6 SUBSTITUIÇÕES ATINGIDO",
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp,
+                color = if (podeFazerMais) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.error
             )
             LazyColumn {
                 items(titularesOrdenados) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
-                        trailingContent = {
+                    JogadorLinhaIntervalo(
+                        jne = jne,
+                        trailing = {
                             if (podeFazerMais) {
-                                OutlinedButton(
+                                FilledTonalButton(
                                     onClick = { onSelecionarTitular(jne) },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
                                 ) {
-                                    Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Substituir", style = MaterialTheme.typography.labelSmall)
+                                    Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(Spacing.xs))
+                                    Text("SAI", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 }
             }
         }
     } else {
         // Fase 2: Escolher quem entra
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // Banner contextual mostrando quem sai
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+                tonalElevation = 0.dp
             ) {
-                Column {
-                    Text("Substituindo:", style = MaterialTheme.typography.labelSmall)
-                    Text(titularSelecionado.jogador.nome, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDownward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(Spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "SUBSTITUINDO",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.error,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            "${titularSelecionado.jogador.nome} (${titularSelecionado.posicaoUsada.abreviacao})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    TextButton(onClick = { onSelecionarTitular(null) }) {
+                        Text("Cancelar")
+                    }
                 }
-                TextButton(onClick = { onSelecionarTitular(null) }) { Text("Cancelar") }
             }
             Text(
-                text = "Escolha quem entra:",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge
+                text = "ESCOLHA QUEM ENTRA",
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             LazyColumn {
                 items(reservasOrdenadas) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
-                        trailingContent = {
+                    JogadorLinhaIntervalo(
+                        jne = jne,
+                        trailing = {
                             Button(
                                 onClick = { onSubstituicao(titularSelecionado, jne) },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                shape = RoundedCornerShape(Radius.sm)
                             ) {
-                                Text("Colocar", style = MaterialTheme.typography.labelSmall)
+                                Icon(Icons.Filled.ArrowUpward, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(Spacing.xs))
+                                Text("ENTRA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 }
             }
         }
@@ -2085,7 +2160,7 @@ private fun BancoTab(reservas: List<JogadorNaEscalacao>) {
 
     if (reservas.isEmpty()) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
+            modifier = Modifier.fillMaxSize().padding(Spacing.xxl),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -2098,37 +2173,20 @@ private fun BancoTab(reservas: List<JogadorNaEscalacao>) {
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
-        item {
-            Text(
-                "${reservasOrdenadas.size} jogador${if (reservasOrdenadas.size != 1) "es" else ""} no banco",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        items(reservasOrdenadas) { jne ->
-            ListItem(
-                headlineContent = { Text(jne.jogador.nome) },
-                supportingContent = {
-                    Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}")
-                },
-                trailingContent = {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Text(
-                            jne.posicaoUsada.abreviacao,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-            )
-            HorizontalDivider(thickness = 0.5.dp)
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            "${reservasOrdenadas.size} JOGADOR${if (reservasOrdenadas.size != 1) "ES" else ""} NO BANCO",
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp
+        )
+        LazyColumn(Modifier.weight(1f)) {
+            items(reservasOrdenadas) { jne ->
+                JogadorLinhaIntervalo(jne = jne)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+            }
         }
     }
 }
@@ -2149,43 +2207,64 @@ private fun EscalacaoAdversarioTab(
         CalculadoraForca.calcularForcaTime(escalacao.copy(titulares = titularesAtuais)).toInt()
     }
     var mostrarGramado by remember { mutableStateOf(false) }
+    val estiloLabel = when (escalacao.time.estiloJogo) {
+        EstiloJogo.OFENSIVO -> "Ofensivo"
+        EstiloJogo.EQUILIBRADO -> "Equilibrado"
+        EstiloJogo.DEFENSIVO -> "Defensivo"
+        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
+    }
 
     Column(Modifier.fillMaxSize()) {
-        // Cabeçalho do adversário
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.errorContainer)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Cabeçalho com escudo + dados táticos do adversário
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+            tonalElevation = 0.dp
         ) {
-            Column {
-                Text(
-                    escalacao.time.nome,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onErrorContainer
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                TeamBadge(
+                    nome = escalacao.time.nome,
+                    escudoRes = escalacao.time.escudoRes,
+                    size = 44.dp
                 )
-                Text(
-                    "Formação: ${escalacao.time.taticaFormacao} · ${when (escalacao.time.estiloJogo) {
-                        EstiloJogo.OFENSIVO -> "Ofensivo"
-                        EstiloJogo.EQUILIBRADO -> "Equilibrado"
-                        EstiloJogo.DEFENSIVO -> "Defensivo"
-                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
-                    }}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
-                )
-                Text(
-                    "Força média: $forcaAtual",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                )
-            }
-            TextButton(onClick = { mostrarGramado = !mostrarGramado }) {
-                Text(if (mostrarGramado) "Lista" else "Campo")
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        escalacao.time.nome,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "${escalacao.time.taticaFormacao} · $estiloLabel · Força $forcaAtual",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Toggle Lista | Campo
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.pill))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Radius.pill))
+                        .padding(2.dp)
+                ) {
+                    ToggleSegment(
+                        label = "Lista",
+                        selected = !mostrarGramado,
+                        onClick = { mostrarGramado = false }
+                    )
+                    ToggleSegment(
+                        label = "Campo",
+                        selected = mostrarGramado,
+                        onClick = { mostrarGramado = true }
+                    )
+                }
             }
         }
 
@@ -2196,35 +2275,43 @@ private fun EscalacaoAdversarioTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(8.dp)
+                    .padding(Spacing.sm)
             )
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
                 items(titularesOrdenados) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = {
-                            Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}")
-                        },
-                        trailingContent = {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.errorContainer
-                            ) {
-                                Text(
-                                    jne.posicaoUsada.abreviacao,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        }
-                    )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    JogadorLinhaIntervalo(jne = jne)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleSegment(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.pill))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -2234,79 +2321,109 @@ private fun TrocarPosicoesTab(
     onTrocarPosicoes: (a: JogadorNaEscalacao, b: JogadorNaEscalacao) -> Unit
 ) {
     var selecionado by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
-    // Captura o valor atual como val imutável para evitar NPE em recomposições
-    // refinadas de lambdas internas (ex.: supportingContent de ListItem) que
-    // ocorrem antes que o escopo externo possa reavaliar o if-null.
     val sel = selecionado
     if (sel == null) {
         Column(Modifier.fillMaxSize()) {
             Text(
-                "Selecione o jogador para mover de posição:",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge
+                "SELECIONE QUEM VAI MOVER DE POSIÇÃO",
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
             )
             LazyColumn {
                 items(titulares) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
-                        trailingContent = {
-                            OutlinedButton(
+                    JogadorLinhaIntervalo(
+                        jne = jne,
+                        trailing = {
+                            FilledTonalButton(
                                 onClick = { selecionado = jne },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f),
+                                    contentColor = MaterialTheme.colorScheme.secondary
+                                )
                             ) {
-                                Text("Selecionar", style = MaterialTheme.typography.labelSmall)
+                                Text("MOVER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 }
             }
         }
     } else {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+                tonalElevation = 0.dp
             ) {
-                Column {
-                    Text("Trocar posição de:", style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        "${sel.jogador.nome} (${sel.posicaoUsada.abreviacao})",
-                        fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SwapHoriz,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(20.dp)
                     )
+                    Spacer(Modifier.width(Spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "TROCAR POSIÇÃO DE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.secondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            "${sel.jogador.nome} (${sel.posicaoUsada.abreviacao})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    TextButton(onClick = { selecionado = null }) { Text("Cancelar") }
                 }
-                TextButton(onClick = { selecionado = null }) { Text("Cancelar") }
             }
             Text(
-                "Selecione quem vai receber a posição:",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge
+                "ESCOLHA COM QUEM TROCAR",
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
             )
             LazyColumn {
                 items(titulares.filter { it.jogador.id != sel.jogador.id }) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = {
-                            Text("${sel.posicaoUsada.abreviacao} ↔ ${jne.posicaoUsada.abreviacao}")
-                        },
-                        trailingContent = {
-                            Button(
-                                onClick = {
-                                    onTrocarPosicoes(sel, jne)
-                                    selecionado = null
-                                },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Trocar", style = MaterialTheme.typography.labelSmall)
+                    JogadorLinhaIntervalo(
+                        jne = jne,
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${sel.posicaoUsada.abreviacao} ↔ ${jne.posicaoUsada.abreviacao}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.width(Spacing.sm))
+                                Button(
+                                    onClick = {
+                                        onTrocarPosicoes(sel, jne)
+                                        selecionado = null
+                                    },
+                                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                    shape = RoundedCornerShape(Radius.sm)
+                                ) {
+                                    Text("TROCAR", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 }
             }
         }
@@ -2334,20 +2451,39 @@ private fun TaticaIntervaloPainel(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.lg)
     ) {
         // ── Formação ──────────────────────────────────────────────
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Formação tática", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Text(
+                "FORMAÇÃO TÁTICA",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
+            )
             Text(
                 "Escolha o esquema tático para o 2º tempo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
                 formacoes.forEach { f ->
-                    FilterChip(selected = f == formacaoAtual, onClick = { onFormacaoChange(f) }, label = { Text(f) })
+                    FilterChip(
+                        selected = f == formacaoAtual,
+                        onClick = { onFormacaoChange(f) },
+                        label = {
+                            Text(
+                                f,
+                                fontWeight = if (f == formacaoAtual) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        shape = RoundedCornerShape(Radius.sm)
+                    )
                 }
             }
         }
@@ -2357,33 +2493,107 @@ private fun TaticaIntervaloPainel(
             GramadoTatico(
                 titulares = titulares,
                 formacao  = formacaoAtual,
-                modifier  = Modifier.padding(vertical = 4.dp)
+                modifier  = Modifier.padding(vertical = Spacing.xs)
             )
         }
 
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         // ── Estilo de jogo ────────────────────────────────────────
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Estilo de jogo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             Text(
-                "Define a postura tática da equipe no 2º tempo.",
+                "ESTILO DE JOGO",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
+            )
+            Text(
+                "Postura tática da equipe no 2º tempo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EstiloJogo.entries.forEach { estilo ->
-                    val label = when (estilo) {
-                        EstiloJogo.OFENSIVO      -> "Ofensivo"
-                        EstiloJogo.EQUILIBRADO   -> "Equilibrado"
-                        EstiloJogo.DEFENSIVO     -> "Defensivo"
-                        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
-                    }
-                    FilterChip(selected = estilo == estiloAtual, onClick = { onEstiloChange(estilo) }, label = { Text(label) })
-                }
+            EstiloJogo.entries.forEach { estilo ->
+                EstiloJogoCard(
+                    estilo = estilo,
+                    selecionado = estilo == estiloAtual,
+                    onClick = { onEstiloChange(estilo) }
+                )
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.lg))
+    }
+}
+
+@Composable
+private fun EstiloJogoCard(
+    estilo: EstiloJogo,
+    selecionado: Boolean,
+    onClick: () -> Unit
+) {
+    val (label, descricao) = when (estilo) {
+        EstiloJogo.OFENSIVO      -> "Ofensivo"      to "Pressiona alto, busca o gol mas se expõe atrás."
+        EstiloJogo.EQUILIBRADO   -> "Equilibrado"   to "Postura padrão, sem riscos extras."
+        EstiloJogo.DEFENSIVO     -> "Defensivo"     to "Recua linhas, foco em segurar o resultado."
+        EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque" to "Aguarda o adversário e explora espaços rápidos."
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selecionado)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            width = if (selecionado) 1.5.dp else 1.dp,
+            color = if (selecionado) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // Indicador radio à esquerda
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .border(
+                        2.dp,
+                        if (selecionado) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outline,
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selecionado) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    descricao,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -2392,123 +2602,237 @@ private fun TaticaIntervaloPainel(
 // ─────────────────────────────────────────────
 @Composable
 fun EventoCard(evento: EventoExibicao, nomeTimeCasa: String) {
-    // Linha de intervalo
+    // Linha de intervalo (separador entre 1ºT e 2ºT)
     if (evento.timeId == -1) {
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 4.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-            thickness = 1.dp
-        )
-        Text(
-            text = "INTERVALO",
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold
-        )
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 4.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-            thickness = 1.dp
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                thickness = 1.dp
+            )
+            Text(
+                text = "INTERVALO",
+                modifier = Modifier.padding(horizontal = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                thickness = 1.dp
+            )
+        }
         return
     }
 
     val ehCasa = evento.nomeTime == nomeTimeCasa
-    val (icone, corFundo) = when (evento.tipo) {
-        TipoEvento.GOL, TipoEvento.PENALTI_CONVERTIDO ->
-            "⚽" to Color(0xFF1B5E20).copy(alpha = 0.15f)
-        TipoEvento.CARTAO_AMARELO ->
-            "🟨" to Color(0xFFF9A825).copy(alpha = 0.15f)
-        TipoEvento.CARTAO_VERMELHO ->
-            "🟥" to Color(0xFFC62828).copy(alpha = 0.15f)
-        TipoEvento.LESAO ->
-            "🚑" to Color(0xFF880E4F).copy(alpha = 0.15f)
-        TipoEvento.PENALTI_PERDIDO ->
-            "❌" to Color(0xFFE65100).copy(alpha = 0.15f)
-        TipoEvento.ASSISTENCIA ->
-            "👟" to Color(0xFF0D47A1).copy(alpha = 0.12f)
-        TipoEvento.SUBSTITUICAO_ENTRA ->
-            "↑" to Color(0xFF1565C0).copy(alpha = 0.12f)
-        TipoEvento.SUBSTITUICAO_SAI ->
-            "↓" to Color(0xFF1565C0).copy(alpha = 0.08f)
-        else -> "📋" to MaterialTheme.colorScheme.surfaceVariant
-    }
+    val style = eventoStyle(evento.tipo)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(corFundo)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (ehCasa) Arrangement.Start else Arrangement.End
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = style.background),
+        shape = RoundedCornerShape(Radius.md),
+        border = if (style.destacado)
+            BorderStroke(1.dp, style.accent.copy(alpha = 0.5f))
+        else null
     ) {
-        if (ehCasa) {
-            // Minuto
-            Box(
-                contentAlignment = Alignment.Center,
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            if (ehCasa) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(style.accent))
+            }
+            Row(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    .weight(1f)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (ehCasa) Arrangement.Start else Arrangement.End
             ) {
-                Text(
-                    text = "${evento.minuto}'",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                if (ehCasa) {
+                    EventoMinuto(evento.minuto, style.accent)
+                    Spacer(Modifier.width(Spacing.sm))
+                    EventoIcone(evento.tipo, style.accent)
+                    Spacer(Modifier.width(Spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = evento.descricao,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (style.destacado) FontWeight.Bold else FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = evento.nomeTime,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = evento.descricao,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (style.destacado) FontWeight.Bold else FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.End,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = evento.nomeTime,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(Spacing.sm))
+                    EventoIcone(evento.tipo, style.accent)
+                    Spacer(Modifier.width(Spacing.sm))
+                    EventoMinuto(evento.minuto, style.accent)
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Text(text = icone, fontSize = 18.sp)
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = evento.descricao,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = evento.nomeTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = evento.descricao,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.End
-                )
-                Text(
-                    text = evento.nomeTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(text = icone, fontSize = 18.sp)
-            Spacer(Modifier.width(8.dp))
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-            ) {
-                Text(
-                    text = "${evento.minuto}'",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            if (!ehCasa) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(style.accent))
             }
         }
     }
+}
+
+private data class EventoStyle(
+    val accent: Color,
+    val background: Color,
+    val destacado: Boolean = false
+)
+
+@Composable
+private fun eventoStyle(tipo: TipoEvento): EventoStyle {
+    val primary = MaterialTheme.colorScheme.primary
+    val surface = MaterialTheme.colorScheme.surface
+    return when (tipo) {
+        TipoEvento.GOL, TipoEvento.PENALTI_CONVERTIDO -> EventoStyle(
+            accent = Color(0xFF00E676),
+            background = Color(0xFF00E676).copy(alpha = 0.10f),
+            destacado = true
+        )
+        TipoEvento.CARTAO_AMARELO -> EventoStyle(
+            accent = Color(0xFFFFB300),
+            background = Color(0xFFFFB300).copy(alpha = 0.08f)
+        )
+        TipoEvento.CARTAO_VERMELHO -> EventoStyle(
+            accent = Color(0xFFFF4444),
+            background = Color(0xFFFF4444).copy(alpha = 0.10f),
+            destacado = true
+        )
+        TipoEvento.LESAO -> EventoStyle(
+            accent = Color(0xFFE91E63),
+            background = Color(0xFFE91E63).copy(alpha = 0.08f)
+        )
+        TipoEvento.PENALTI_PERDIDO -> EventoStyle(
+            accent = Color(0xFFFF6F00),
+            background = Color(0xFFFF6F00).copy(alpha = 0.08f)
+        )
+        TipoEvento.ASSISTENCIA -> EventoStyle(
+            accent = Color(0xFF42A5F5),
+            background = Color(0xFF42A5F5).copy(alpha = 0.06f)
+        )
+        TipoEvento.SUBSTITUICAO_ENTRA -> EventoStyle(
+            accent = Color(0xFF66BB6A),
+            background = Color(0xFF66BB6A).copy(alpha = 0.06f)
+        )
+        TipoEvento.SUBSTITUICAO_SAI -> EventoStyle(
+            accent = Color(0xFFFF7043),
+            background = Color(0xFFFF7043).copy(alpha = 0.05f)
+        )
+        else -> EventoStyle(
+            accent = primary,
+            background = surface
+        )
+    }
+}
+
+@Composable
+private fun EventoMinuto(minuto: Int, accent: Color) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(accent.copy(alpha = 0.18f))
+    ) {
+        Text(
+            text = "${minuto}'",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = accent
+        )
+    }
+}
+
+@Composable
+private fun EventoIcone(tipo: TipoEvento, accent: Color) {
+    when (tipo) {
+        TipoEvento.CARTAO_AMARELO -> CartaoIcon(Color(0xFFFFB300))
+        TipoEvento.CARTAO_VERMELHO -> CartaoIcon(Color(0xFFFF4444))
+        TipoEvento.GOL, TipoEvento.PENALTI_CONVERTIDO -> Icon(
+            imageVector = Icons.Filled.SportsSoccer,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(22.dp)
+        )
+        TipoEvento.LESAO -> Icon(
+            imageVector = Icons.Filled.LocalHospital,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        TipoEvento.PENALTI_PERDIDO -> Icon(
+            imageVector = Icons.Filled.Cancel,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        TipoEvento.SUBSTITUICAO_ENTRA -> Icon(
+            imageVector = Icons.Filled.ArrowUpward,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        TipoEvento.SUBSTITUICAO_SAI -> Icon(
+            imageVector = Icons.Filled.ArrowDownward,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        TipoEvento.ASSISTENCIA -> Icon(
+            imageVector = Icons.Filled.SwapHoriz,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        else -> Icon(
+            imageVector = Icons.Filled.SportsSoccer,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun CartaoIcon(color: Color) {
+    Box(
+        modifier = Modifier
+            .size(width = 14.dp, height = 20.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(color)
+    )
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2521,78 +2845,1001 @@ private fun LesaoPainel(
     onSubstituicao: (JogadorNaEscalacao) -> Unit,
     onSemReservas: () -> Unit
 ) {
+    val erro = MaterialTheme.colorScheme.error
+
+    // Reservas ordenadas: mesmo setor do lesionado primeiro
+    val reservasOrdenadas = remember(reservas, jogadorLesionado) {
+        val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
+        val byPos = compareBy<JogadorNaEscalacao>(
+            { posOrder[it.posicaoUsada.setor] ?: 2 },
+            { it.posicaoUsada.ordinal }
+        )
+        if (jogadorLesionado != null) {
+            val mesmoSetor = compareBy<JogadorNaEscalacao> {
+                if (it.posicaoUsada.setor == jogadorLesionado.posicaoUsada.setor) 0 else 1
+            }
+            reservas.sortedWith(mesmoSetor.then(byPos))
+        } else {
+            reservas.sortedWith(byPos)
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
-            Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-        ) {
-            Column(
-                Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "🚑 JOGADOR LESIONADO",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                if (jogadorLesionado != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${jogadorLesionado.jogador.nome} (${jogadorLesionado.posicaoUsada.abreviacao}) saiu de campo lesionado.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
+        // Header de alerta
+        PainelHeader(
+            titulo = "Jogador lesionado",
+            subtitulo = if (jogadorLesionado != null)
+                "${jogadorLesionado.jogador.nome} (${jogadorLesionado.posicaoUsada.abreviacao}) saiu de campo"
+            else "Substituição forçada",
+            accent = erro,
+            icone = Icons.Filled.LocalHospital
+        )
 
         if (reservas.isEmpty()) {
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(16.dp),
+                    .padding(Spacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("Sem reservas disponíveis.", style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
+                Icon(
+                    imageVector = Icons.Filled.Cancel,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(Modifier.height(Spacing.md))
+                Text(
+                    "Sem reservas disponíveis",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(Spacing.xs))
                 Text(
                     "O time continuará com um jogador a menos.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
             }
-            Button(
-                onClick = onSemReservas,
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
-            ) { Text("Continuar") }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp
+            ) {
+                Button(
+                    onClick = onSemReservas,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(Spacing.lg),
+                    shape = RoundedCornerShape(Radius.md),
+                    contentPadding = PaddingValues(vertical = Spacing.md)
+                ) {
+                    Text("Continuar com 10", fontWeight = FontWeight.SemiBold)
+                }
+            }
         } else {
             Text(
-                "Escolha o substituto:",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge
+                "ESCOLHA O SUBSTITUTO",
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
             )
             LazyColumn(Modifier.weight(1f)) {
-                items(reservas) { jne ->
-                    ListItem(
-                        headlineContent = { Text(jne.jogador.nome) },
-                        supportingContent = { Text("${jne.posicaoUsada.abreviacao} · Força ${jne.jogador.forca}") },
-                        trailingContent = {
+                items(reservasOrdenadas) { jne ->
+                    JogadorLinhaIntervalo(
+                        jne = jne,
+                        trailing = {
                             Button(
                                 onClick = { onSubstituicao(jne) },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                                shape = RoundedCornerShape(Radius.sm)
                             ) {
-                                Text("Colocar", style = MaterialTheme.typography.labelSmall)
+                                Icon(
+                                    Icons.Filled.ArrowUpward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(Spacing.xs))
+                                Text("ENTRA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     )
-                    HorizontalDivider(thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Sub-entrega C: helpers comuns dos painéis modais
+// ─────────────────────────────────────────────────────────────
+
+// corSetor + PosicaoBadge promovidos para Components.kt (públicos)
+
+/**
+ * Linha de jogador padrão usada em SubstituicoesTab, BancoTab,
+ * TrocarPosicoesTab, EscalacaoAdversarioTab e LesaoPainel.
+ *
+ * - Faixa lateral colorida pelo setor à esquerda (3dp).
+ * - Badge de posição + nome + força.
+ * - Slot trailing para botão de ação.
+ */
+@Composable
+private fun JogadorLinhaIntervalo(
+    jne: JogadorNaEscalacao,
+    trailing: @Composable () -> Unit = {},
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val cor = corSetor(jne.posicaoUsada.setor)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(cor)
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            PosicaoBadge(
+                abreviacao = jne.posicaoUsada.abreviacao,
+                setor = jne.posicaoUsada.setor
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = jne.jogador.nome,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Força ${jne.jogador.forca} · ${jne.jogador.idade} anos",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            trailing()
+        }
+    }
+}
+
+/**
+ * Cabeçalho contextual usado em IntervaloPainel e LesaoPainel.
+ * Fica sticky no topo, com barra de acento colorida à esquerda.
+ */
+@Composable
+private fun PainelHeader(
+    titulo: String,
+    subtitulo: String,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    icone: ImageVector? = null,
+    chipDireita: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = accent.copy(alpha = 0.10f),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .height(36.dp)
+                    .background(accent, RoundedCornerShape(Radius.sm))
+            )
+            if (icone != null) {
+                Icon(
+                    imageVector = icone,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = titulo.uppercase(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = 1.5.sp
+                )
+                Text(
+                    text = subtitulo,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (chipDireita != null) chipDireita()
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Sub-entrega A: scoreboard polido + timeline de eventos
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun MatchScoreboard(
+    nomeTimeCasa: String,
+    nomeTimeFora: String,
+    escudoTimeCasa: String,
+    escudoTimeFora: String,
+    faseAtual: String,
+    minutoAtual: Int,
+    golsCasaAtual: Int,
+    golsForaAtual: Int,
+    scoreFontSize: androidx.compose.ui.unit.TextUnit,
+    progresso: Float,
+    eventosTimeline: List<EventoExibicao>,
+    timeCasaId: Int,
+    simulacaoEncerrada: Boolean,
+    torcedores: Int,
+    nomeEstadio: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(Radius.lg),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column {
+            MatchPhaseStripe(faseAtual, minutoAtual, simulacaoEncerrada)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.lg),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ScoreboardTeamColumn(
+                    nome = nomeTimeCasa,
+                    escudo = escudoTimeCasa,
+                    label = "Casa",
+                    modifier = Modifier.weight(1f)
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    AnimatedContent(
+                        targetState = golsCasaAtual,
+                        transitionSpec = {
+                            slideInVertically { -it } + fadeIn() togetherWith
+                                slideOutVertically { it } + fadeOut()
+                        },
+                        label = "gols_casa"
+                    ) { gols ->
+                        Text(
+                            text = gols.toString(),
+                            fontSize = scoreFontSize,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = "-",
+                        fontSize = (scoreFontSize.value * 0.6f).sp,
+                        fontWeight = FontWeight.Light,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AnimatedContent(
+                        targetState = golsForaAtual,
+                        transitionSpec = {
+                            slideInVertically { -it } + fadeIn() togetherWith
+                                slideOutVertically { it } + fadeOut()
+                        },
+                        label = "gols_fora"
+                    ) { gols ->
+                        Text(
+                            text = gols.toString(),
+                            fontSize = scoreFontSize,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                ScoreboardTeamColumn(
+                    nome = nomeTimeFora,
+                    escudo = escudoTimeFora,
+                    label = "Visitante",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            MatchTimelineBar(
+                progresso = progresso,
+                eventos = eventosTimeline,
+                timeCasaId = timeCasaId,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("0'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("45'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("90'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            if (torcedores > 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg)
+                        .padding(bottom = Spacing.md),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "👥", fontSize = 12.sp)
+                    Spacer(Modifier.width(Spacing.xs))
+                    Text(
+                        text = "%,d".format(torcedores) + (if (nomeEstadio.isNotBlank()) " · $nomeEstadio" else ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatchPhaseStripe(faseAtual: String, minutoAtual: Int, simulacaoEncerrada: Boolean) {
+    val accent = when (faseAtual) {
+        "PRÉ-JOGO" -> MaterialTheme.colorScheme.onSurfaceVariant
+        "1º TEMPO", "2º TEMPO" -> MaterialTheme.colorScheme.primary
+        "INTERVALO" -> Color(0xFFFFB300)
+        "FIM DE JOGO" -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(accent.copy(alpha = 0.14f))
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (faseAtual in listOf("1º TEMPO", "2º TEMPO") && !simulacaoEncerrada) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(accent)
+            )
+            Spacer(Modifier.width(Spacing.sm))
+        }
+        Text(
+            text = if (minutoAtual > 0 && !simulacaoEncerrada)
+                "$faseAtual  ·  ${minutoAtual}'"
+            else faseAtual,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+@Composable
+private fun ScoreboardTeamColumn(
+    nome: String,
+    escudo: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        TeamBadge(nome = nome, escudoRes = escudo, size = 56.dp)
+        Spacer(Modifier.height(Spacing.sm))
+        Text(
+            text = nome,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun MatchTimelineBar(
+    progresso: Float,
+    eventos: List<EventoExibicao>,
+    timeCasaId: Int,
+    modifier: Modifier = Modifier
+) {
+    val totalMin = 95
+    val trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    val progressColor = MaterialTheme.colorScheme.primary
+
+    val dots = remember(eventos) {
+        eventos
+            .filter { it.timeId != -1 }
+            .filter { it.tipo in setOf(
+                TipoEvento.GOL,
+                TipoEvento.PENALTI_CONVERTIDO,
+                TipoEvento.PENALTI_PERDIDO,
+                TipoEvento.CARTAO_AMARELO,
+                TipoEvento.CARTAO_VERMELHO
+            ) }
+    }
+
+    BoxWithConstraints(modifier = modifier.height(20.dp)) {
+        val widthPx = constraints.maxWidth.toFloat()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(trackColor)
+                .align(Alignment.Center)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progresso)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(progressColor)
+                .align(Alignment.CenterStart)
+        )
+
+        dots.forEach { ev ->
+            val frac = (ev.minuto / totalMin.toFloat()).coerceIn(0f, 1f)
+            val color = when (ev.tipo) {
+                TipoEvento.GOL, TipoEvento.PENALTI_CONVERTIDO -> Color(0xFF00E676)
+                TipoEvento.PENALTI_PERDIDO -> Color(0xFFFF6F00)
+                TipoEvento.CARTAO_AMARELO -> Color(0xFFFFB300)
+                TipoEvento.CARTAO_VERMELHO -> Color(0xFFFF4444)
+                else -> MaterialTheme.colorScheme.primary
+            }
+            val dotSize = if (ev.tipo in setOf(TipoEvento.GOL, TipoEvento.PENALTI_CONVERTIDO, TipoEvento.CARTAO_VERMELHO)) 10.dp else 7.dp
+            Box(
+                modifier = Modifier
+                    .offset {
+                        val sizePx = dotSize.toPx()
+                        androidx.compose.ui.unit.IntOffset(
+                            x = (frac * widthPx - sizePx / 2f).toInt(),
+                            y = 0
+                        )
+                    }
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(color)
+                    .align(Alignment.CenterStart)
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Sub-entrega B: Man of the Match — destaque do clube do jogador
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun ManOfTheMatchCard(
+    resultado: ResultadoPartida,
+    escalacaoJogador: Escalacao?,
+    isTimeCasaOJogador: Boolean
+) {
+    if (escalacaoJogador == null || resultado.notasJogadores.isEmpty()) return
+
+    val timeJogadorId = if (isTimeCasaOJogador) resultado.timeCasaId else resultado.timeForaId
+    val jogadoresDoTime = (escalacaoJogador.titulares + escalacaoJogador.reservas)
+        .associate { it.jogador.id to it.jogador }
+
+    val melhor = resultado.notasJogadores
+        .filter { (id, _) -> id in jogadoresDoTime }
+        .maxByOrNull { it.value } ?: return
+
+    val jogador = jogadoresDoTime[melhor.key] ?: return
+    val nota = melhor.value
+    val cor = notaColor(nota)
+
+    val golsJog = resultado.eventos.count {
+        it.jogadorId == jogador.id &&
+        (it.tipo == TipoEvento.GOL || it.tipo == TipoEvento.PENALTI_CONVERTIDO)
+    }
+    val assistJog = resultado.eventos.count {
+        it.jogadorId == jogador.id && it.tipo == TipoEvento.ASSISTENCIA
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.lg),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.5.dp, cor.copy(alpha = 0.5f))
+    ) {
+        Box {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            colors = listOf(
+                                cor.copy(alpha = 0.10f),
+                                cor.copy(alpha = 0f)
+                            )
+                        )
+                    )
+            )
+            Column(modifier = Modifier.padding(Spacing.lg)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = cor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "MELHOR EM CAMPO",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cor,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+                Spacer(Modifier.height(Spacing.md))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(cor.copy(alpha = 0.18f))
+                            .border(2.dp, cor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "%.1f".format(nota),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Black,
+                            color = cor
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = jogador.nome,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${jogador.posicao.abreviacao} · ${jogador.idade} anos · Força ${jogador.forca}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (golsJog > 0 || assistJog > 0) {
+                            Spacer(Modifier.height(Spacing.xs))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (golsJog > 0) {
+                                    StatPill(
+                                        icon = Icons.Filled.SportsSoccer,
+                                        valor = golsJog,
+                                        label = if (golsJog == 1) "gol" else "gols",
+                                        accent = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (assistJog > 0) {
+                                    StatPill(
+                                        icon = Icons.Filled.SwapHoriz,
+                                        valor = assistJog,
+                                        label = if (assistJog == 1) "assist." else "assists",
+                                        accent = Color(0xFF42A5F5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatPill(
+    icon: ImageVector,
+    valor: Int,
+    label: String,
+    accent: Color
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(accent.copy(alpha = 0.14f))
+            .padding(horizontal = Spacing.sm, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = "$valor $label",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = accent
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Sub-entrega D: helpers da disputa de pênaltis
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Placard dramático mostrando placar atual + tracker de cobranças (bolinhas
+ * verde/vermelho/cinza) + opcionalmente um banner com o vencedor.
+ *
+ * Reusado pelo PenaltiInterativoPainel (durante a disputa) e pelo
+ * PenaltiResultadoPainel (replay animado).
+ */
+@Composable
+private fun PenaltiPlacardCard(
+    nomeTimeCasa: String,
+    nomeTimeFora: String,
+    golsCasa: Int,
+    golsFora: Int,
+    cobrancasCasa: List<EventoPenalti>,
+    cobrancasFora: List<EventoPenalti>,
+    isSuddenDeath: Boolean,
+    tituloRodada: String,
+    agregadoCasa: Int,
+    agregadoFora: Int,
+    destaqueVencedor: Boolean,
+    timeJogadorEhCasa: Boolean,
+    mostrarVencedor: Boolean = false,
+    vencedorNome: String? = null,
+    jogadorVenceu: Boolean = false
+) {
+    val accent = if (isSuddenDeath) MaterialTheme.colorScheme.error
+                 else MaterialTheme.colorScheme.primary
+    val mostrarAgregado = agregadoCasa > 0 || agregadoFora > 0
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+        shape = RoundedCornerShape(Radius.lg),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.4f))
+    ) {
+        Column {
+            // Faixa superior com título da rodada
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(accent.copy(alpha = 0.14f))
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isSuddenDeath) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(accent)
+                    )
+                    Spacer(Modifier.width(Spacing.sm))
+                }
+                Text(
+                    text = tituloRodada,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent,
+                    letterSpacing = 1.sp
+                )
+            }
+
+            // Placar gigante
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.lg),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    nomeTimeCasa,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                    modifier = Modifier.padding(horizontal = Spacing.md)
+                ) {
+                    AnimatedContent(
+                        targetState = golsCasa,
+                        transitionSpec = {
+                            slideInVertically { -it } + fadeIn() togetherWith
+                                slideOutVertically { it } + fadeOut()
+                        },
+                        label = "pgc"
+                    ) { g ->
+                        Text(
+                            g.toString(),
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        "-",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Light,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AnimatedContent(
+                        targetState = golsFora,
+                        transitionSpec = {
+                            slideInVertically { -it } + fadeIn() togetherWith
+                                slideOutVertically { it } + fadeOut()
+                        },
+                        label = "pgf"
+                    ) { g ->
+                        Text(
+                            g.toString(),
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Text(
+                    nomeTimeFora,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Tracker de cobranças
+            PenaltiTracker(
+                cobrancasCasa = cobrancasCasa,
+                cobrancasFora = cobrancasFora,
+                slotsMin = 5,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.md)
+            )
+
+            // Agregado (se aplicável)
+            if (mostrarAgregado) {
+                Text(
+                    "Agregado: $agregadoCasa × $agregadoFora",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg)
+                        .padding(bottom = Spacing.sm),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // Banner de vencedor
+            if (mostrarVencedor && vencedorNome != null) {
+                val cor = if (jogadorVenceu) Color(0xFF00E676)
+                          else MaterialTheme.colorScheme.error
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(cor.copy(alpha = 0.14f))
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = cor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(Spacing.sm))
+                    Text(
+                        text = "$vencedorNome AVANÇA",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = cor,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Duas linhas de bolinhas (uma por time) representando cada cobrança:
+ *  - verde = convertido
+ *  - vermelho = perdido
+ *  - cinza vazio = ainda não cobrado (até o slot mínimo)
+ */
+@Composable
+private fun PenaltiTracker(
+    cobrancasCasa: List<EventoPenalti>,
+    cobrancasFora: List<EventoPenalti>,
+    slotsMin: Int = 5,
+    modifier: Modifier = Modifier
+) {
+    val totalSlots = maxOf(slotsMin, cobrancasCasa.size, cobrancasFora.size)
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        PenaltiTrackerLinha(cobrancas = cobrancasCasa, totalSlots = totalSlots)
+        PenaltiTrackerLinha(cobrancas = cobrancasFora, totalSlots = totalSlots)
+    }
+}
+
+@Composable
+private fun PenaltiTrackerLinha(
+    cobrancas: List<EventoPenalti>,
+    totalSlots: Int
+) {
+    val empty = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val gol   = Color(0xFF00E676)
+    val miss  = MaterialTheme.colorScheme.error
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        repeat(totalSlots) { i ->
+            val ev = cobrancas.getOrNull(i)
+            val color = when {
+                ev == null         -> empty
+                ev.convertido      -> gol
+                else               -> miss
+            }
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
+    }
+}
+
+/**
+ * Card final de vencedor — mostrado em PenaltiInterativoPainel.FINALIZADO.
+ */
+@Composable
+private fun PenaltiVencedorCard(
+    nomeVencedor: String,
+    placar: String,
+    jogadorVenceu: Boolean
+) {
+    val cor = if (jogadorVenceu) Color(0xFF00E676) else MaterialTheme.colorScheme.error
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.lg),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.5.dp, cor.copy(alpha = 0.5f))
+    ) {
+        Box {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            colors = listOf(
+                                cor.copy(alpha = 0.10f),
+                                cor.copy(alpha = 0f)
+                            )
+                        )
+                    )
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(cor.copy(alpha = 0.18f))
+                        .border(2.dp, cor, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = cor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "VENCEDOR",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cor,
+                        letterSpacing = 1.5.sp
+                    )
+                    Text(
+                        text = nomeVencedor,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "$placar nos pênaltis",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
