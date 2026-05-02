@@ -1,12 +1,12 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,15 +15,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.presentation.ui.components.FadigaBadge
 import br.com.managerfoot.presentation.ui.components.ForcaBadge
+import br.com.managerfoot.presentation.ui.components.PosicaoBadge
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
+import br.com.managerfoot.presentation.ui.components.SectionTitle
+import br.com.managerfoot.presentation.ui.components.corSetor
+import br.com.managerfoot.presentation.ui.theme.*
 import br.com.managerfoot.presentation.viewmodel.TreinamentoViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ─────────────────────────────────────────────────────────────
+//  TreinamentoScreen — Tactical Dark
+//  Treinos individuais e coletivos, separando Sênior/Base
+// ─────────────────────────────────────────────────────────────
 @Composable
 fun TreinamentoScreen(
     timeId: Int,
@@ -42,247 +51,337 @@ fun TreinamentoScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Treinamento") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
+    val pendentes = elenco.count { !it.treinouNestaCiclo && !it.aposentado }
+    val total     = elenco.count { !it.aposentado }
+    val seniores  = elenco.filter { !it.categoriaBase }
+    val juniores  = elenco.filter { it.categoriaBase }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            ScreenTopBar(
+                titulo = "Treinamento",
+                subtitulo = if (total > 0) "$pendentes pendentes · $total total" else null,
+                onVoltar = onVoltar
             )
-        },
-        snackbarHost = {
-            mensagem?.let {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.inverseSurface
-                        )
-                    ) {
-                        Text(
-                            it,
-                            modifier = Modifier.padding(12.dp),
-                            color = MaterialTheme.colorScheme.inverseOnSurface,
-                            style = MaterialTheme.typography.bodyMedium
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    horizontal = Spacing.md,
+                    vertical = Spacing.sm
+                ),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                // Card descritivo + botão Treinar Time
+                item {
+                    TreinarTodosCard(
+                        pendentes = pendentes,
+                        onTreinarTudo = { vm.treinarTudo(timeId) }
+                    )
+                }
+
+                // Legenda de fadiga
+                item { FadigaLegenda() }
+
+                if (seniores.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(Spacing.xs))
+                        SectionTitle("Elenco Sênior · ${seniores.size}")
+                    }
+                    items(seniores, key = { it.id }) { jogador ->
+                        TreinamentoJogadorCard(
+                            jogador = jogador,
+                            onTreinar  = { vm.treinar(jogador.id) },
+                            onDescansar = { vm.descansar(jogador.id) }
                         )
                     }
                 }
+
+                if (juniores.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(Spacing.xs))
+                        SectionTitle("Base de Juniores · ${juniores.size}")
+                    }
+                    items(juniores, key = { it.id }) { jogador ->
+                        TreinamentoJogadorCard(
+                            jogador = jogador,
+                            onTreinar  = { vm.treinar(jogador.id) },
+                            onDescansar = { vm.descansar(jogador.id) }
+                        )
+                    }
+                }
+
+                item { Spacer(Modifier.height(Spacing.lg)) }
             }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Legenda de fadiga
-            item {
-                FadigaLegenda()
-            }
 
-            // Descrição + botão Treinar Time
-            item {
-                val pendentes = elenco.count { !it.treinouNestaCiclo && !it.aposentado }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "Cada sessão de treino reduz a fadiga em 5% e acumula progresso de evolução. Permitido apenas uma sessão por ciclo (entre dois jogos).",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Button(
-                            onClick = { vm.treinarTudo(timeId) },
-                            enabled = pendentes > 0,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.FitnessCenter, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                if (pendentes > 0) "Treinar Time Inteiro ($pendentes pendentes)"
-                                else "Time já treinou neste ciclo"
-                            )
-                        }
-                    }
-                }
-            }
-
-            val seniores = elenco.filter { !it.categoriaBase }
-            val juniores = elenco.filter { it.categoriaBase }
-
-            if (seniores.isNotEmpty()) {
-                item {
-                    Text(
-                        "Elenco Sênior",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-                items(seniores, key = { it.id }) { jogador ->
-                    TreinamentoJogadorCard(
-                        jogador = jogador,
-                        onTreinar  = { vm.treinar(jogador.id) },
-                        onDescansar = { vm.descansar(jogador.id) }
-                    )
-                }
-            }
-
-            if (juniores.isNotEmpty()) {
-                item {
-                    Text(
-                        "Base de Juniores",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-                items(juniores, key = { it.id }) { jogador ->
-                    TreinamentoJogadorCard(
-                        jogador = jogador,
-                        onTreinar  = { vm.treinar(jogador.id) },
-                        onDescansar = { vm.descansar(jogador.id) }
-                    )
-                }
+        // Snackbar inferior
+        mensagem?.let { msg ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(Spacing.md),
+                shape = RoundedCornerShape(Radius.md),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, GreenMid),
+                shadowElevation = Elev.floating
+            ) {
+                Text(
+                    msg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(Spacing.md)
+                )
             }
         }
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Card descritivo + botão "Treinar Time Inteiro"
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun TreinarTodosCard(
+    pendentes: Int,
+    onTreinarTudo: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, GreenMid)
+    ) {
+        Column(
+            Modifier.padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Icon(
+                    Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    tint = GreenElectric,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    "Sessão de treino",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                "Cada sessão reduz a fadiga em 5% e acumula progresso de evolução. " +
+                "Permitido apenas uma sessão por ciclo (entre dois jogos).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onTreinarTudo,
+                enabled = pendentes > 0,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.md),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Icon(
+                    Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    if (pendentes > 0) "Treinar Time Inteiro ($pendentes pendentes)"
+                    else "Time já treinou neste ciclo",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Card de jogador no treinamento (com faixa lateral pelo setor)
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun TreinamentoJogadorCard(
     jogador: Jogador,
     onTreinar: () -> Unit,
     onDescansar: () -> Unit
 ) {
+    val borderColor = when {
+        jogador.treinouNestaCiclo -> PromotionGreen.copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, borderColor)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ForcaBadge(jogador.forca)
-            Spacer(Modifier.width(8.dp))
-            FadigaBadge(jogador.fadiga)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = jogador.nomeAbreviado,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (jogador.categoriaBase) {
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF7B1FA2))
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        ) {
-                            Text("BASE", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (jogador.treinouNestaCiclo) {
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF388E3C))
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        ) {
-                            Text("✓ FEITO", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                Text(
-                    text = "${jogador.posicao.abreviacao} · ${jogador.idade} anos",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // Barra de progresso de evolução
-                val prog = jogador.progressoEvolucao.coerceIn(0f, 1f)
-                if (prog > 0f) {
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { prog },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // Faixa lateral pelo setor
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(corSetor(jogador.posicao.setor))
+            )
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                Button(
-                    onClick = onTreinar,
-                    enabled = !jogador.treinouNestaCiclo,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        Icons.Default.FitnessCenter,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (jogador.treinouNestaCiclo) "Treinado" else "Treinar",
-                        fontSize = 12.sp
-                    )
+                PosicaoBadge(
+                    abreviacao = jogador.posicao.abreviacao,
+                    setor = jogador.posicao.setor
+                )
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        Text(
+                            jogador.nomeAbreviado,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (jogador.categoriaBase) {
+                            TagPill(texto = "BASE", cor = SetorGoleiro)
+                        }
+                        if (jogador.treinouNestaCiclo) {
+                            TagPill(texto = "✓ FEITO", cor = PromotionGreen)
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        Text(
+                            "${jogador.idade}a",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FadigaBadge(jogador.fadiga)
+                        ForcaBadge(jogador.forca)
+                    }
+                    val prog = jogador.progressoEvolucao.coerceIn(0f, 1f)
+                    if (prog > 0f) {
+                        Spacer(Modifier.height(Spacing.xs))
+                        LinearProgressIndicator(
+                            progress = { prog },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = GreenElectric,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
                 }
-                OutlinedButton(
-                    onClick = onDescansar,
-                    enabled = !jogador.treinouNestaCiclo,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
                 ) {
-                    Text(
-                        if (jogador.treinouNestaCiclo) "—" else "Descansar",
-                        fontSize = 12.sp
-                    )
+                    Button(
+                        onClick = onTreinar,
+                        enabled = !jogador.treinouNestaCiclo,
+                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp),
+                        shape = RoundedCornerShape(Radius.sm)
+                    ) {
+                        Icon(
+                            Icons.Default.FitnessCenter,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(Spacing.xxs))
+                        Text(
+                            if (jogador.treinouNestaCiclo) "Treinado" else "Treinar",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onDescansar,
+                        enabled = !jogador.treinouNestaCiclo,
+                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp),
+                        shape = RoundedCornerShape(Radius.sm)
+                    ) {
+                        Text(
+                            if (jogador.treinouNestaCiclo) "—" else "Descansar",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Tag pill (BASE / FEITO)
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun TagPill(texto: String, cor: Color) {
+    Surface(
+        shape = RoundedCornerShape(Radius.sm),
+        color = cor.copy(alpha = 0.18f),
+        border = BorderStroke(0.5.dp, cor.copy(alpha = 0.5f))
+    ) {
+        Text(
+            texto,
+            fontSize = 9.sp,
+            color = cor,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(horizontal = Spacing.xs, vertical = 2.dp)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Legenda de fadiga (4 níveis Tactical Dark)
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun FadigaLegenda() {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(Radius.md),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Fadiga:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "FADIGA",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             LegendaItem(cor = Color(0xFF2E7D32), texto = "≥80%")
             LegendaItem(cor = Color(0xFFF9A825), texto = "60–79%")
             LegendaItem(cor = Color(0xFFE65100), texto = "40–59%")
@@ -293,11 +392,14 @@ private fun FadigaLegenda() {
 
 @Composable
 private fun LegendaItem(cor: Color, texto: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
+    ) {
         Box(
             Modifier
                 .size(10.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .clip(RoundedCornerShape(2.dp))
                 .background(cor)
         )
         Text(texto, style = MaterialTheme.typography.labelSmall)
