@@ -1,27 +1,42 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.managerfoot.domain.model.Jogador
-import br.com.managerfoot.presentation.ui.components.*
+import br.com.managerfoot.presentation.ui.components.EmptyState
+import br.com.managerfoot.presentation.ui.components.ForcaBadge
+import br.com.managerfoot.presentation.ui.components.PosicaoBadge
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
+import br.com.managerfoot.presentation.ui.components.SecaoHeader
+import br.com.managerfoot.presentation.ui.components.corSetor
+import br.com.managerfoot.presentation.ui.components.formatarSaldo
+import br.com.managerfoot.presentation.ui.theme.*
 import br.com.managerfoot.presentation.viewmodel.JunioresViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ─────────────────────────────────────────────────────────────
+//  JunioresScreen — Tactical Dark
+//  Base de juniores: promoção e dispensa de jovens talentos
+// ─────────────────────────────────────────────────────────────
 @Composable
 fun JunioresScreen(
     timeId: Int,
@@ -57,67 +72,132 @@ fun JunioresScreen(
         )
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Base de Juniores") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            ScreenTopBar(
+                titulo = "Base de Juniores",
+                subtitulo = "Talentos em formação",
+                onVoltar = onVoltar
             )
-        }
-    ) { padding ->
-        if (juniores.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
+
+            if (juniores.isEmpty()) {
                 EmptyState(
-                    mensagem = "Nenhum jogador na base de juniores.\nAposente jogadores para gerar novos talentos."
+                    "Nenhum jogador na base de juniores.\n" +
+                    "Aposente jogadores para gerar novos talentos."
                 )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(bottom = 32.dp)
-            ) {
-                item {
-                    SecaoHeader("${juniores.size} jogador(es) na base")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        horizontal = Spacing.md,
+                        vertical = Spacing.sm
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    item {
+                        SecaoHeader("${juniores.size} jogador${if (juniores.size != 1) "es" else ""} na base")
+                    }
+                    items(juniores, key = { it.id }) { jogador ->
+                        JuniorCard(
+                            jogador = jogador,
+                            onClick = { vm.selecionarJogador(jogador) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(Spacing.lg)) }
                 }
-                items(juniores, key = { it.id }) { jogador ->
-                    JogadorRow(
-                        jogador  = jogador,
-                        onClick  = { vm.selecionarJogador(jogador) },
-                        trailing = {
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text  = "★ %.1f".format(jogador.notaMedia),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text  = "${jogador.idade} anos",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Card de jogador júnior (faixa lateral pelo setor + nota+idade)
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun JuniorCard(
+    jogador: Jogador,
+    onClick: () -> Unit
+) {
+    val notaCor = corDaNota(jogador.notaMedia)
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // Faixa lateral pelo setor
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(corSetor(jogador.posicao.setor))
+            )
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                PosicaoBadge(
+                    abreviacao = jogador.posicao.abreviacao,
+                    setor = jogador.posicao.setor
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        jogador.nome,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(
+                        "${jogador.idade} anos",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                ForcaBadge(jogador.forca)
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            tint = GoldChampion,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            "%.1f".format(jogador.notaMedia),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = notaCor
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-// ── Diálogo de detalhe de um jogador júnior ──────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  Dialog de detalhe do jogador júnior
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun JuniorDetalheDialog(
     jogador: Jogador,
@@ -131,14 +211,20 @@ private fun JuniorDetalheDialog(
     AlertDialog(
         onDismissRequest = onFechar,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ForcaBadge(jogador.forca)
-                Spacer(Modifier.width(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                PosicaoBadge(jogador.posicao.abreviacao, jogador.posicao.setor)
                 Column {
-                    Text(jogador.nome, fontWeight = FontWeight.Bold)
                     Text(
-                        "${jogador.posicao.abreviacao} · ${jogador.idade} anos",
-                        style = MaterialTheme.typography.bodySmall,
+                        jogador.nome,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${jogador.idade} anos · Força ${jogador.forca}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -148,40 +234,57 @@ private fun JuniorDetalheDialog(
             Column(
                 modifier = Modifier
                     .verticalScroll(rememberScrollState())
-                    .fillMaxWidth()
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                // Nota média
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Nota média e força
+                Surface(
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
-                    Text("Nota média", style = MaterialTheme.typography.bodySmall)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(2.dp))
-                        Text(
-                            "%.1f".format(jogador.notaMedia),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = when {
-                                jogador.notaMedia >= 7.5f -> Color(0xFF4CAF50)
-                                jogador.notaMedia >= 6.0f -> MaterialTheme.colorScheme.onSurface
-                                else -> Color(0xFFF44336)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.sm),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "NOTA MÉDIA",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                letterSpacing = 1.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Star,
+                                    contentDescription = null,
+                                    tint = GoldChampion,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(2.dp))
+                                Text(
+                                    "%.1f".format(jogador.notaMedia),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = corDaNota(jogador.notaMedia)
+                                )
                             }
-                        )
+                        }
+                        ForcaBadge(jogador.forca)
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-                // Atributos
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "ATRIBUTOS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
                 JuniorAtributoRow("Técnica",     jogador.tecnica)
                 JuniorAtributoRow("Passes",      jogador.passe)
                 JuniorAtributoRow("Velocidade",  jogador.velocidade)
@@ -189,85 +292,80 @@ private fun JuniorDetalheDialog(
                 JuniorAtributoRow("Defesa",      jogador.defesa)
                 JuniorAtributoRow("Físico",      jogador.fisico)
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-
-                // Contrato e salário
+                Spacer(Modifier.height(Spacing.xs))
                 Text(
-                    "Contrato: ${jogador.contratoAnos} ano(s)  ·  ${formatarSaldo(jogador.salario)}/mês",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "CONTRATO",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
                 )
-
-                if (confirmarPromocao) {
-                    Spacer(Modifier.height(12.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                Surface(
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Duração", style = MaterialTheme.typography.bodySmall)
                             Text(
-                                "Promover ${jogador.nomeAbreviado} ao elenco principal?",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
+                                "${jogador.contratoAnos} ano${if (jogador.contratoAnos != 1) "s" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { confirmarPromocao = false },
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("Cancelar") }
-                                Button(
-                                    onClick = onPromover,
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("Confirmar") }
-                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Salário", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "${formatarSaldo(jogador.salario)}/mês",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MoneyNegative
+                            )
                         }
                     }
                 }
 
+                if (confirmarPromocao) {
+                    Spacer(Modifier.height(Spacing.sm))
+                    ConfirmacaoCard(
+                        mensagem = "Promover ${jogador.nomeAbreviado} ao elenco principal?",
+                        cor = PromotionGreen,
+                        onCancelar = { confirmarPromocao = false },
+                        onConfirmar = onPromover,
+                        textoConfirmar = "Confirmar"
+                    )
+                }
+
                 if (confirmarDispensa) {
-                    Spacer(Modifier.height(12.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                "Dispensar ${jogador.nomeAbreviado}? Ele irá para o mercado livre.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { confirmarDispensa = false },
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("Cancelar") }
-                                Button(
-                                    onClick = onDispensar,
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error
-                                    )
-                                ) { Text("Dispensar") }
-                            }
-                        }
-                    }
+                    Spacer(Modifier.height(Spacing.sm))
+                    ConfirmacaoCard(
+                        mensagem = "Dispensar ${jogador.nomeAbreviado}? Ele irá para o mercado livre.",
+                        cor = RelegationRed,
+                        onCancelar = { confirmarDispensa = false },
+                        onConfirmar = onDispensar,
+                        textoConfirmar = "Dispensar"
+                    )
                 }
             }
         },
         confirmButton = {
             if (!confirmarPromocao && !confirmarDispensa) {
-                Button(onClick = { confirmarPromocao = true }) {
-                    Text("Promover ao Elenco")
+                Button(
+                    onClick = { confirmarPromocao = true },
+                    shape = RoundedCornerShape(Radius.sm)
+                ) {
+                    Text("Promover ao Elenco", fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (!confirmarPromocao && !confirmarDispensa) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     TextButton(
                         onClick = { confirmarDispensa = true },
                         colors = ButtonDefaults.textButtonColors(
@@ -282,6 +380,42 @@ private fun JuniorDetalheDialog(
 }
 
 @Composable
+private fun ConfirmacaoCard(
+    mensagem: String,
+    cor: Color,
+    onCancelar: () -> Unit,
+    onConfirmar: () -> Unit,
+    textoConfirmar: String
+) {
+    Surface(
+        shape = RoundedCornerShape(Radius.md),
+        color = cor.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, cor.copy(alpha = 0.5f))
+    ) {
+        Column(Modifier.padding(Spacing.md)) {
+            Text(
+                mensagem,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                OutlinedButton(
+                    onClick = onCancelar,
+                    modifier = Modifier.weight(1f)
+                ) { Text("Cancelar") }
+                Button(
+                    onClick = onConfirmar,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = cor)
+                ) { Text(textoConfirmar, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun JuniorAtributoRow(label: String, valor: Int) {
     Row(
         modifier = Modifier
@@ -292,25 +426,37 @@ private fun JuniorAtributoRow(label: String, valor: Int) {
         Text(
             label,
             style    = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(90.dp)
+            modifier = Modifier.width(96.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         LinearProgressIndicator(
             progress = { valor / 99f },
             modifier = Modifier
                 .weight(1f)
-                .height(6.dp),
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
             color = when {
-                valor >= 75 -> Color(0xFF4CAF50)
+                valor >= 75 -> PromotionGreen
                 valor >= 55 -> MaterialTheme.colorScheme.primary
-                else        -> MaterialTheme.colorScheme.outline
-            }
+                valor >= 40 -> AmberAccent
+                else        -> RelegationRed
+            },
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(Spacing.xs))
         Text(
             valor.toString(),
-            style      = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            modifier   = Modifier.width(24.dp)
+            style      = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            modifier   = Modifier.width(28.dp),
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+private fun corDaNota(nota: Float): Color = when {
+    nota >= 7.5f -> PromotionGreen
+    nota >= 6.0f -> GreenElectric
+    nota >= 5.0f -> AmberAccent
+    else         -> RelegationRed
 }
