@@ -13,6 +13,9 @@ interface CampeonatoDao {
     @Query("SELECT * FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY tipo")
     fun observePorTemporada(temporadaId: Int): Flow<List<CampeonatoEntity>>
 
+    @Query("SELECT * FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY tipo")
+    suspend fun buscarPorTemporadaId(temporadaId: Int): List<CampeonatoEntity>
+
     @Query("SELECT * FROM campeonatos WHERE id = :id")
     suspend fun buscarPorId(id: Int): CampeonatoEntity?
 

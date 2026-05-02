@@ -38,31 +38,40 @@ import br.com.managerfoot.presentation.viewmodel.CopaChaveamentoViewModel
 @Composable
 fun CopaChaveamentoScreen(
     copaId: Int,
+    copaArgId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
 ) {
-    val partidas by vm.partidas.collectAsState()
+    val partidas    by vm.partidas.collectAsState()
+    val partidasArg by vm.partidasArg.collectAsState()
 
-    LaunchedEffect(copaId) { vm.carregar(copaId) }
+    LaunchedEffect(copaId, copaArgId) { vm.carregarAmbas(copaId, copaArgId) }
 
-    val faseDisponivel = remember(partidas) {
-        MotorCampeonato.COPA_FASES.filter { fase -> partidas.any { it.fase == fase } }
+    val mostrarFiltroPais = copaId > 0 && copaArgId > 0
+    var paisSelecionado by remember { mutableStateOf("Brasil") }
+
+    val partidasAtivas = if (paisSelecionado == "Argentina") partidasArg else partidas
+    val fasesMotor     = if (paisSelecionado == "Argentina")
+        MotorCampeonato.COPA_ARG_FASES else MotorCampeonato.COPA_FASES
+
+    val faseDisponivel = remember(partidasAtivas, fasesMotor) {
+        fasesMotor.filter { fase -> partidasAtivas.any { it.fase == fase } }
     }
 
     var faseSelecionada by remember(faseDisponivel) {
         mutableStateOf(faseDisponivel.lastOrNull() ?: "")
     }
 
-    // Detecta o campeão (se a Final foi concluída)
-    val campeao = remember(partidas) {
-        val finais = partidas.filter { it.fase == "Final" }
+    // Detecta o campeão (se a Final foi concluída) — para a copa ativa
+    val campeao = remember(partidasAtivas) {
+        val finais = partidasAtivas.filter { it.fase == "Final" }
         if (finais.isEmpty()) null
-        else {
-            val vencedor = computarVencedorConfronto(finais)
-            vencedor
-        }
+        else computarVencedorConfronto(finais)
     }
+
+    val tituloCopa = if (paisSelecionado == "Argentina") "Copa Argentina"
+                     else "Copa do Brasil"
 
     Column(
         modifier = Modifier
@@ -70,12 +79,31 @@ fun CopaChaveamentoScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         ScreenTopBar(
-            titulo = "Copa do Brasil",
+            titulo = if (mostrarFiltroPais) "Copas" else tituloCopa,
             subtitulo = if (campeao != null) "${campeao.nomeVencedor} é o campeão!"
                         else if (faseDisponivel.isNotEmpty()) "Fase atual: ${faseDisponivel.last()}"
                         else "Não iniciada",
             onVoltar = onVoltar
         )
+
+        // Filtro de país (chips) — só aparece quando ambas as copas existem
+        if (mostrarFiltroPais) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.md, bottom = Spacing.xs)
+            ) {
+                items(listOf("Brasil", "Argentina")) { pais ->
+                    FilterChipPill(
+                        label = pais,
+                        selected = paisSelecionado == pais,
+                        onClick = { paisSelecionado = pais }
+                    )
+                }
+            }
+        }
 
         if (faseDisponivel.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -119,8 +147,8 @@ fun CopaChaveamentoScreen(
             }
         }
 
-        val confrontosDaFase = remember(partidas, faseSelecionada) {
-            partidas.filter { it.fase == faseSelecionada }
+        val confrontosDaFase = remember(partidasAtivas, faseSelecionada) {
+            partidasAtivas.filter { it.fase == faseSelecionada }
                 .groupBy { it.confrontoId }
                 .values.toList()
                 .sortedBy { it.firstOrNull()?.confrontoId ?: 0 }

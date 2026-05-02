@@ -123,6 +123,25 @@ class JogadorRepository @Inject constructor(
     suspend fun buscarDisponiveis(timeId: Int): List<Jogador> =
         jogadorDao.buscarDisponiveisPorTime(timeId).map { it.toDomain() }
 
+    suspend fun buscarPorId(id: Int): Jogador? =
+        jogadorDao.buscarPorId(id)?.toDomain()
+
+    suspend fun atualizarDisponibilidadeVenda(jogadorId: Int, flag: Boolean) =
+        jogadorDao.atualizarDisponibilidadeVenda(jogadorId, flag)
+
+    suspend fun atualizarDisponibilidadeEmprestimo(jogadorId: Int, flag: Boolean) =
+        jogadorDao.atualizarDisponibilidadeEmprestimo(jogadorId, flag)
+
+    suspend fun buscarListadosParaTransferencia(timeId: Int): List<Jogador> =
+        jogadorDao.buscarListadosParaTransferencia(timeId).map { it.toDomain() }
+
+    suspend fun buscarListadosPorTimeIA(playerTimeId: Int): List<Jogador> =
+        jogadorDao.buscarListadosPorTimeIA(playerTimeId).map { it.toDomain() }
+
+    /** Retorna todos os jogadores sênior do time (incluindo lesionados/suspensos) — usado para folha salarial. */
+    suspend fun buscarSeniores(timeId: Int): List<Jogador> =
+        jogadorDao.buscarSenioresDoTime(timeId).map { it.toDomain() }
+
     suspend fun buscarMercado(
         posicao: Posicao? = null,
         forcaMin: Int = 1,
@@ -191,6 +210,65 @@ class JogadorRepository @Inject constructor(
                 tipo = TipoTransferencia.VENDA
             )
         )
+    }
+
+    /**
+     * Realiza o empréstimo de um jogador do time de origem para [oferta].timeCompradorId.
+     * O jogador é movido para o clube tomador, mas mantém referência ao clube de origem
+     * e à data de retorno (12 meses à frente).
+     */
+    suspend fun realizarEmprestimo(
+        oferta: OfertaTransferencia,
+        temporadaId: Int,
+        mes: Int,
+        anoRetorno: Int,
+        mesRetorno: Int
+    ) {
+        jogadorDao.transferirJogador(oferta.jogadorId, oferta.timeCompradorId)
+        jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
+        oferta.timeVendedorId?.let { origem ->
+            jogadorDao.atualizarEmprestimo(oferta.jogadorId, origem, anoRetorno, mesRetorno)
+        }
+        financaDao.inserirTransferencia(
+            TransferenciaEntity(
+                jogadorId = oferta.jogadorId,
+                timeOrigemId = oferta.timeVendedorId,
+                timeDestinoId = oferta.timeCompradorId,
+                valor = oferta.valor,
+                temporadaId = temporadaId,
+                mes = mes,
+                tipo = TipoTransferencia.EMPRESTIMO_SAIDA
+            )
+        )
+    }
+
+    /** Observa os jogadores emprestados pelo time de origem (aparecem na aba Meu elenco). */
+    fun observeEmprestadosDoTime(timeOrigemId: Int): kotlinx.coroutines.flow.Flow<List<Jogador>> =
+        jogadorDao.observeEmprestadosPorOrigem(timeOrigemId).map { lista -> lista.map { it.toDomain() } }
+
+    /**
+     * Verifica se algum empréstimo expirou no mês corrente e devolve os jogadores
+     * ao clube de origem, registrando um [TipoTransferencia.EMPRESTIMO_RETORNO].
+     */
+    suspend fun processarRetornosEmprestimo(anoAtual: Int, mesAtual: Int, temporadaId: Int) {
+        val expirados = jogadorDao.buscarEmprestadosParaRetorno(anoAtual, mesAtual)
+        for (j in expirados) {
+            val origemId = j.timeOrigemEmprestimo ?: continue
+            jogadorDao.transferirJogador(j.id, origemId)
+            jogadorDao.atualizarEscalacaoSemPosicao(j.id, 0)
+            jogadorDao.limparEmprestimo(j.id)
+            financaDao.inserirTransferencia(
+                TransferenciaEntity(
+                    jogadorId = j.id,
+                    timeOrigemId = j.timeId,
+                    timeDestinoId = origemId,
+                    valor = 0L,
+                    temporadaId = temporadaId,
+                    mes = mesAtual,
+                    tipo = TipoTransferencia.EMPRESTIMO_RETORNO
+                )
+            )
+        }
     }
 
     /**
@@ -324,8 +402,64 @@ class JogadorRepository @Inject constructor(
                 }
             }
         }
-        jogadorDao.atualizarTodos(atualizados)
+        // Recalcula o valor de mercado de cada jogador com base na força e idade atualizadas.
+        // Feito em passe separado para usar os atributos já computados acima.
+        val comValoresMercado = atualizados.map { j ->
+            if (j.aposentado) j
+            else j.copy(valorMercado = calcularValorMercado(j.forca, j.idade))
+        }
+        jogadorDao.atualizarTodos(comValoresMercado)
     }
+
+    /**
+     * Calcula o valor de mercado de um jogador em centavos com base em força e idade.
+     *
+     * A base é calculada por interpolação linear por faixa de força (piecewise),
+     * garantindo os seguintes valores de referência no pico etário (fator 1.0):
+     *   F60 → R$1,4M | F70 → R$5,4M | F80 → R$10,6M | F90 → R$35,2M | F99 → R$80M
+     *
+     * O fator etário é multiplicado sobre a base:
+     *  - até 29 anos: crescente (valorização progressiva)
+     *  - 30–32 anos:  estável no pico (fator 1.00)
+     *  - 33+ anos:    decrescente conforme o declínio
+     */
+    private fun calcularValorMercado(forca: Int, idade: Int): Long {
+        // Interpolação linear entre os breakpoints de força (valores em centavos no pico)
+        val baseCentavos: Long = when {
+            forca >= 90 -> lerpLong(3_520_000_000L, 8_000_000_000L, (forca - 90).toFloat() / 9f)
+            forca >= 80 -> lerpLong(1_060_000_000L, 3_520_000_000L, (forca - 80).toFloat() / 10f)
+            forca >= 70 -> lerpLong(  540_000_000L, 1_060_000_000L, (forca - 70).toFloat() / 10f)
+            forca >= 60 -> lerpLong(  140_000_000L,   540_000_000L, (forca - 60).toFloat() / 10f)
+            forca >= 50 -> lerpLong(   30_000_000L,   140_000_000L, (forca - 50).toFloat() / 10f)
+            else        -> lerpLong(    5_000_000L,    30_000_000L,  (forca -  1).toFloat() / 49f)
+        }
+
+        val fatorIdade = when {
+            idade <= 16 -> 0.50f
+            idade <= 17 -> 0.56f
+            idade <= 18 -> 0.62f
+            idade <= 19 -> 0.68f
+            idade <= 20 -> 0.74f
+            idade <= 21 -> 0.80f
+            idade <= 22 -> 0.85f
+            idade <= 23 -> 0.90f
+            idade <= 24 -> 0.93f
+            idade <= 25 -> 0.96f
+            idade <= 26 -> 0.98f
+            idade <= 32 -> 1.00f  // pico de mercado — estabilizado 26-32
+            idade <= 33 -> 0.90f
+            idade <= 34 -> 0.80f
+            idade <= 35 -> 0.68f
+            idade <= 36 -> 0.56f
+            idade <= 37 -> 0.46f
+            else        -> 0.36f
+        }
+
+        return (baseCentavos * fatorIdade).toLong().coerceAtLeast(5_000_000L)
+    }
+
+    private fun lerpLong(from: Long, to: Long, t: Float): Long =
+        (from + (to - from) * t.coerceIn(0f, 1f)).toLong()
 
     private fun atributosPrincipais(posicao: Posicao): Set<String> = when (posicao) {
         Posicao.GOLEIRO            -> setOf("defesa", "fisico", "tecnica")
@@ -548,6 +682,12 @@ class JogadorRepository @Inject constructor(
                 )
             }
             jogadorDao.atualizarTodos(atualizados)
+
+            // Também libera o treinamento dos juniores para o próximo ciclo
+            val juniores = jogadorDao.buscarJunioresDoTime(timeId)
+            if (juniores.isNotEmpty()) {
+                jogadorDao.atualizarTodos(juniores.map { it.copy(treinouNestaCiclo = false) })
+            }
         }
     }
 
@@ -694,13 +834,30 @@ class JogadorRepository @Inject constructor(
 
     suspend fun limparEscalacaoTime(timeId: Int) = jogadorDao.limparEscalacaoTime(timeId)
 
-    suspend fun processarExpiracaoContratos(timeId: Int) {
+    /**
+     * Decrementa contratos de todos os jogadores sênior com clube ao final da temporada.
+     * Jogadores de times da IA com contrato expirado (contratoAnos = 0) são liberados
+     * automaticamente para o mercado livre.
+     * Jogadores do time do usuário com contrato expirado permanecem no elenco —
+     * o usuário decide via UI se renova ou dispensa.
+     */
+    suspend fun processarExpiracaoContratos(timeJogadorId: Int) {
         jogadorDao.decrementarContratos()
         val expirados = jogadorDao.buscarComContratoExpirado()
-            .filter { it.timeId == timeId }
-        expirados.forEach {
-            jogadorDao.transferirJogador(it.id, null) // libera o jogador
-        }
+        expirados
+            .filter { it.timeId != null && it.timeId != timeJogadorId }
+            .forEach { jogadorDao.transferirJogador(it.id, null) }
+    }
+
+    /** Renova o contrato de um jogador com novo salário e duração. */
+    suspend fun renovarContrato(jogadorId: Int, novoSalario: Long, novosAnos: Int) {
+        val j = jogadorDao.buscarPorId(jogadorId) ?: return
+        jogadorDao.atualizar(j.copy(salario = novoSalario, contratoAnos = novosAnos))
+    }
+
+    /** Dispensa o jogador para o mercado livre sem transferência financeira. */
+    suspend fun dispensarParaMercado(jogadorId: Int) {
+        jogadorDao.transferirJogador(jogadorId, null)
     }
 
     // Mapeamento Entity -> Domain
@@ -734,7 +891,12 @@ class JogadorRepository @Inject constructor(
         categoriaBase = categoriaBase,
         fadiga = fadiga,
         treinouNestaCiclo = treinouNestaCiclo,
-        partidasSemJogar = partidasSemJogar
+        partidasSemJogar = partidasSemJogar,
+        disponívelParaVenda = disponívelParaVenda,
+        disponívelParaEmprestimo = disponívelParaEmprestimo,
+        timeOrigemEmprestimo = timeOrigemEmprestimo,
+        anoRetornoEmprestimo = anoRetornoEmprestimo,
+        mesRetornoEmprestimo = mesRetornoEmprestimo
     )
 }
 

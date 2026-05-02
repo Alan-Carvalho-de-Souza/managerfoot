@@ -25,8 +25,10 @@ import br.com.managerfoot.data.database.entities.*
         HallDaFamaEntity::class,
         RankingGeralEntity::class,
         EstadioEntity::class,
+        PropostaIAEntity::class,
+        PropostaClubeEntity::class,
     ],
-    version = 17,
+    version = 24,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +43,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun hallDaFamaDao(): HallDaFamaDao
     abstract fun rankingGeralDao(): RankingGeralDao
     abstract fun estadioDao(): EstadioDao
+    abstract fun propostaIADao(): PropostaIADao
+    abstract fun propostaClubeDao(): PropostaClubeDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -79,6 +83,12 @@ class Converters {
     @TypeConverter fun tipoCampToString(t: TipoCampeonato): String = t.name
     @TypeConverter fun stringToTipoCamp(s: String): TipoCampeonato = TipoCampeonato.valueOf(s)
 
+    @TypeConverter fun statusPropostaToString(s: StatusProposta): String = s.name
+    @TypeConverter fun stringToStatusProposta(s: String): StatusProposta = StatusProposta.valueOf(s)
+
+    @TypeConverter fun tipoPropostaToString(t: TipoProposta): String = t.name
+    @TypeConverter fun stringToTipoProposta(s: String): TipoProposta = TipoProposta.valueOf(s)
+
     @TypeConverter fun formatoToString(f: FormatoCampeonato): String = f.name
     @TypeConverter fun stringToFormato(s: String): FormatoCampeonato = FormatoCampeonato.valueOf(s)
 
@@ -87,4 +97,7 @@ class Converters {
 
     @TypeConverter fun tipoTransfToString(t: TipoTransferencia): String = t.name
     @TypeConverter fun stringToTipoTransf(s: String): TipoTransferencia = TipoTransferencia.valueOf(s)
+
+    @TypeConverter fun statusPropostaClubeToString(s: StatusPropostaClube): String = s.name
+    @TypeConverter fun stringToStatusPropostaClube(s: String): StatusPropostaClube = StatusPropostaClube.valueOf(s)
 }

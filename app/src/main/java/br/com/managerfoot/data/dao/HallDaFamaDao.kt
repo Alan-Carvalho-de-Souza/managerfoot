@@ -13,6 +13,9 @@ interface HallDaFamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserir(entry: HallDaFamaEntity)
 
+    @Query("SELECT * FROM hall_da_fama WHERE ano = :ano AND divisao = :divisao LIMIT 1")
+    suspend fun buscarCampeaoPorAnoEDivisao(ano: Int, divisao: Int): HallDaFamaEntity?
+
     @Query("DELETE FROM hall_da_fama")
     suspend fun deleteAll()
 }

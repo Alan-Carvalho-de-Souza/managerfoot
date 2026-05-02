@@ -599,8 +599,11 @@ private fun ClubeCard(time: Time, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val subtitulo = if (time.pais == "Argentina" || time.pais == "Uruguay")
+                    "${time.cidade} · ${time.pais}"
+                else "${time.cidade} · ${time.estado}"
                 Text(
-                    text = "${time.cidade} · ${time.estado}",
+                    text = subtitulo,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -642,7 +645,10 @@ private fun serieLabelDe(divisao: Int): String = when (divisao) {
     2 -> "Série B"
     3 -> "Série C"
     4 -> "Série D"
-    5 -> "Primera Div."
+    5 -> "Primera Div."        // Argentina A
+    6 -> "Segunda Div."        // Argentina B
+    in 11..12 -> "Primera Div." // Uruguai A (uma das duas)
+    in 13..16 -> "Segunda Div." // Uruguai B (uma das duas)
     else -> "Série $divisao"
 }
 
@@ -651,6 +657,9 @@ private fun corDivisao(divisao: Int): Color = when (divisao) {
     2 -> Color(0xFF42A5F5)   // azul — Série B
     3 -> Color(0xFFFFB300)   // âmbar — Série C
     4 -> Color(0xFFFF7043)   // laranja — Série D
-    5 -> Color(0xFFAB47BC)   // roxo — Argentina
+    5 -> Color(0xFFAB47BC)   // roxo — Argentina A
+    6 -> Color(0xFF8E24AA)   // roxo escuro — Argentina B
+    in 11..12 -> Color(0xFF26A69A) // verde-azulado — Uruguai A
+    in 13..16 -> Color(0xFF00897B) // teal — Uruguai B
     else -> Color(0xFF7B8394)
 }

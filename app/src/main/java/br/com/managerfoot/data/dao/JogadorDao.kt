@@ -40,6 +40,8 @@ interface JogadorDao {
     @Query("""
         SELECT * FROM jogadores
         WHERE timeId IS NULL
+          AND aposentado = 0
+          AND categoriaBase = 0
           AND (:posicao IS NULL OR posicao = :posicao)
           AND forca BETWEEN :forcaMin AND :forcaMax
         ORDER BY forca DESC
@@ -71,10 +73,10 @@ interface JogadorDao {
     @Query("UPDATE jogadores SET lesionado = 1, partidasSemJogar = :partidas WHERE id = :jogadorId")
     suspend fun aplicarLesao(jogadorId: Int, partidas: Int)
 
-    @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND contratoAnos > 0")
+    @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND categoriaBase = 0 AND contratoAnos > 0")
     suspend fun decrementarContratos()
 
-    @Query("SELECT * FROM jogadores WHERE timeId IS NOT NULL AND contratoAnos = 0")
+    @Query("SELECT * FROM jogadores WHERE timeId IS NOT NULL AND categoriaBase = 0 AND contratoAnos = 0")
     suspend fun buscarComContratoExpirado(): List<JogadorEntity>
 
     @Delete
@@ -131,6 +133,9 @@ interface JogadorDao {
     @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 1 ORDER BY posicao, forca DESC")
     fun observeJuniores(timeId: Int): Flow<List<JogadorEntity>>
 
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND categoriaBase = 1")
+    suspend fun buscarJunioresDoTime(timeId: Int): List<JogadorEntity>
+
     /** Promove um jogador da base para o elenco principal. */
     @Query("UPDATE jogadores SET categoriaBase = 0 WHERE id = :jogadorId")
     suspend fun promoverJunior(jogadorId: Int)
@@ -150,4 +155,36 @@ interface JogadorDao {
     /** Retorna todos os jogadores ativos (sênior + base) de um time. */
     @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
     suspend fun buscarElencoCompletoDoTime(timeId: Int): List<JogadorEntity>
+
+    /** Atualiza o flag de disponível para venda. */
+    @Query("UPDATE jogadores SET disponívelParaVenda = :flag WHERE id = :jogadorId")
+    suspend fun atualizarDisponibilidadeVenda(jogadorId: Int, flag: Boolean)
+
+    /** Atualiza o flag de disponível para empréstimo. */
+    @Query("UPDATE jogadores SET disponívelParaEmprestimo = :flag WHERE id = :jogadorId")
+    suspend fun atualizarDisponibilidadeEmprestimo(jogadorId: Int, flag: Boolean)
+
+    /** Retorna jogadores de um time listados para venda ou empréstimo pelo usuário. */
+    @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND (disponívelParaVenda = 1 OR disponívelParaEmprestimo = 1) AND categoriaBase = 0 AND aposentado = 0")
+    suspend fun buscarListadosParaTransferencia(timeId: Int): List<JogadorEntity>
+
+    /** Todos os jogadores de times da IA listados (venda ou empréstimo) excetuando o time do jogador. */
+    @Query("SELECT * FROM jogadores WHERE timeId != :playerTimeId AND timeId IS NOT NULL AND (disponívelParaVenda = 1 OR disponívelParaEmprestimo = 1) AND categoriaBase = 0 AND aposentado = 0")
+    suspend fun buscarListadosPorTimeIA(playerTimeId: Int): List<JogadorEntity>
+
+    /** Define os campos de empréstimo ativo no jogador. */
+    @Query("UPDATE jogadores SET timeOrigemEmprestimo = :timeOrigemId, anoRetornoEmprestimo = :anoRetorno, mesRetornoEmprestimo = :mesRetorno, disponívelParaEmprestimo = 0 WHERE id = :jogadorId")
+    suspend fun atualizarEmprestimo(jogadorId: Int, timeOrigemId: Int, anoRetorno: Int, mesRetorno: Int)
+
+    /** Limpa os campos de empréstimo ao retornar o jogador ao clube de origem. */
+    @Query("UPDATE jogadores SET timeOrigemEmprestimo = NULL, anoRetornoEmprestimo = NULL, mesRetornoEmprestimo = NULL WHERE id = :jogadorId")
+    suspend fun limparEmprestimo(jogadorId: Int)
+
+    /** Observa jogadores emprestados de um time de origem (para exibir na aba Meu elenco). */
+    @Query("SELECT * FROM jogadores WHERE timeOrigemEmprestimo = :timeOrigemId AND aposentado = 0")
+    fun observeEmprestadosPorOrigem(timeOrigemId: Int): kotlinx.coroutines.flow.Flow<List<JogadorEntity>>
+
+    /** Retorna jogadores cujo empréstimo expirou no ano/mês informado. */
+    @Query("SELECT * FROM jogadores WHERE timeOrigemEmprestimo IS NOT NULL AND (anoRetornoEmprestimo < :anoAtual OR (anoRetornoEmprestimo = :anoAtual AND mesRetornoEmprestimo <= :mesAtual))")
+    suspend fun buscarEmprestadosParaRetorno(anoAtual: Int, mesAtual: Int): List<JogadorEntity>
 }

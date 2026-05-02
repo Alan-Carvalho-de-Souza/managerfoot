@@ -13,7 +13,7 @@ import br.com.managerfoot.domain.model.ResultadoPartida
 // ─────────────────────────────────────────────
 object MotorCampeonato {
 
-    // ── Fases da Copa (em ordem) ──────────────────────────────────
+    // ── Fases da Copa do Brasil (em ordem) — 64 times ───────────────
     val COPA_FASES = listOf(
         "Primeira Fase",
         "Segunda Fase",
@@ -23,25 +23,45 @@ object MotorCampeonato {
         "Final"
     )
 
+    // ── Fases da Copa Argentina (em ordem) — 32 times ────────────────
+    // Primeira Fase (32→16), Oitavas (16→8), Quartas (8→4), Semi (4→2), Final (2→1)
+    val COPA_ARG_FASES = listOf(
+        "Primeira Fase",
+        "Oitavas",
+        "Quartas",
+        "Semi",
+        "Final"
+    )
+
     // Retorna rodadaIda de uma fase (0-indexed faseIndex)
     fun rodadaIdaDeFase(faseIndex: Int) = faseIndex * 2 + 1
 
-    // ordemGlobal de cada jogo da Copa no calendário multi-competição.
-    // Copa Fase 0 ida fica após Brasileirão R3 (30), e assim por diante.
-    // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em N*10+5.
+    // ordemGlobal de cada jogo da Copa do Brasil no calendário multi-competição.
+    // Brasileirão usa ordemGlobal = rodada * 10 (10, 20, 30 ...) → Copa encaixa em valores entre rodadas.
     // Índices: 0=F0-ida, 1=F0-volta, 2=F1-ida, 3=F1-volta, ... 11=Final-volta
     // Copa encaixa entre as rodadas do Brasileirão (ordemGlobal = rodada*10):
-    //   Primeira Fase ─ Fev:  antes de R1 (10)
-    //   Segunda Fase  ─ Mar:  entre R1 (10) e R4 (40)
-    //   Oitavas       ─ Mai:  entre R9 (90) e R12 (120)
-    //   Quartas       ─ Jul:  entre R17 (170) e R19 (190)
-    //   Semifinal     ─ Set:  entre R24 (240) e R26 (260)
-    //   Final         ─ Nov:  entre R33 (330) e R35 (350)
-    val COPA_ORDEM_GLOBAL = intArrayOf(2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+    //   Primeira Fase ─ Fev:  entre R1 (10) e R4 (40)   → 13, 33
+    //   Segunda Fase  ─ Mar/Abr: entre R5 (50) e R9 (90)  → 53, 83
+    //   Oitavas       ─ Mai/Jun: entre R13(130) e R17(170) → 133, 163
+    //   Quartas       ─ Jul/Ago: entre R20(200) e R24(240) → 207, 233
+    //   Semifinal     ─ Set/Out: entre R27(270) e R32(320) → 278, 313
+    //   Final         ─ Nov/Dez: entre R35(350) e fim      → 357, 383
+    val COPA_ORDEM_GLOBAL = intArrayOf(13, 33, 53, 83, 133, 163, 207, 233, 278, 313, 357, 383)
 
-    fun proximaFaseCopa(faseAtual: String): String? {
-        val idx = COPA_FASES.indexOf(faseAtual)
-        return if (idx >= 0 && idx < COPA_FASES.size - 1) COPA_FASES[idx + 1] else null
+    // ordemGlobal de cada jogo da Copa Argentina no calendário Argentine.
+    // Argentine calendar: Apertura OG 10–200 (rodada*10), Clausura OG 220–410 (rodada*10+210).
+    // Índices: 0=PF-ida, 1=PF-volta, 2=Oitavas-ida, 3=Oitavas-volta,
+    //          4=Quartas-ida, 5=Quartas-volta, 6=Semi-ida, 7=Semi-volta, 8=Final-ida, 9=Final-volta
+    //   Primeira Fase ─ após Apertura R2  (OG 20)
+    //   Oitavas       ─ após Apertura R8  (OG 80)
+    //   Quartas       ─ após Apertura R14 (OG 140)
+    //   Semifinal     ─ gap Apertura-Clausura (OG 200–220)
+    //   Final         ─ após Clausura R20 (OG 420)
+    val COPA_ARG_ORDEM_GLOBAL = intArrayOf(25, 45, 85, 115, 145, 175, 205, 215, 415, 425)
+
+    fun proximaFaseCopa(faseAtual: String, fases: List<String> = COPA_FASES): String? {
+        val idx = fases.indexOf(faseAtual)
+        return if (idx >= 0 && idx < fases.size - 1) fases[idx + 1] else null
     }
 
     // ── Geração de fase mata-mata ida e volta ─────────────────────
@@ -286,4 +306,176 @@ object MotorCampeonato {
             else -> "Empate [$g]"
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Formato Argentine Apertura / Clausura  (GRUPOS_E_MATA_MATA)
+    //  30 teams → Zona A (15) + Zona B (15)
+    //  Fase de grupos: 14 rodadas intra-zona (turno único, cap) + 2 interzonais = 16 total
+    //  Fase eliminatória: Oitavas (R17) → Quartas (R18) → Semi (R19) → Final (R20)
+    //  Apertura: ordemGlobal = rodada * 10          (OG 10–200)
+    //  Clausura:  ordemGlobal = rodada * 10 + 210   (OG 220–410)
+    // ══════════════════════════════════════════════════════════════
+    const val ARG_GRUPO_A              = "A"
+    const val ARG_GRUPO_B              = "B"
+    const val ARG_ROUNDS_ZONA          = 14   // rounds for turno único in each 15-team zone (capped)
+    const val ARG_ROUNDS_GROUP_TOTAL   = 16   // 14 (zona) + 2 (interzonais)
+    const val ARG_ROUND_KNOCKOUT_START = 17   // first knockout rodada
+    const val ARG_TOTAL_ROUNDS         = 20   // total rodadas per tournament
+    const val ARG_CLAUSURA_OG_OFFSET   = 210  // added to rodada*10 for Clausura
+
+    val ARG_FASES_KNOCKOUT = listOf("Oitavas", "Quartas", "Semi", "Final")
+
+    /**
+     * Generates single round-robin (turno only) for one group of N teams.
+     * For odd N a dummy bye (-1) is injected so every possible pair meets exactly once.
+     * Matches for round [rodadaBase + 0 .. rodadaBase + min(N-1, maxRodadas)-1] are produced.
+     * ordemGlobal = rodada * 10 + ogOffset
+     */
+    fun gerarTurnoUnicoGrupo(
+        campeonatoId: Int,
+        participantes: List<Int>,
+        rodadaBase: Int = 1,
+        ogOffset: Int = 0,
+        maxRodadas: Int = Int.MAX_VALUE
+    ): List<PartidaEntity> {
+        val times = participantes.toMutableList()
+        val partidas = mutableListOf<PartidaEntity>()
+        if (times.size % 2 != 0) times.add(-1)          // bye for odd N
+
+        val metade    = times.size / 2
+        val numRodadas = minOf(times.size - 1, maxRodadas)
+
+        repeat(numRodadas) { idx ->
+            val rodada = rodadaBase + idx
+            val og     = rodada * 10 + ogOffset
+            for (i in 0 until metade) {
+                val teamA = times[i]
+                val teamB = times[times.size - 1 - i]
+                if (teamA != -1 && teamB != -1) {
+                    // Alternate home/away each round
+                    val (casa, fora) = if (idx % 2 == 0) teamA to teamB else teamB to teamA
+                    partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                        timeCasaId = casa, timeForaId = fora, ordemGlobal = og))
+                }
+            }
+            val ultimo = times.removeAt(times.size - 1)
+            times.add(1, ultimo)
+        }
+        return partidas
+    }
+
+    /**
+     * Generates 2 interzonal rounds starting at [rodadaBase]:
+     *   Round +0: fixed rival pairings  (grupoA[i] vs grupoB[i])
+     *   Round +1: shuffled secondary pairings
+     */
+    fun gerarInterzonais(
+        campeonatoId: Int,
+        grupoA: List<Int>,
+        grupoB: List<Int>,
+        rodadaBase: Int,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        require(grupoA.size == grupoB.size)
+        val partidas = mutableListOf<PartidaEntity>()
+
+        // Round 1 – rival (A[i] hosts B[i])
+        val r1 = rodadaBase
+        val og1 = r1 * 10 + ogOffset
+        grupoA.forEachIndexed { i, teamA ->
+            partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = r1,
+                timeCasaId = teamA, timeForaId = grupoB[i], ordemGlobal = og1))
+        }
+
+        // Round 2 – random secondary (B[j] hosts A[j], shuffled independently)
+        val r2  = rodadaBase + 1
+        val og2 = r2 * 10 + ogOffset
+        val shA = grupoA.shuffled()
+        val shB = grupoB.shuffled()
+        shA.forEachIndexed { i, teamA ->
+            partidas.add(PartidaEntity(campeonatoId = campeonatoId, rodada = r2,
+                timeCasaId = shB[i], timeForaId = teamA, ordemGlobal = og2))
+        }
+        return partidas
+    }
+
+    /**
+     * Generates Oitavas bracket for Argentine knockout.
+     * Cross-seeding: A1-B8, A2-B7, A3-B6, A4-B5 (A side hosts);
+     *                B1-A8, B2-A7, B3-A6, B4-A5 (B side hosts)
+     * top8A sorted best→worst; top8B sorted best→worst.
+     */
+    fun gerarOitavasArgentina(
+        campeonatoId: Int,
+        top8A: List<Int>,
+        top8B: List<Int>,
+        rodada: Int,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        require(top8A.size == 8 && top8B.size == 8)
+        val og = rodada * 10 + ogOffset
+        return buildList {
+            for (i in 0 until 4) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = top8A[i], timeForaId = top8B[7 - i],
+                    fase = "Oitavas", ordemGlobal = og))
+            }
+            for (i in 0 until 4) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = top8B[i], timeForaId = top8A[7 - i],
+                    fase = "Oitavas", ordemGlobal = og))
+            }
+        }
+    }
+
+    /**
+     * Generates next knockout phase by pairing winners consecutively.
+     * Winner[0] (home) vs Winner[1], Winner[2] (home) vs Winner[3], ...
+     */
+    fun gerarProximaFaseKnockoutArgentina(
+        campeonatoId: Int,
+        vencedores: List<Int>,
+        rodada: Int,
+        fase: String,
+        ogOffset: Int = 0
+    ): List<PartidaEntity> {
+        val og = rodada * 10 + ogOffset
+        return buildList {
+            var i = 0
+            while (i + 1 < vencedores.size) {
+                add(PartidaEntity(campeonatoId = campeonatoId, rodada = rodada,
+                    timeCasaId = vencedores[i], timeForaId = vencedores[i + 1],
+                    fase = fase, ordemGlobal = og))
+                i += 2
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Formato Uruguaio Apertura / Intermediário / Clausura
+    //  16 times na Primera División
+    //  Apertura:      turno único (15 rods)  OG = rodada*10           (10–150)
+    //  Intermediário: 2 grupos de 8, turno único (7 rods) + Final(R8) OG = rodada*10+155 (165–235)
+    //  Clausura:      turno único invertido  (15 rods)  OG = rodada*10+250 (260–400)
+    //  Playoff:       Semi (R16 OG 411), Final (R17 OG 421) — armazenados no Clausura
+    // ══════════════════════════════════════════════════════════════
+    const val URU_ROUNDS_APERTURA       = 15   // 16 teams, turno único (N-1)
+    const val URU_ROUNDS_INTERM_GROUP   = 7    // 8 teams per group, turno único
+    const val URU_INTERM_FINAL_RODADA   = 8    // Intermediário Final round
+    const val URU_INTERM_OG_OFFSET      = 155  // OG offset for Intermediário (R1→165)
+    const val URU_INTERM_OG_FINAL       = 235  // Intermediário Final OG (8*10+155)
+    const val URU_CLAUSURA_OG_OFFSET    = 250  // OG offset for Clausura (R1→260)
+    const val URU_PLAYOFF_SEMI_RODADA   = 16   // Championship Semi round in Clausura
+    const val URU_PLAYOFF_FINAL_RODADA  = 17   // Championship Final round in Clausura
+    const val URU_PLAYOFF_OG_SEMI       = 411  // Championship Semi OG
+    const val URU_PLAYOFF_OG_FINAL      = 421  // Championship Final OG
+    // URU_GRUPO_A / URU_GRUPO_B reutilizam ARG_GRUPO_A / ARG_GRUPO_B ("A"/"B")
+
+    //  Torneo Competencia – Segunda División Uruguaia
+    //  14 teams → 2 groups of 7, turno único (6 rods) + Final (R7)
+    //  OG = rodada*10 + URU_B_COMPET_OG_OFFSET (450..510); Final OG = 520
+    const val URU_B_COMPET_ROUNDS_GROUP = 6    // 7 teams per group, turno único (N-1)
+    const val URU_B_COMPET_FINAL_RODADA = 7    // Competencia Final round
+    const val URU_B_COMPET_OG_OFFSET    = 450  // OG offset for Competencia groups (R1→460)
+    const val URU_B_COMPET_OG_FINAL     = 520  // Competencia Final OG (7*10+450)
 }

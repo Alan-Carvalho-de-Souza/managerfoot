@@ -11,8 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,12 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import br.com.managerfoot.R
 import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.presentation.ui.components.ScreenTopBar
@@ -45,14 +45,40 @@ fun HallDaFamaScreen(
     val hallDaFama by vm.hallDaFama.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    val opcoes = listOf(
-        0 to "Todas",
-        1 to "Série A",
-        2 to "Série B",
-        3 to "Série C",
-        4 to "Série D",
-        5 to "Copa do Brasil"
+    // Opções por país (preservadas do dev)
+    val opcoesBrasil = listOf(
+        100 to "Todas",
+        1 to "Série A", 2 to "Série B", 3 to "Série C", 4 to "Série D",
+        5 to "Copa do Brasil", 6 to "Supercopa Rei"
     )
+    val opcoesArgentina = listOf(
+        200 to "Todas",
+        17 to "Campeão Argentino",
+        7 to "Apertura", 8 to "Clausura", 9 to "Copa Argentina", 10 to "Segunda Div."
+    )
+    val opcoesUruguai = listOf(
+        300 to "Todas",
+        14 to "Campeão Uruguaio",
+        11 to "Apertura", 12 to "Intermediário", 13 to "Clausura",
+        15 to "Segunda Divisão", 16 to "Competencia"
+    )
+
+    val paisDaDivisao = remember(divisaoSelecionada) {
+        when (divisaoSelecionada) {
+            in 7..10, 17, 200 -> "Argentina"
+            in 11..16, 300 -> "Uruguai"
+            0 -> "Todos"
+            else -> "Brasil"
+        }
+    }
+    var paisSelecionado by remember(divisaoSelecionada) { mutableStateOf(paisDaDivisao) }
+
+    val opcoesDaDiv = when (paisSelecionado) {
+        "Argentina" -> opcoesArgentina
+        "Uruguai" -> opcoesUruguai
+        "Brasil" -> opcoesBrasil
+        else -> emptyList()
+    }
 
     Column(
         modifier = Modifier
@@ -66,7 +92,8 @@ fun HallDaFamaScreen(
             onVoltar = onVoltar
         )
 
-        // Filtro de competição (chips horizontais)
+        // Filtro de país (chips horizontais)
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai")
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -74,13 +101,43 @@ fun HallDaFamaScreen(
                 .fillMaxWidth()
                 .padding(top = Spacing.md, bottom = Spacing.sm)
         ) {
-            items(opcoes) { (div, label) ->
+            items(paises) { pais ->
                 FilterChipPill(
-                    label = label,
-                    selected = divisaoSelecionada == div,
-                    onClick = { vm.selecionarDivisao(div) }
+                    label = if (pais == "Todos") pais else "${bandeiraPais(pais)} $pais",
+                    selected = paisSelecionado == pais,
+                    onClick = {
+                        paisSelecionado = pais
+                        val div = when (pais) {
+                            "Argentina" -> 200
+                            "Brasil" -> 100
+                            "Uruguai" -> 300
+                            else -> 0
+                        }
+                        vm.selecionarDivisao(div)
+                    }
                 )
             }
+        }
+
+        // Filtro de competição (chips horizontais) — só quando país específico selecionado
+        if (paisSelecionado != "Todos") {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Spacing.md)
+            ) {
+                items(opcoesDaDiv) { (div, label) ->
+                    FilterChipPill(
+                        label = label,
+                        selected = div == divisaoSelecionada,
+                        onClick = { vm.selecionarDivisao(div) }
+                    )
+                }
+            }
+        } else {
+            Spacer(Modifier.height(Spacing.sm))
         }
 
         if (hallDaFama.isEmpty()) {
@@ -104,7 +161,7 @@ fun HallDaFamaScreen(
     }
 }
 
-// ─── Empty state com ícone de troféu ────────────────────────
+// ─── Empty state ────────────────────────────────────────────
 @Composable
 private fun HallDaFamaEmptyState(modifier: Modifier = Modifier) {
     Column(
@@ -145,7 +202,7 @@ private fun HallDaFamaEmptyState(modifier: Modifier = Modifier) {
     }
 }
 
-// ─── Card de uma temporada do Hall da Fama ──────────────────
+// ─── Card de uma temporada ──────────────────────────────────
 @Composable
 private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
     Card(
@@ -162,14 +219,14 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                GoldChampion.copy(alpha = 0.10f),
+                                GoldChampion.copy(alpha = 0.12f),
                                 GoldChampion.copy(alpha = 0.02f)
                             )
                         )
                     )
             )
             Column(modifier = Modifier.padding(Spacing.lg)) {
-                // Header: ano gigante + nome do campeonato
+                // ── Header: ano gigante + nome do campeonato ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -201,7 +258,7 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -209,7 +266,7 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
 
                 Spacer(Modifier.height(Spacing.lg))
 
-                // Linha do campeão (destaque dourado)
+                // ── Linha do campeão (destaque dourado) ──
                 CampeaoLinha(
                     posicao = "CAMPEÃO",
                     nome = entrada.campeaoNome,
@@ -219,7 +276,7 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     forte = true
                 )
 
-                // Linha do vice (prata)
+                // ── Linha do vice (prata) ──
                 if (entrada.viceNome.isNotEmpty()) {
                     Spacer(Modifier.height(Spacing.sm))
                     CampeaoLinha(
@@ -232,7 +289,7 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                     )
                 }
 
-                // Premiações individuais (Artilheiro / Garçom)
+                // ── Premiações individuais (Artilheiro / Garçom) ──
                 val temArtilheiro = entrada.artilheiroNome.isNotEmpty()
                 val temAssistente = entrada.assistenteNome.isNotEmpty()
                 if (temArtilheiro || temAssistente) {
@@ -247,28 +304,44 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
                         letterSpacing = 1.sp
                     )
                     Spacer(Modifier.height(Spacing.sm))
-                    if (temArtilheiro) {
-                        PremioIndividualLinha(
-                            icone = Icons.Filled.SportsSoccer,
-                            label = "Artilheiro",
-                            nomeJogador = entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome },
-                            nomeTime = entrada.artilheiroNomeTime,
-                            escudoTime = entrada.artilheiroEscudo,
-                            valor = "${entrada.artilheiroGols} gols",
-                            accent = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    if (temAssistente) {
-                        if (temArtilheiro) Spacer(Modifier.height(Spacing.sm))
-                        PremioIndividualLinha(
-                            icone = Icons.Filled.Handshake,
-                            label = "Garçom",
-                            nomeJogador = entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome },
-                            nomeTime = entrada.assistenteNomeTime,
-                            escudoTime = entrada.assistenteEscudo,
-                            valor = "${entrada.assistenciasTotais} assist.",
-                            accent = BronzePlace
-                        )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        if (temArtilheiro) {
+                            PremioColuna(
+                                modifier = Modifier.weight(1f),
+                                painter = painterResource(R.drawable.ic_artilheiro_trophy),
+                                label = "Artilheiro",
+                                nomeJogador = entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome },
+                                nomeTime = entrada.artilheiroNomeTime,
+                                escudoTime = entrada.artilheiroEscudo,
+                                valor = "${entrada.artilheiroGols} gols",
+                                accent = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (temArtilheiro && temAssistente) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(96.dp)
+                                    .background(GoldChampion.copy(alpha = 0.25f))
+                            )
+                        }
+                        if (temAssistente) {
+                            PremioColuna(
+                                modifier = Modifier.weight(1f),
+                                painter = painterResource(R.drawable.ic_garcom_trophy),
+                                label = "Garçom",
+                                nomeJogador = entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome },
+                                nomeTime = entrada.assistenteNomeTime,
+                                escudoTime = entrada.assistenteEscudo,
+                                valor = "${entrada.assistenciasTotais} assist.",
+                                accent = BronzePlace
+                            )
+                        }
                     }
                 }
             }
@@ -298,7 +371,7 @@ private fun CampeaoLinha(
         // Avatar circular dourado/prata com escudo dentro
         Box(
             modifier = Modifier
-                .size(if (forte) 48.dp else 40.dp)
+                .size(if (forte) 56.dp else 44.dp)
                 .clip(CircleShape)
                 .background(cor.copy(alpha = 0.20f))
                 .border(if (forte) 2.dp else 1.5.dp, cor, CircleShape),
@@ -307,7 +380,7 @@ private fun CampeaoLinha(
             TeamBadge(
                 nome = nome,
                 escudoRes = escudo,
-                size = if (forte) 36.dp else 30.dp
+                size = if (forte) 42.dp else 32.dp
             )
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -336,8 +409,9 @@ private fun CampeaoLinha(
 }
 
 @Composable
-private fun PremioIndividualLinha(
-    icone: ImageVector,
+private fun PremioColuna(
+    modifier: Modifier = Modifier,
+    painter: Painter,
     label: String,
     nomeJogador: String,
     nomeTime: String,
@@ -345,53 +419,44 @@ private fun PremioIndividualLinha(
     valor: String,
     accent: Color
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    Column(
+        modifier = modifier.padding(horizontal = Spacing.xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = 0.18f))
-                .border(0.5.dp, accent.copy(alpha = 0.5f), CircleShape),
-            contentAlignment = Alignment.Center
+        Icon(
+            painter = painter,
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(48.dp)
+        )
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+        Text(
+            nomeJogador,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
         ) {
-            Icon(
-                imageVector = icone,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
+            TeamBadge(nome = nomeTime, escudoRes = escudoTime, size = 14.dp)
             Text(
-                label.uppercase(),
+                nomeTime,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = accent,
-                letterSpacing = 1.sp
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text(
-                    nomeJogador,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                TeamBadge(nome = nomeTime, escudoRes = escudoTime, size = 16.dp)
-                Text(
-                    nomeTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
         Text(
             valor,
@@ -400,4 +465,11 @@ private fun PremioIndividualLinha(
             color = accent
         )
     }
+}
+
+private fun bandeiraPais(pais: String): String = when (pais) {
+    "Brasil" -> "🇧🇷"
+    "Argentina" -> "🇦🇷"
+    "Uruguai" -> "🇺🇾"
+    else -> ""
 }

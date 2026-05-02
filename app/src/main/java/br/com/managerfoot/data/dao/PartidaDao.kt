@@ -26,6 +26,35 @@ interface PartidaDao {
     @Query("SELECT * FROM partidas WHERE campeonatoId = :campeonatoId AND jogada = 1 AND fase IS NULL")
     suspend fun buscarPartidasJogadasDeLiga(campeonatoId: Int): List<PartidaEntity>
 
+    /**
+     * Migração: corrige os ordemGlobal de jogos da Copa do Brasil criados com os valores
+     * antigos (2, 7, 15, 35, ...) para os novos valores que se intercalam corretamente
+     * entre as rodadas do Brasileirão.
+     * Filtra apenas campeonatos do tipo COPA_NACIONAL para não afetar a Copa Argentina.
+     */
+    @Query("""
+        UPDATE partidas SET ordemGlobal = CASE ordemGlobal
+            WHEN 2   THEN 13
+            WHEN 7   THEN 33
+            WHEN 15  THEN 53
+            WHEN 35  THEN 83
+            WHEN 95  THEN 133
+            WHEN 115 THEN 163
+            WHEN 175 THEN 207
+            WHEN 195 THEN 233
+            WHEN 245 THEN 278
+            WHEN 265 THEN 313
+            WHEN 335 THEN 357
+            WHEN 355 THEN 383
+            ELSE ordemGlobal
+        END
+        WHERE ordemGlobal IN (2, 7, 15, 35, 95, 115, 175, 195, 245, 265, 335, 355)
+          AND campeonatoId IN (
+              SELECT id FROM campeonatos WHERE tipo = 'COPA_NACIONAL' AND (pais IS NULL OR pais != 'Argentina')
+          )
+    """)
+    suspend fun migrarOrdemGlobalCopaBrasil()
+
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0
@@ -45,7 +74,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId = :campeonatoId
-        ORDER BY rodada DESC
+        ORDER BY ordemGlobal DESC
         LIMIT :limite
     """)
     suspend fun buscarUltimosResultados(timeId: Int, campeonatoId: Int, limite: Int = 5): List<PartidaEntity>
@@ -53,7 +82,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1 AND campeonatoId IN (:campeonatoIds)
-        ORDER BY rodada DESC
+        ORDER BY ordemGlobal DESC
         LIMIT :limite
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
@@ -187,6 +216,34 @@ interface PartidaDao {
     """)
     suspend fun buscarAssisteTop1(campeonatoId: Int): ArtilheiroDto?
 
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p ON ep.partidaId = p.id
+        INNER JOIN jogadores j ON ep.jogadorId = j.id
+        LEFT JOIN times t ON j.timeId = t.id
+        WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'GOL'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT 1
+    """)
+    suspend fun buscarArtilheiroTop1Multi(campeonatoIds: List<Int>): ArtilheiroDto?
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p ON ep.partidaId = p.id
+        INNER JOIN jogadores j ON ep.jogadorId = j.id
+        LEFT JOIN times t ON j.timeId = t.id
+        WHERE p.campeonatoId IN (:campeonatoIds) AND ep.tipo = 'ASSISTENCIA'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT 1
+    """)
+    suspend fun buscarAssisteTop1Multi(campeonatoIds: List<Int>): ArtilheiroDto?
+
     // ── Consultas históricas (todas as temporadas) ──
 
     @Query("""
@@ -244,6 +301,66 @@ interface PartidaDao {
         LIMIT :limite
     """)
     fun observeAssistentesHistoricoFiltrado(tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'GOL' AND c.tipo = 'COPA_NACIONAL' AND c.pais = 'Argentina'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeArtilheirosHistoricoCopaArgentina(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'ASSISTENCIA' AND c.tipo = 'COPA_NACIONAL' AND c.pais = 'Argentina'
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeAssistentesHistoricoCopaArgentina(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'GOL' AND c.tipo = 'COPA_NACIONAL' AND (c.pais IS NULL OR c.pais != 'Argentina')
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeArtilheirosHistoricoCopaBrasil(limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'ASSISTENCIA' AND c.tipo = 'COPA_NACIONAL' AND (c.pais IS NULL OR c.pais != 'Argentina')
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeAssistentesHistoricoCopaBrasil(limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
@@ -317,6 +434,24 @@ interface PartidaDao {
     fun observeRodada(campeonatoId: Int, rodada: Int): Flow<List<CalendarioPartidaDto>>
 
     @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida,
+               p.penaltisCasa AS penaltisCasa, p.penaltisForaId AS penaltisForaId
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.campeonatoId = :campeonatoId AND p.fase IS NOT NULL
+        ORDER BY p.rodada, p.id
+    """)
+    fun observeArgKnockout(campeonatoId: Int): Flow<List<CalendarioPartidaDto>>
+
+    @Query("""
         SELECT p.id AS partidaId, p.confrontoId AS confrontoId, p.fase AS fase,
                p.rodada AS rodada, p.timeCasaId AS timeCasaId,
                tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
@@ -375,6 +510,24 @@ interface PartidaDao {
         ORDER BY c.temporadaId ASC, p.rodada ASC
     """)
     suspend fun buscarHistoricoCopaDoTime(timeId: Int): List<PartidaCopaHistoricoDto>
+
+    @Query("""
+        SELECT p.campeonatoId AS campeonatoId,
+               c.nome        AS nomeCampeonato,
+               c.temporadaId AS temporadaId,
+               p.timeCasaId  AS timeCasaId,
+               p.timeForaId  AS timeForaId,
+               p.golsCasa    AS golsCasa,
+               p.golsFora    AS golsFora,
+               p.fase        AS fase
+        FROM partidas p
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        WHERE c.tipo = 'SUPERCOPA'
+        AND (p.timeCasaId = :timeId OR p.timeForaId = :timeId)
+        AND p.jogada = 1
+        ORDER BY c.temporadaId ASC, p.rodada ASC
+    """)
+    suspend fun buscarHistoricoSupercopaDoTime(timeId: Int): List<PartidaCopaHistoricoDto>
 
     // ── Estatísticas de jogadores por equipe ──
 
@@ -445,7 +598,9 @@ data class CalendarioPartidaDto(
     val golsFora: Int?,
     val jogada: Boolean,
     val torcedores: Int? = null,
-    val receitaPartida: Long? = null
+    val receitaPartida: Long? = null,
+    val penaltisCasa: Int? = null,
+    val penaltisForaId: Int? = null
 )
 
 data class CopaPartidaDto(

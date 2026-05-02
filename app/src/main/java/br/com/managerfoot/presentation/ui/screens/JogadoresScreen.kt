@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Close
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,8 +77,25 @@ fun JogadoresScreen(
         }
     }
 
-    var jogadorParaOfertar by remember { mutableStateOf<Jogador?>(null) }
-    var jogadorParaVender  by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaOfertar  by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaVender   by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaRenovar  by remember { mutableStateOf<Jogador?>(null) }
+
+    // Dialog: Renovar / Dispensar (contrato expirado)
+    jogadorParaRenovar?.let { jogador ->
+        ContratoExpiradoDialog(
+            jogador   = jogador,
+            onRenovar = { novoSalario, novosAnos ->
+                vm.renovarContrato(jogador, novoSalario, novosAnos)
+                jogadorParaRenovar = null
+            },
+            onDispensar = {
+                vm.dispensarJogador(jogador)
+                jogadorParaRenovar = null
+            },
+            onDismiss = { jogadorParaRenovar = null }
+        )
+    }
 
     // Dialog: Fazer oferta (aba Pesquisa)
     jogadorParaOfertar?.let { jogador ->
@@ -123,8 +143,11 @@ fun JogadoresScreen(
         Box(modifier = Modifier.weight(1f)) {
             when (abaAtiva) {
                 0 -> ElencoProgressaoTab(
-                    elenco = elenco,
-                    onClicarJogador = { jogadorParaVender = it }
+                    elenco          = elenco,
+                    onClicarJogador = { jogador ->
+                        if (jogador.contratoAnos == 0) jogadorParaRenovar = jogador
+                        else jogadorParaVender = jogador
+                    }
                 )
                 1 -> PesquisaTab(
                     jogadores = resultadoPesquisa,
@@ -164,6 +187,113 @@ fun JogadoresScreen(
 }
 
 // ─────────────────────────────────────────────────────────
+//  Dialog: Contrato Expirado
+// ─────────────────────────────────────────────────────────
+
+@Composable
+private fun ContratoExpiradoDialog(
+    jogador:     Jogador,
+    onRenovar:   (novoSalario: Long, novosAnos: Int) -> Unit,
+    onDispensar: () -> Unit,
+    onDismiss:   () -> Unit
+) {
+    val salarioAtualReais  = jogador.salario / 100L
+    val podeReduzirSalario = jogador.idade >= 29
+
+    var salarioTexto by remember { mutableStateOf(salarioAtualReais.toString()) }
+    var anosContrato by remember { mutableIntStateOf(2) }
+
+    val salarioNovo   = salarioTexto.toLongOrNull() ?: 0L
+    val salarioValido = if (podeReduzirSalario) salarioNovo > 0
+                        else salarioNovo >= salarioAtualReais
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint               = MaterialTheme.colorScheme.error,
+                    modifier           = Modifier.size(20.dp)
+                )
+                Text("Contrato expirado")
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(jogador.nome, fontWeight = FontWeight.Bold)
+                Text("Posição: ${jogador.posicao.name.replace("_", " ")}")
+                Text("Força: ${jogador.forca}")
+                Text("Valor de mercado: ${formatarSaldo(jogador.valorMercado)}", fontWeight = FontWeight.Bold)
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    "O contrato deste jogador encerrou. Deseja renová-lo?",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value           = salarioTexto,
+                    onValueChange   = { salarioTexto = it.filter { c -> c.isDigit() } },
+                    label           = { Text("Salário mensal (R\$)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine      = true,
+                    modifier        = Modifier.fillMaxWidth(),
+                    supportingText  = {
+                        when {
+                            !salarioValido && salarioNovo > 0 ->
+                                Text(
+                                    "Salário mínimo: R\$ $salarioAtualReais (jogador abaixo de 29 anos)",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            podeReduzirSalario ->
+                                Text(
+                                    "Jogador com ${jogador.idade} anos — pode aceitar redução salarial",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                        }
+                    }
+                )
+
+                Text("Duração: $anosContrato ano(s)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1, 2, 3, 4, 5).forEach { anos ->
+                        FilterChip(
+                            selected = anosContrato == anos,
+                            onClick  = { anosContrato = anos },
+                            label    = { Text("$anos") }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onRenovar(salarioNovo * 100L, anosContrato) },
+                enabled = salarioValido
+            ) { Text("Renovar") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                TextButton(
+                    onClick = onDispensar,
+                    colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Dispensar") }
+            }
+        }
+    )
+}
+
+// ─────────────────────────────────────────────────────────
 //  Tab 0 — Elenco com progressão
 // ─────────────────────────────────────────────────────────
 
@@ -196,12 +326,18 @@ private fun ElencoProgressaoTab(
 
 @Composable
 private fun JogadorProgressaoCard(jogador: Jogador, onClick: () -> Unit) {
+    // Borda destacada quando contrato expirado ou prestes a expirar
+    val borderColor = when (jogador.contratoAnos) {
+        0    -> MaterialTheme.colorScheme.error
+        1    -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.outline
+    }
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radius.md),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        border = BorderStroke(if (jogador.contratoAnos <= 1) 1.5.dp else 1.dp, borderColor)
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             // Faixa lateral colorida pelo setor
@@ -263,6 +399,11 @@ private fun JogadorProgressaoCard(jogador: Jogador, onClick: () -> Unit) {
                     EvolucaoChip(progresso = jogador.progressoEvolucao)
                 }
 
+                // Aviso de contrato expirado / prestes a expirar
+                if (jogador.contratoAnos <= 1) {
+                    ContratoAvisoChip(anos = jogador.contratoAnos)
+                }
+
                 // Barra de progressão bidirecional (negativo à esquerda, positivo à direita)
                 ProgressoEvolucaoBar(progresso = jogador.progressoEvolucao)
             }
@@ -287,6 +428,37 @@ private fun InfoBadge(icone: ImageVector, texto: String, accent: Color) {
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = accent
+        )
+    }
+}
+
+@Composable
+private fun ContratoAvisoChip(anos: Int) {
+    val (label, cor) = when (anos) {
+        0    -> "CONTRATO EXPIRADO" to MaterialTheme.colorScheme.error
+        else -> "1 ANO RESTANTE" to MaterialTheme.colorScheme.tertiary
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(cor.copy(alpha = 0.14f))
+            .border(0.5.dp, cor.copy(alpha = 0.5f), RoundedCornerShape(Radius.sm))
+            .padding(horizontal = Spacing.sm, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            tint = cor,
+            modifier = Modifier.size(12.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = cor,
+            letterSpacing = 0.5.sp
         )
     }
 }

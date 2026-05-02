@@ -116,11 +116,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         fora: Escalacao,
         // Quando informado, inibe as substituições táticas aleatórias para o time
         // do jogador — apenas subs forçadas (lesão/expulsão) ocorrem nesses casos.
-        timeJogadorId: Int = -1
+        timeJogadorId: Int = -1,
+        // Campo neutro: desativa o bônus de mandante (ex: Supercopa Rei)
+        campoNeutro: Boolean = false
     ): ResultadoPartida {
 
+        val fatorMandante = if (campoNeutro) 1.0 else CalculadoraForca.fatorMandante(casa.time.estadioCapacidade)
         val fCasaRaw = CalculadoraForca.calcularForcaTime(casa) *
-                CalculadoraForca.fatorMandante(casa.time.estadioCapacidade) *
+                fatorMandante *
                 CalculadoraForca.fatorEstilo(casa.time.estiloJogo, fora.time.estiloJogo)
 
         val fForaRaw = CalculadoraForca.calcularForcaTime(fora) *
@@ -644,11 +647,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         escalacaoCasa: Escalacao,
         escalacaoFora: Escalacao,
         estado: EstadoMetade,
-        timeJogadorId: Int = -1
+        timeJogadorId: Int = -1,
+        // Campo neutro: desativa o bônus de mandante (ex: Supercopa Rei)
+        campoNeutro: Boolean = false
     ): Pair<EstadoMetade, List<EventoSimulado>> {
 
+        val fatorMandante = if (campoNeutro) 1.0 else CalculadoraForca.fatorMandante(escalacaoCasa.time.estadioCapacidade)
         val fCasaRaw = CalculadoraForca.calcularForcaTime(escalacaoCasa) *
-                CalculadoraForca.fatorMandante(escalacaoCasa.time.estadioCapacidade) *
+                fatorMandante *
                 CalculadoraForca.fatorEstilo(escalacaoCasa.time.estiloJogo, escalacaoFora.time.estiloJogo)
         val fForaRaw = CalculadoraForca.calcularForcaTime(escalacaoFora) *
                 CalculadoraForca.fatorEstilo(escalacaoFora.time.estiloJogo, escalacaoCasa.time.estiloJogo)

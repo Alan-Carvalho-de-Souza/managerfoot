@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -169,7 +170,7 @@ fun PartidaSimulacaoScreen(
                 timeId = ev.timeId,
                 nomeTime = if (ehCasa) nomeTimeCasa else nomeTimeFora,
                 jogadorId = ev.jogadorId,
-                pularExibicao = ev.tipo == TipoEvento.DEFESA_GOLEIRO
+                pularExibicao = ev.tipo == TipoEvento.PARTICIPOU
             )
         }
     }
@@ -673,10 +674,37 @@ fun PartidaSimulacaoScreen(
         }
 
         // ── Botão de encerrar ────────────────────────────────────
-        // Spinner enquanto dadosPenaltisAdversario ainda não chegou
+        // Spinner enquanto dadosPenaltisAdversario ainda não chegou (caso raro de delay).
+        // Se dadosPenaltisAdversario for null (falha ao buscar dados de pênaltis), exibe
+        // o botão "Voltar ao painel" diretamente para não bloquear o usuário.
         if (simulacaoEncerrada && resultado.precisaPenaltis && !penaltisInterativoConcluido && penaltisResultado == null) {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            if (dadosPenaltisAdversario == null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Button(
+                        onClick = onSimulacaoFinalizada,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.lg),
+                        shape = RoundedCornerShape(Radius.md),
+                        contentPadding = PaddingValues(vertical = Spacing.md)
+                    ) {
+                        Text("Voltar ao painel", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(Spacing.sm))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            } else {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
@@ -2750,6 +2778,10 @@ private fun eventoStyle(tipo: TipoEvento): EventoStyle {
             accent = Color(0xFFFF7043),
             background = Color(0xFFFF7043).copy(alpha = 0.05f)
         )
+        TipoEvento.DEFESA_GOLEIRO -> EventoStyle(
+            accent = Color(0xFF26A69A),
+            background = Color(0xFF26A69A).copy(alpha = 0.06f)
+        )
         else -> EventoStyle(
             accent = primary,
             background = surface
@@ -2812,6 +2844,12 @@ private fun EventoIcone(tipo: TipoEvento, accent: Color) {
         )
         TipoEvento.ASSISTENCIA -> Icon(
             imageVector = Icons.Filled.SwapHoriz,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp)
+        )
+        TipoEvento.DEFESA_GOLEIRO -> Icon(
+            imageVector = Icons.Filled.PanTool,
             contentDescription = null,
             tint = accent,
             modifier = Modifier.size(20.dp)

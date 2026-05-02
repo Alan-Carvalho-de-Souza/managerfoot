@@ -7,6 +7,8 @@ import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.PartidaDao
+import br.com.managerfoot.data.dao.PropostaClubeDao
+import br.com.managerfoot.data.dao.PropostaIADao
 import br.com.managerfoot.data.dao.RankingGeralDao
 import br.com.managerfoot.data.database.AppDatabase
 import br.com.managerfoot.data.database.entities.*
@@ -28,7 +30,9 @@ class GameRepository @Inject constructor(
     private val financaDao: br.com.managerfoot.data.dao.FinancaDao,
     private val hallDaFamaDao: HallDaFamaDao,
     private val rankingGeralDao: RankingGeralDao,
-    private val estadioDao: EstadioDao
+    private val estadioDao: EstadioDao,
+    private val propostaIADao: PropostaIADao,
+    private val propostaClubeDao: PropostaClubeDao
 ) {
     private val simulador = SimuladorPartida()
 
@@ -83,6 +87,8 @@ class GameRepository @Inject constructor(
         hallDaFamaDao.deleteAll()
         rankingGeralDao.deleteAll()
         estadioDao.deleteAll()
+        propostaIADao.limparTodas()
+        propostaClubeDao.limparTodas()
     }
 
     suspend fun criarCampeonato(
@@ -135,6 +141,10 @@ class GameRepository @Inject constructor(
     fun observarAssistentesMulti(ids: List<Int>) = partidaDao.observeAssistentesMulti(ids)
     fun observarArtilheirosHistoricoFiltrado(tipos: List<String>) = partidaDao.observeArtilheirosHistoricoFiltrado(tipos)
     fun observarAssistentesHistoricoFiltrado(tipos: List<String>) = partidaDao.observeAssistentesHistoricoFiltrado(tipos)
+    fun observarArtilheirosHistoricoCopaArgentina() = partidaDao.observeArtilheirosHistoricoCopaArgentina()
+    fun observarAssistentesHistoricoCopaArgentina() = partidaDao.observeAssistentesHistoricoCopaArgentina()
+    fun observarArtilheirosHistoricoCopaBrasil() = partidaDao.observeArtilheirosHistoricoCopaBrasil()
+    fun observarAssistentesHistoricoCopaBrasil() = partidaDao.observeAssistentesHistoricoCopaBrasil()
 
     suspend fun buscarPartidasConfronto(timeAId: Int, timeBId: Int) =
         partidaDao.buscarPartidasConfronto(timeAId, timeBId)
@@ -167,6 +177,9 @@ class GameRepository @Inject constructor(
 
     suspend fun buscarHistoricoCopaDoTime(timeId: Int) =
         partidaDao.buscarHistoricoCopaDoTime(timeId)
+
+    suspend fun buscarHistoricoSupercopaDoTime(timeId: Int) =
+        partidaDao.buscarHistoricoSupercopaDoTime(timeId)
 
     suspend fun simularRodada(campeonatoId: Int, rodada: Int) {
         val partidas = partidaDao.buscarPorRodada(campeonatoId, rodada)
@@ -228,7 +241,8 @@ class GameRepository @Inject constructor(
             partidaId     = partidaDoJogador.id,
             casa          = escalacaoFinalCasa,
             fora          = escalacaoFinalFora,
-            timeJogadorId = timeJogadorId
+            timeJogadorId = timeJogadorId,
+            campoNeutro   = campeonatoDao.buscarPorId(campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
         )
         val notasPartida = persistirResultado(resultadoJogador)
 
@@ -327,6 +341,7 @@ class GameRepository @Inject constructor(
         }
 
         // Simula 1º tempo (minutos 1–45, fração = 0,5 dos gols esperados)
+        val campoNeutro = campeonatoDao.buscarPorId(campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
         val (estadoApos1H, eventos1H) = simulador.simularPeriodo(
             minInicio     = 1,
             minFim        = 45,
@@ -334,7 +349,8 @@ class GameRepository @Inject constructor(
             escalacaoCasa = escalacaoCasa,
             escalacaoFora = escalacaoFora,
             estado        = estadoInicial,
-            timeJogadorId = timeJogadorId
+            timeJogadorId = timeJogadorId,
+            campoNeutro   = campoNeutro
         )
 
         val golsCasa1H = eventos1H.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoCasa.time.id }
@@ -373,7 +389,8 @@ class GameRepository @Inject constructor(
             estadoMetade1            = estadoApos1H,
             golsCasaMetade1          = golsCasa1H,
             golsForaMetade1          = golsFora1H,
-            eventosAcumulados        = todosEventos1H
+            eventosAcumulados        = todosEventos1H,
+            campoNeutro              = campoNeutro
         )
         return Pair(contexto, resultadoParcial)
     }
@@ -439,7 +456,8 @@ class GameRepository @Inject constructor(
             escalacaoCasa = escalacaoCasaAtual,
             escalacaoFora = escalacaoForaAtual,
             estado        = estadoPeriodo,
-            timeJogadorId = ctx.timeJogadorId
+            timeJogadorId = ctx.timeJogadorId,
+            campoNeutro   = ctx.campoNeutro
         )
 
         // Injeta SUBSTITUICAO_ENTRA/SAI para as substituições manuais do jogador que
@@ -566,6 +584,23 @@ class GameRepository @Inject constructor(
             }
         }
 
+        // Supercopa: jogo único — empate nos 90min decide por pênaltis
+        if (!precisaPenaltis) {
+            val tipoDoJogo = campeonatoDao.buscarPorId(ctx.campeonatoId)?.tipo
+            if (tipoDoJogo == TipoCampeonato.SUPERCOPA && golsCasaFinal == golsForaFinal) {
+                precisaPenaltis = true
+            }
+        }
+
+        // Argentine GRUPOS_E_MATA_MATA knockout: jogo único — empate decide por pênaltis
+        if (!precisaPenaltis && golsCasaFinal == golsForaFinal) {
+            val formato = campeonatoDao.buscarPorId(ctx.campeonatoId)?.formato
+            val fasePartida = partidaDoJogador?.fase
+            if (formato == FormatoCampeonato.GRUPOS_E_MATA_MATA && fasePartida != null) {
+                precisaPenaltis = true
+            }
+        }
+
         return resultadoBase.copy(
             precisaPenaltis  = precisaPenaltis,
             golsAgregadoCasa = golsAgregadoCasa,
@@ -583,16 +618,21 @@ class GameRepository @Inject constructor(
     ): ResultadoPartida {
         val escalacaoFinalCasa = escalacaoCasa ?: gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFinalFora = escalacaoFora ?: gerarEscalacaoIA(partida.timeForaId)
+        val campoNeutro = campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
 
         val resultado = simulador.simular(
-            partidaId = partida.id,
-            casa = escalacaoFinalCasa,
-            fora = escalacaoFinalFora
+            partidaId   = partida.id,
+            casa        = escalacaoFinalCasa,
+            fora        = escalacaoFinalFora,
+            campoNeutro = campoNeutro
         )
 
         persistirResultado(resultado)
         return resultado
     }
+
+    /** Corrige ordemGlobal de partidas da Copa do Brasil criadas com os valores antigos. */
+    suspend fun migrarOrdemGlobalCopaBrasil() = partidaDao.migrarOrdemGlobalCopaBrasil()
 
     suspend fun buscarProximaPartida(timeId: Int): PartidaEntity? =
         partidaDao.buscarProximaPartida(timeId)
@@ -642,8 +682,17 @@ class GameRepository @Inject constructor(
         val campeonatoBId: Int,
         val campeonatoCId: Int,
         val campeonatoDId: Int,
-        val campeonatoArgAId: Int,
+        val campeonatoArgAId: Int,        // Apertura
+        val campeonatoArgBId: Int,        // Segunda División Argentina
+        val campeonatoArgClausuraId: Int, // Clausura Argentina
+        val campeonatoUruAperturaId: Int, // Apertura Uruguaio
+        val campeonatoUruBId: Int,        // Segunda División Uruguaia
+        val campeonatoUruClausuraId: Int, // Clausura Uruguaio
+        val campeonatoUruIntermedId: Int, // Intermediário Uruguaio
+        val campeonatoUruBCompetId: Int,  // Torneo Competencia – Segunda División
         val copaId: Int,
+        val copaArgId: Int,               // Copa Argentina
+        val supercopaId: Int,
         val temporadaId: Int,
         val ano: Int
     )
@@ -653,7 +702,14 @@ class GameRepository @Inject constructor(
         campeonatoBId: Int,
         campeonatoCId: Int,
         campeonatoDId: Int,
-        campeonatoArgAId: Int = -1,
+        campeonatoArgAId: Int = -1,         // Apertura
+        campeonatoArgBId: Int = -1,         // Segunda División
+        campeonatoArgClausuraId: Int = -1,  // Clausura
+        campeonatoUruAperturaId: Int = -1,  // Apertura Uruguaio
+        campeonatoUruClausuraId: Int = -1,  // Clausura Uruguaio
+        campeonatoUruIntermedId: Int = -1,  // Intermediário Uruguaio
+        campeonatoUruBId: Int = -1,         // Segunda División Uruguaia
+        campeonatoUruBCompetId: Int = -1,   // Torneo Competencia – Segunda División
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -663,13 +719,15 @@ class GameRepository @Inject constructor(
         // ── Helper: registra Hall da Fama para uma divisão ────────
         suspend fun registrarHallDaFama(campId: Int, div: Int) {
             if (campId <= 0) return
+            // Evita duplicatas: pula se já existe entrada para este ano + divisão
+            if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div) != null) return
             val tabTop2    = classificacaoDao.buscarTop2(campId)
             val campeao    = tabTop2.getOrNull(0) ?: return
             val vice       = tabTop2.getOrNull(1)
             val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
             val assistente = partidaDao.buscarAssisteTop1(campId)
             val campEntity = campeonatoDao.buscarPorId(campId)
-            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Primera Div."; else -> "D" }
+            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Copa"; 6 -> "Supercopa"; 7 -> "Apertura"; 8 -> "Clausura"; 10 -> "Segunda Div. Argentina"; 11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"; 15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"; 17 -> "Campeonato Argentino"; else -> "D" }
             hallDaFamaDao.inserir(HallDaFamaEntity(
                 ano = ano,
                 nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
@@ -699,7 +757,39 @@ class GameRepository @Inject constructor(
         registrarHallDaFama(campeonatoBId, 2)
         registrarHallDaFama(campeonatoCId, 3)
         registrarHallDaFama(campeonatoDId, 4)
-        registrarHallDaFama(campeonatoArgAId, 5)
+        // ── Garante conclusão dos torneios estrangeiros ───────────────────────
+        // Quando o usuário controla um time brasileiro os torneios Argentino Clausura
+        // e Uruguaio Clausura/Intermediário podem não ter terminado. Forçamos a
+        // simulação completa antes de registrar o Hall da Fama e fazer promoções.
+        if (campeonatoArgAId > 0 && campeonatoDao.buscarPorId(campeonatoArgAId)?.encerrado == false) {
+            simularProximaFaseArgentinaSeNecessario(campeonatoArgAId, -1, ano, temporadaId)
+        }
+        if (campeonatoArgClausuraId > 0 && campeonatoDao.buscarPorId(campeonatoArgClausuraId)?.encerrado == false) {
+            simularProximaFaseArgentinaSeNecessario(campeonatoArgClausuraId, -1, ano, temporadaId)
+        }
+        // Uruguai: simula cadeia Apertura → Intermediário → Clausura em loop (1 rodada por iteração)
+        var itrUru = 100
+        while (itrUru-- > 0) {
+            val algumUruAberto = listOf(campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId)
+                .any { it > 0 && campeonatoDao.buscarPorId(it)?.encerrado == false }
+            if (!algumUruAberto) break
+            simularUruguaiSeNecessario(
+                aperturaId    = campeonatoUruAperturaId,
+                clausuraId    = campeonatoUruClausuraId,
+                intermedidId  = campeonatoUruIntermedId,
+                competBId     = campeonatoUruBCompetId,
+                timeJogadorId = -1,
+                anoAtual      = ano,
+                temporadaId   = temporadaId
+            )
+        }
+        // Argentine Segunda Div. e Uruguayan Apertura/Segunda Div./Competencia
+        // são PONTOS_CORRIDOS — registra via tabela de classificação normalmente.
+        registrarHallDaFama(campeonatoArgBId, 10)  // 10 = Segunda Div. Argentina
+        // Uruguai: Apertura (11), Segunda Div. (15) e Competencia B (16)
+        registrarHallDaFama(campeonatoUruAperturaId, 11)  // 11 = Apertura Uruguaio (PONTOS_CORRIDOS)
+        registrarHallDaFama(campeonatoUruBId, 15)         // 15 = Segunda Div. Uruguaia
+        registrarHallDaFama(campeonatoUruBCompetId, 16)   // 16 = Competencia URU B
 
         // ── Bônus de reputação por título de divisão ──────────────
         suspend fun aplicarBonusTitulo(campId: Int, bonusPercent: Double) {
@@ -713,7 +803,9 @@ class GameRepository @Inject constructor(
         aplicarBonusTitulo(campeonatoBId, 0.03) // Série B +3%
         aplicarBonusTitulo(campeonatoCId, 0.02) // Série C +2%
         aplicarBonusTitulo(campeonatoDId, 0.01) // Série D +1%
-        aplicarBonusTitulo(campeonatoArgAId, 0.04) // Primera Div. +4%
+        // Apertura/Clausura: bônus já aplicado ao encerrar cada torneio
+        aplicarBonusTitulo(campeonatoArgBId, 0.02) // Segunda Div. ARG +2%
+        aplicarBonusTitulo(campeonatoUruBId, 0.02) // Segunda Div. URU +2%
 
         // ── Premiações de títulos — para o time do jogador se ele é campeão ou vice ─────────
         // Os valores estão em centavos (1 milhão = 1_000_000_00L no padrão monetário do jogo)
@@ -727,6 +819,7 @@ class GameRepository @Inject constructor(
                 vice?.timeId   -> premioCampeao / 2 to "Vice-campeão"
                 else           -> return
             }
+            val nomeCamp = campeonatoDao.buscarPorId(campId)?.nome ?: "Campeonato"
             timeRepository.creditarSaldo(timeJogadorId, premio)
             financaDao.inserir(
                 br.com.managerfoot.data.database.entities.FinancaEntity(
@@ -734,6 +827,7 @@ class GameRepository @Inject constructor(
                     temporadaId       = temporadaId,
                     mes               = 13,  // mês 13 = encerramento da temporada
                     receitaPremiacoes = premio,
+                    descricaoPremio   = "$nomeCamp — $posicao",
                     saldoFinal        = premio
                 )
             )
@@ -742,7 +836,8 @@ class GameRepository @Inject constructor(
         premiarSeJogador(campeonatoBId,  8_000_000_00L)  // Cam: R$  8M, Vice: R$  4M
         premiarSeJogador(campeonatoCId,  5_000_000_00L)  // Cam: R$  5M, Vice: R$2.5M
         premiarSeJogador(campeonatoDId,  2_000_000_00L)  // Cam: R$  2M, Vice: R$  1M
-        premiarSeJogador(campeonatoArgAId, 15_000_000_00L) // Cam: R$ 15M, Vice: R$7.5M
+        // Apertura/Clausura: premiação já feita ao encerrar cada torneio
+        premiarSeJogador(campeonatoArgBId,  6_000_000_00L) // Cam: R$  6M, Vice: R$  3M
 
         // ── Desfechos (promoções / rebaixamentos) ─────────────────
         suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
@@ -784,10 +879,13 @@ class GameRepository @Inject constructor(
         val novosD = (partD - promovidosD.toSet()) + rebaixadosC
 
         // Encerra todos os campeonatos
-        listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId)
+        listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
+               campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
+               campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId, campeonatoUruBId)
             .filter { it > 0 }.forEach { campeonatoDao.encerrar(it) }
 
         jogadorRepository.processarDesenvolvimentoAnual()
+        jogadorRepository.processarExpiracaoContratos(timeJogadorId)
 
         val novoAno         = ano + 1
         val novoTemporadaId = temporadaId + 1
@@ -814,20 +912,202 @@ class GameRepository @Inject constructor(
         atualizarRankingGeral(campeonatoBId)
         atualizarRankingGeral(campeonatoCId)
         atualizarRankingGeral(campeonatoDId)
-        atualizarRankingGeral(campeonatoArgAId)
+        atualizarRankingGeral(campeonatoArgBId)
+        atualizarRankingGeral(campeonatoUruBId)
 
-        // Renova Primera División Argentina (mesmos participantes — sem promoção/rebaixamento)
+        // ── Títulos dos campeões do Apertura e Clausura ────────────
+        // Centralizado aqui para garantir que ambos campeões sejam contabilizados,
+        // inclusive quando verificarEAvancarFaseArgentina não processou a Final.
+        suspend fun registrarTituloArgentino(campId: Int) {
+            if (campId <= 0) return
+            val finalPartida = partidaDao.buscarTodasPorCampeonato(campId)
+                .filter { it.fase == "Final" && it.jogada }
+                .firstOrNull() ?: return
+            val gC = finalPartida.golsCasa ?: return
+            val gF = finalPartida.golsFora ?: return
+            val campeaoId = when {
+                gC > gF -> finalPartida.timeCasaId
+                gF > gC -> finalPartida.timeForaId
+                (finalPartida.penaltisCasa ?: 0) > (finalPartida.penaltisForaId ?: 0) -> finalPartida.timeCasaId
+                else -> finalPartida.timeForaId
+            }
+            val timeEnt = timeRepository.buscarEntityPorId(campeaoId) ?: return
+            val existing = rankingGeralDao.buscarPorTime(campeaoId)
+            val entry = existing ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                timeId = campeaoId, nomeTime = timeEnt.nome, escudoRes = timeEnt.escudoRes, divisaoAtual = timeEnt.divisao
+            )
+            rankingGeralDao.inserirOuAtualizar(entry.copy(
+                titulosNacionais = entry.titulosNacionais + 1,
+                pontosAcumulados = entry.pontosAcumulados + 20L
+            ))
+        }
+        registrarTituloArgentino(campeonatoArgAId)
+        registrarTituloArgentino(campeonatoArgClausuraId)
+
+        // Campeão Geral da temporada Argentina: time com mais pontos acumulados
+        // somando fase de grupos do Apertura + Clausura
+        run {
+            val tabAp = if (campeonatoArgAId > 0) classificacaoDao.buscarTabelaOrdenada(campeonatoArgAId) else emptyList()
+            val tabCl = if (campeonatoArgClausuraId > 0) classificacaoDao.buscarTabelaOrdenada(campeonatoArgClausuraId) else emptyList()
+            val pontosCombinados = mutableMapOf<Int, Int>()
+            for (cls in tabAp + tabCl) pontosCombinados[cls.timeId] = (pontosCombinados[cls.timeId] ?: 0) + cls.pontos
+            val ordenadosPontos = pontosCombinados.entries.sortedByDescending { it.value }
+            val campGeral = ordenadosPontos.getOrNull(0)?.key
+            val viceGeral = ordenadosPontos.getOrNull(1)?.key
+            if (campGeral != null) {
+                val timeEnt = timeRepository.buscarEntityPorId(campGeral)
+                val rankCG = rankingGeralDao.buscarPorTime(campGeral)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = campGeral, nomeTime = timeEnt?.nome ?: "", escudoRes = timeEnt?.escudoRes ?: "", divisaoAtual = timeEnt?.divisao ?: 5
+                    )
+                rankingGeralDao.inserirOuAtualizar(rankCG.copy(
+                    titulosNacionais = rankCG.titulosNacionais + 1,
+                    pontosAcumulados = rankCG.pontosAcumulados + 10L
+                ))
+
+                // ── Hall da Fama: Campeonato Argentino geral (divisão 17) ──
+                val viceEnt = if (viceGeral != null) timeRepository.buscarEntityPorId(viceGeral) else null
+                val idsArg = listOfNotNull(
+                    campeonatoArgAId.takeIf { it > 0 },
+                    campeonatoArgClausuraId.takeIf { it > 0 }
+                )
+                val artilheiro = if (idsArg.isNotEmpty()) partidaDao.buscarArtilheiroTop1Multi(idsArg) else null
+                val assistente = if (idsArg.isNotEmpty()) partidaDao.buscarAssisteTop1Multi(idsArg) else null
+                hallDaFamaDao.inserir(HallDaFamaEntity(
+                    ano                 = ano,
+                    nomeCampeonato      = "Campeonato Argentino $ano",
+                    campeaoTimeId       = campGeral,
+                    campeaoNome         = timeEnt?.nome ?: "",
+                    campeaoEscudo       = timeEnt?.escudoRes ?: "",
+                    viceTimeId          = viceGeral ?: -1,
+                    viceNome            = viceEnt?.nome ?: "",
+                    viceEscudo          = viceEnt?.escudoRes ?: "",
+                    artilheiroId        = artilheiro?.jogadorId ?: -1,
+                    artilheiroNome      = artilheiro?.nomeJogador ?: "",
+                    artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
+                    artilheiroGols      = artilheiro?.total ?: 0,
+                    artilheiroNomeTime  = artilheiro?.nomeTime ?: "",
+                    artilheiroEscudo    = artilheiro?.escudoRes ?: "",
+                    assistenteId        = assistente?.jogadorId ?: -1,
+                    assistenteNome      = assistente?.nomeJogador ?: "",
+                    assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
+                    assistenciasTotais  = assistente?.total ?: 0,
+                    assistenteNomeTime  = assistente?.nomeTime ?: "",
+                    assistenteEscudo    = assistente?.escudoRes ?: "",
+                    divisao             = 17
+                ))
+            }
+        }
+
+        // ── Incrementa temporadasJogadas para la Primera División Argentina ──
+        // Feito a partir dos participantes do Apertura (Clausura tem os mesmos times),
+        // garantindo que cada clube incremente a contagem uma única vez por temporada.
+        if (campeonatoArgAId > 0) {
+            val participantesArgentina = campeonatoDao.buscarIdsParticipantes(campeonatoArgAId)
+            for (timeId in participantesArgentina) {
+                val timeEnt = timeRepository.buscarEntityPorId(timeId) ?: continue
+                val existing = rankingGeralDao.buscarPorTime(timeId)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = timeId, nomeTime = timeEnt.nome, escudoRes = timeEnt.escudoRes, divisaoAtual = timeEnt.divisao
+                    )
+                rankingGeralDao.inserirOuAtualizar(existing.copy(
+                    nomeTime          = timeEnt.nome,
+                    escudoRes         = timeEnt.escudoRes,
+                    divisaoAtual      = timeEnt.divisao,
+                    temporadasJogadas = existing.temporadasJogadas + 1
+                ))
+            }
+        }
+
+        // ── Promoção / Rebaixamento — Argentina ───────────────────
+        // Tabela geral: soma de pontos do Apertura + Clausura (fase de grupos)
+        val tabAp2 = if (campeonatoArgAId > 0) classificacaoDao.buscarTabelaOrdenada(campeonatoArgAId) else emptyList()
+        val tabCl2 = if (campeonatoArgClausuraId > 0) classificacaoDao.buscarTabelaOrdenada(campeonatoArgClausuraId) else emptyList()
+        val pontosGeralArg = mutableMapOf<Int, Int>()
+        for (cls in tabAp2 + tabCl2) pontosGeralArg[cls.timeId] = (pontosGeralArg[cls.timeId] ?: 0) + cls.pontos
+        // Dois últimos da tabela geral → rebaixados para Segunda División
+        val rebaixadosArgA = pontosGeralArg.entries
+            .sortedBy { it.value }
+            .take(2)
+            .map { it.key }
+        // Dois primeiros da Segunda División → promovidos para Primera
+        val dfArgB = if (campeonatoArgBId > 0) {
+            val tabB = classificacaoDao.buscarTabelaOrdenada(campeonatoArgBId)
+            tabB.sortedWith(
+                compareByDescending<ClassificacaoEntity> { it.pontos }
+                    .thenByDescending { it.vitorias }
+                    .thenByDescending { it.saldoGols }
+                    .thenByDescending { it.golsPro }
+            ).take(2).map { it.timeId }
+        } else emptyList()
+        val promovidosArgB = dfArgB  // Segunda → Primera
+
+        // Atualiza campo divisao dos times afetados
+        rebaixadosArgA.forEach { id ->
+            timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 6)) }
+        }
+        promovidosArgB.forEach { id ->
+            timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 5)) }
+        }
+
+        // Renova Primera División Argentina – Apertura e Clausura (com promoção/rebaixamento)
         val participantesArgA = if (campeonatoArgAId > 0)
             campeonatoDao.buscarIdsParticipantes(campeonatoArgAId) else emptyList()
-        val novoArgAId = if (participantesArgA.isNotEmpty()) criarCampeonato(
+        val novosArgA = (participantesArgA - rebaixadosArgA.toSet()) + promovidosArgB
+        val novoAperturaId = if (novosArgA.isNotEmpty()) criarArgentinaTorneio(
+            novosArgA, novoTemporadaId,
+            "Primera División Argentina Apertura $novoAno", ogOffset = 0
+        ) else -1
+        val novoClausuraId = if (novosArgA.isNotEmpty()) criarArgentinaTorneio(
+            novosArgA, novoTemporadaId,
+            "Primera División Argentina Clausura $novoAno",
+            ogOffset = MotorCampeonato.ARG_CLAUSURA_OG_OFFSET
+        ) else -1
+
+        // Renova Segunda División Argentina (com promoção/rebaixamento)
+        val participantesArgB = if (campeonatoArgBId > 0)
+            campeonatoDao.buscarIdsParticipantes(campeonatoArgBId) else emptyList()
+        val novosArgB = (participantesArgB - promovidosArgB.toSet()) + rebaixadosArgA
+        val novoArgBId = if (novosArgB.isNotEmpty()) criarCampeonato(
             CampeonatoEntity(
                 temporadaId  = novoTemporadaId,
-                nome         = "Primera División Argentina $novoAno",
-                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                nome         = "Segunda División Argentina $novoAno",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO2,
                 formato      = FormatoCampeonato.PONTOS_CORRIDOS,
-                totalRodadas = (participantesArgA.size - 1) * 2,
+                totalRodadas = (novosArgB.size - 1) * 2,
                 pais         = "Argentina"
-            ), participantesArgA) else -1
+            ), novosArgB) else -1
+
+        // ── Promoção / Rebaixamento — Uruguai ─────────────────────────────
+        // Tabela Anual: soma de pontos do Apertura + Clausura + Intermediário
+        val tabelaAnualUru = calcularTabelaAnualUruguai(campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId)
+        // 2 últimos rebaixados para a Segunda Divisão
+        val rebaixadosUruA = tabelaAnualUru.entries.sortedBy { it.value }.take(2).map { it.key }
+        // 2 primeiros da Segunda División Uruguaia promovidos (acesso direto)
+        val promovidosUruB = if (campeonatoUruBId > 0) {
+            classificacaoDao.buscarTabelaOrdenada(campeonatoUruBId)
+                .sortedWith(compareByDescending<ClassificacaoEntity> { it.pontos }
+                    .thenByDescending { it.vitorias }.thenByDescending { it.saldoGols })
+                .take(2).map { it.timeId }
+        } else emptyList()
+        rebaixadosUruA.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 10)) } }
+        promovidosUruB.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 9)) } }
+
+        // Renova Primera División Uruguaia
+        val participantesUruA = if (campeonatoUruAperturaId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruAperturaId) else emptyList()
+        val novosUruA = (participantesUruA - rebaixadosUruA.toSet()) + promovidosUruB
+        val novoUruAperturaId = if (novosUruA.isNotEmpty()) criarUruguaiApertura(novosUruA, novoTemporadaId, novoAno) else -1
+        val novoUruIntermedId = if (novosUruA.isNotEmpty()) criarUruguaiIntermediario(novosUruA, novoTemporadaId, novoAno) else -1
+        val novoUruClausuraId = if (novoUruAperturaId > 0) criarUruguaiClausura(novoUruAperturaId, novosUruA, novoTemporadaId, novoAno) else -1
+
+        // Renova Segunda División Uruguaia
+        val participantesUruB = if (campeonatoUruBId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruBId) else emptyList()
+        val novosUruB = (participantesUruB - promovidosUruB.toSet()) + rebaixadosUruA
+        val novoUruBId = if (novosUruB.isNotEmpty()) criarCampeonato(
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Segunda División Uruguaia $novoAno",
+                tipo = TipoCampeonato.EXTRANGEIRO_DIVISAO2, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosUruB.size - 1) * 2, pais = "Uruguay"), novosUruB) else -1
+        val novoUruBCompetId = if (novosUruB.size >= 2) criarUruguaiSegundaDivCompetencia(novosUruB, novoTemporadaId, novoAno) else -1
 
         // Cria Copa do Brasil para a próxima temporada
         val participantesCopa = determinarParticipantesCopa(novoTemporadaId, novosA)
@@ -842,7 +1122,34 @@ class GameRepository @Inject constructor(
             participantesCopa
         )
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoArgAId, novoCopaId, novoTemporadaId, novoAno)
+        // Cria Copa Argentina para a próxima temporada
+        val participantesCopaArg = determinarParticipantesCopaArgentina(novoAperturaId, novoArgBId)
+        val novoCopaArgId = if (participantesCopaArg.isNotEmpty()) criarCopaArgentina(
+            CampeonatoEntity(
+                temporadaId  = novoTemporadaId,
+                nome         = "Copa Argentina $novoAno",
+                tipo         = TipoCampeonato.COPA_NACIONAL,
+                formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                totalRodadas = 10,
+                pais         = "Argentina"
+            ),
+            participantesCopaArg
+        ) else -1
+
+        // Cria Supercopa Rei para a próxima temporada:
+        // campeão Série A do ano que encerrou vs campeão Copa do Brasil do ano que encerrou.
+        val champBrasileiro = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, 1)
+        val champCopa       = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, 5)
+        val novoSupercopaId = if (champBrasileiro != null && champCopa != null) {
+            criarSupercopa(
+                campeonatoBrasileiraoId = champBrasileiro.campeaoTimeId,
+                campeonatoCopaId        = champCopa.campeaoTimeId,
+                ano                     = novoAno,
+                temporadaId             = novoTemporadaId
+            )
+        } else -1
+
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()
@@ -852,6 +1159,337 @@ class GameRepository @Inject constructor(
 
     fun observarRankingGeral(): Flow<List<RankingGeralEntity>> =
         rankingGeralDao.observeRanking()
+
+    // ══════════════════════════════════════════════════════════════
+    //  Formato Argentine Apertura / Clausura (GRUPOS_E_MATA_MATA)
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Cria um torneio Argentine Primera División (Apertura ou Clausura).
+     * - Divide os 30 participantes aleatoriamente em Zona A e Zona B (15 cada)
+     * - Gera fase de grupos: 15 rodadas intra-zona + 2 rodadas interzonais
+     * - Knockout (Oitavas–Quartas–Semi–Final) gerado mais tarde via verificarEAvancarFaseArgentina
+     * [ogOffset] = 0 para Apertura, ARG_CLAUSURA_OG_OFFSET (210) para Clausura
+     */
+    suspend fun criarArgentinaTorneio(
+        participantes: List<Int>,
+        temporadaId: Int,
+        nome: String,
+        ogOffset: Int = 0
+    ): Int {
+        if (participantes.size < 2) return -1
+        val shuffled   = participantes.shuffled()
+        val mid        = shuffled.size / 2
+        val grupoA     = shuffled.subList(0, mid)
+        val grupoB     = shuffled.subList(mid, shuffled.size)
+
+        val campeonatoId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = nome,
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.ARG_TOTAL_ROUNDS,
+                pais         = "Argentina"
+            )
+        ).toInt()
+
+        // Participantes com grupo atribuído
+        campeonatoDao.inserirParticipantes(
+            grupoA.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_A) } +
+            grupoB.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_B) }
+        )
+
+        // Fase de grupos: turno único por zona (cap=ARG_ROUNDS_ZONA) + 2 rodadas interzonais
+        val partidasZonaA   = MotorCampeonato.gerarTurnoUnicoGrupo(campeonatoId, grupoA, 1, ogOffset, MotorCampeonato.ARG_ROUNDS_ZONA)
+        val partidasZonaB   = MotorCampeonato.gerarTurnoUnicoGrupo(campeonatoId, grupoB, 1, ogOffset, MotorCampeonato.ARG_ROUNDS_ZONA)
+        val partidasInter   = MotorCampeonato.gerarInterzonais(campeonatoId, grupoA, grupoB,
+            MotorCampeonato.ARG_ROUNDS_ZONA + 1, ogOffset)
+        partidaDao.inserirTodas(partidasZonaA + partidasZonaB + partidasInter)
+
+        // Classificação inicial por grupo
+        val tabela =
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoA, MotorCampeonato.ARG_GRUPO_A) +
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoB, MotorCampeonato.ARG_GRUPO_B)
+        classificacaoDao.inserirTodos(tabela)
+
+        return campeonatoId
+    }
+
+    /**
+     * Verifica se a fase atual do torneio argentine se completou e avança:
+     * - Grupo completo → gera Oitavas
+     * - Oitavas/Quartas/Semi completo → gera fase seguinte (resolvendo pênaltis de empates IA)
+     * - Final completa → encerra torneio e registra Hall da Fama
+     * Retorna true quando o torneio é encerrado.
+     */
+    suspend fun verificarEAvancarFaseArgentina(
+        campeonatoId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (campeonatoId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(campeonatoId) ?: return false
+        if (camp.encerrado) return false
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(campeonatoId)
+        if (todasPartidas.isEmpty()) return false
+
+        val isClausura = todasPartidas.any { it.ordemGlobal > MotorCampeonato.ARG_CLAUSURA_OG_OFFSET + 10 }
+        val ogOffset   = if (isClausura) MotorCampeonato.ARG_CLAUSURA_OG_OFFSET else 0
+
+        // ── Transição: grupo → oitavas ─────────────────────────────
+        val grupoCompleto = todasPartidas.any { it.fase == null } &&
+                            todasPartidas.filter { it.fase == null }.all { it.jogada }
+        val temOitavas    = todasPartidas.any { it.fase == "Oitavas" }
+
+        if (grupoCompleto && !temOitavas) {
+            val tabelaOrdenada = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
+            val top8A = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_A }.take(8).map { it.timeId }
+            val top8B = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_B }.take(8).map { it.timeId }
+            if (top8A.size < 8 || top8B.size < 8) return false
+            val oitavas = MotorCampeonato.gerarOitavasArgentina(
+                campeonatoId, top8A, top8B, MotorCampeonato.ARG_ROUND_KNOCKOUT_START, ogOffset)
+            partidaDao.inserirTodas(oitavas)
+            return false
+        }
+
+        // ── Fases eliminatórias ────────────────────────────────────
+        for ((faseIdx, fase) in MotorCampeonato.ARG_FASES_KNOCKOUT.withIndex()) {
+            val partidasFase = todasPartidas.filter { it.fase == fase }
+            if (partidasFase.isEmpty()) continue
+            if (!partidasFase.all { it.jogada }) return false   // fase em andamento
+
+            val proximaFase = MotorCampeonato.ARG_FASES_KNOCKOUT.getOrNull(faseIdx + 1)
+            if (proximaFase != null && todasPartidas.any { it.fase == proximaFase }) continue  // já gerada
+
+            // Resolve pênaltis de empates IA e coleta vencedores
+            val vencedores = mutableListOf<Int>()
+            for (partida in partidasFase.sortedBy { it.id }) {
+                val gC = partida.golsCasa ?: continue
+                val gF = partida.golsFora ?: continue
+                val vencedor = when {
+                    gC > gF -> partida.timeCasaId
+                    gF > gC -> partida.timeForaId
+                    else -> {
+                        val pC = partida.penaltisCasa
+                        val pF = partida.penaltisForaId
+                        if (pC != null && pF != null) {
+                            if (pC > pF) partida.timeCasaId else partida.timeForaId
+                        } else {
+                            // IA vs IA draw → simulate penalties now
+                            simularEPersistirPenaltisIA(partida, partida)
+                        }
+                    }
+                }
+                vencedores.add(vencedor)
+            }
+
+            if (proximaFase == null) {
+                // ── Final concluída → encerrar torneio ──
+                val campeaoId = vencedores.firstOrNull() ?: return true
+                val finalPartida = partidasFase.firstOrNull() ?: return true
+                val viceId = if (campeaoId == finalPartida.timeCasaId) finalPartida.timeForaId else finalPartida.timeCasaId
+
+                val divisaoHallDaFama = if (isClausura) 8 else 7  // 7=Apertura, 8=Clausura
+                val campeaoEnt = timeRepository.buscarEntityPorId(campeaoId)
+                val viceEnt    = timeRepository.buscarEntityPorId(viceId)
+                val artilheiro = partidaDao.buscarArtilheiroTop1(campeonatoId)
+                val assistente = partidaDao.buscarAssisteTop1(campeonatoId)
+
+                hallDaFamaDao.inserir(HallDaFamaEntity(
+                    ano                  = anoAtual,
+                    nomeCampeonato       = camp.nome,
+                    campeaoTimeId        = campeaoId,
+                    campeaoNome          = campeaoEnt?.nome ?: "",
+                    campeaoEscudo        = campeaoEnt?.escudoRes ?: "",
+                    viceTimeId           = viceId,
+                    viceNome             = viceEnt?.nome ?: "",
+                    viceEscudo           = viceEnt?.escudoRes ?: "",
+                    artilheiroId         = artilheiro?.jogadorId ?: -1,
+                    artilheiroNome       = artilheiro?.nomeJogador ?: "",
+                    artilheiroNomeAbrev  = artilheiro?.nomeAbrev ?: "",
+                    artilheiroGols       = artilheiro?.total ?: 0,
+                    artilheiroNomeTime   = artilheiro?.nomeTime ?: "",
+                    artilheiroEscudo     = artilheiro?.escudoRes ?: "",
+                    assistenteId         = assistente?.jogadorId ?: -1,
+                    assistenteNome       = assistente?.nomeJogador ?: "",
+                    assistenteNomeAbrev  = assistente?.nomeAbrev ?: "",
+                    assistenciasTotais   = assistente?.total ?: 0,
+                    assistenteNomeTime   = assistente?.nomeTime ?: "",
+                    assistenteEscudo     = assistente?.escudoRes ?: "",
+                    divisao              = divisaoHallDaFama
+                ))
+
+                // Premiação ao time do jogador
+                if (timeJogadorId > 0) {
+                    val top2 = listOf(campeaoId to "Campeão", viceId to "Vice-campeão")
+                    for ((timePremiado, posicao) in top2) {
+                        if (timePremiado != timeJogadorId) continue
+                        val valor = if (posicao == "Campeão") 15_000_000_00L else 7_500_000_00L
+                        timeRepository.creditarSaldo(timeJogadorId, valor)
+                        financaDao.inserir(br.com.managerfoot.data.database.entities.FinancaEntity(
+                            timeId = timeJogadorId, temporadaId = temporadaId, mes = 13,
+                            receitaPremiacoes = valor,
+                            descricaoPremio   = "${camp.nome} — $posicao",
+                            saldoFinal        = valor
+                        ))
+                    }
+                }
+
+                // Título do campeão é contabilizado em encerrarTemporadaComHallDaFama
+                // via registrarTituloArgentino() para evitar dupla contagem.
+                // Aqui apenas premiamos o vice-campeão com pontos.
+                val rankVice = rankingGeralDao.buscarPorTime(viceId)
+                val rankViceArg = rankingGeralDao.buscarPorTime(viceId)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = viceId, nomeTime = viceEnt?.nome ?: "",
+                        escudoRes = viceEnt?.escudoRes ?: "", divisaoAtual = viceEnt?.divisao ?: 5
+                    )
+                rankingGeralDao.inserirOuAtualizar(rankViceArg.copy(
+                    pontosAcumulados = rankViceArg.pontosAcumulados + 8L
+                ))
+
+                campeonatoDao.encerrar(campeonatoId)
+                return true
+            }
+
+            // Gera próxima fase
+            val rodadaProxima = MotorCampeonato.ARG_ROUND_KNOCKOUT_START +
+                    MotorCampeonato.ARG_FASES_KNOCKOUT.indexOf(proximaFase)
+            val novasPartidas = MotorCampeonato.gerarProximaFaseKnockoutArgentina(
+                campeonatoId, vencedores, rodadaProxima, proximaFase, ogOffset)
+            partidaDao.inserirTodas(novasPartidas)
+            return false
+        }
+        return false
+    }
+
+    /**
+     * Avança automaticamente as fases do torneio Argentine quando o jogador não participa
+     * (já eliminado ou jogo num time sem participação).
+     * Simula TODAS as fases/rodadas pendentes de uma vez até o torneio ser encerrado,
+     * garantindo que o campeão seja definido mesmo quando o jogador não tem mais jogos
+     * suficientes para acionar chamadas individuais.
+     */
+    suspend fun simularProximaFaseArgentinaSeNecessario(
+        campeonatoId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int = 1
+    ) {
+        if (campeonatoId <= 0) return
+        if (campeonatoDao.buscarPorId(campeonatoId)?.encerrado == true) return
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(campeonatoId)
+
+        // Se jogador ainda tem partidas pendentes neste torneio, não avança IA
+        val playerStillIn = todasPartidas.any {
+            !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId)
+        }
+        if (playerStillIn) return
+
+        // Simula TODAS as fases/rodadas pendentes até o torneio ser encerrado
+        var iteracoes = 10 // limite de segurança para evitar loop infinito
+        while (iteracoes-- > 0) {
+            if (campeonatoDao.buscarPorId(campeonatoId)?.encerrado == true) return
+
+            val pendentes = partidaDao.buscarTodasPorCampeonato(campeonatoId).filter { !it.jogada }
+            if (pendentes.isEmpty()) {
+                // Todas as partidas da fase atual já foram jogadas — avança/finaliza
+                verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+                return
+            }
+
+            // Simula a menor rodada pendente
+            val proximaRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: return
+            val partidasRodada = pendentes.filter { it.rodada == proximaRodada }
+            for (p in partidasRodada) {
+                try { simularPartidaInterna(p) } catch (_: Exception) {}
+            }
+            campeonatoDao.avancarRodada(campeonatoId)
+            val encerrou = verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+            if (encerrou) return
+            // se não encerrou, continua o loop para simular a próxima fase/rodada
+        }
+    }
+
+    /** Retorna true se o campeonato com [campeonatoId] está encerrado. */
+    suspend fun isCampeonatoEncerrado(campeonatoId: Int): Boolean =
+        campeonatoDao.buscarPorId(campeonatoId)?.encerrado == true
+
+    /**
+     * Retorna o timeId do campeão da Copa (ida/volta) se encerrada, ou -1 caso contrário.
+     * Usado para exibir a vaga extra da Copa do Brasil na tabela da Série A.
+     */
+    suspend fun buscarCampeaoCopaSeEncerrada(copaId: Int): Int {
+        if (copaId <= 0) return -1
+        val copa = campeonatoDao.buscarPorId(copaId) ?: return -1
+        if (!copa.encerrado) return -1
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaId)
+        val finalMatches = todasPartidas.filter { it.fase == "Final" && it.jogada }
+        if (finalMatches.isEmpty()) return -1
+        val ida   = finalMatches.minByOrNull { it.rodada } ?: return -1
+        val volta = finalMatches.maxByOrNull { it.rodada } ?: return -1
+        if (ida == volta) {
+            val gC = ida.golsCasa ?: return -1
+            val gF = ida.golsFora ?: return -1
+            return when { gC > gF -> ida.timeCasaId; gF > gC -> ida.timeForaId; else -> -1 }
+        }
+        val vencedorDireto = MotorCampeonato.determinarVencedorTie(
+            timeCasaIdaId = ida.timeCasaId,
+            timeForaIdaId = ida.timeForaId,
+            golsCasaIda   = ida.golsCasa   ?: 0,
+            golsForaIda   = ida.golsFora   ?: 0,
+            golsCasaVolta = volta.golsCasa ?: 0,
+            golsForaVolta = volta.golsFora ?: 0
+        )
+        if (vencedorDireto != null) return vencedorDireto
+        val pCasa = volta.penaltisCasa
+        val pFora = volta.penaltisForaId
+        if (pCasa != null && pFora != null) {
+            return if (pCasa > pFora) volta.timeCasaId else volta.timeForaId
+        }
+        return -1
+    }
+
+    /**
+     * Avança o torneio argentino em exatamente UMA rodada (ou transição de fase),
+     * garantindo sincronismo com o ritmo da liga do jogador quando ele não é argentino.
+     * Diferente de [simularProximaFaseArgentinaSeNecessario], não tenta completar
+     * o torneio inteiro — apenas dá um passo de cada vez.
+     */
+    suspend fun simularUmaRodadaArgentina(
+        campeonatoId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int = 1
+    ) {
+        if (campeonatoId <= 0) return
+        val camp = campeonatoDao.buscarPorId(campeonatoId) ?: return
+        if (camp.encerrado) return
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(campeonatoId)
+        // Se o jogador ainda tem partidas pendentes neste torneio, não avança
+        if (todasPartidas.any { !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId) }) return
+
+        val pendentes = todasPartidas.filter { !it.jogada }
+        if (pendentes.isEmpty()) {
+            // Fase atual completa → avança/gera próxima fase ou encerra
+            verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+            return
+        }
+
+        // Simula apenas a menor rodada pendente (UMA rodada)
+        val proximaRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: return
+        val partidasRodada = pendentes.filter { it.rodada == proximaRodada }
+        for (p in partidasRodada) {
+            try { simularPartidaInterna(p) } catch (_: Exception) {}
+        }
+        campeonatoDao.avancarRodada(campeonatoId)
+        verificarEAvancarFaseArgentina(campeonatoId, anoAtual, timeJogadorId, temporadaId)
+    }
 
     // ── Cria a Copa: gera Primeira Fase ──────────────────────────────
     suspend fun criarCopa(campeonato: CampeonatoEntity, participantes: List<Int>): Int {
@@ -871,18 +1509,835 @@ class GameRepository @Inject constructor(
         return copaId
     }
 
-    // ── Verifica se fase atual foi concluída e avança para próxima ──
-    // Retorna true se a Copa foi finalizada (Final concluída).
-    suspend fun verificarEAvancarFaseCopa(
-        copaId: Int,
+    // ── Cria Copa Argentina: 32 times — inicia Primeira Fase (16 confrontos ida/volta) ──
+    suspend fun criarCopaArgentina(campeonato: CampeonatoEntity, participantes: List<Int>): Int {
+        val copaArgId = campeonatoDao.inserir(campeonato).toInt()
+        campeonatoDao.inserirParticipantes(participantes.map { CampeonatoTimeEntity(copaArgId, it) })
+        val pares = MotorCampeonato.sortearPares(participantes)
+        val partidas = MotorCampeonato.gerarFaseIdaVolta(
+            campeonatoId      = copaArgId,
+            pares             = pares,
+            fase              = MotorCampeonato.COPA_ARG_FASES[0],
+            rodadaIda         = MotorCampeonato.rodadaIdaDeFase(0),
+            confrontoIdInicio = 1,
+            ordemGlobalIda    = MotorCampeonato.COPA_ARG_ORDEM_GLOBAL[0],
+            ordemGlobalVolta  = MotorCampeonato.COPA_ARG_ORDEM_GLOBAL[1]
+        )
+        partidaDao.inserirTodas(partidas)
+        return copaArgId
+    }
+
+    // ── Determina participantes Copa Argentina: todos da Primera División + top 2 da Segunda ──
+    suspend fun determinarParticipantesCopaArgentina(
+        campeonatoArgAId: Int,
+        campeonatoArgBId: Int
+    ): List<Int> {
+        val primeiraDiv = if (campeonatoArgAId > 0)
+            campeonatoDao.buscarIdsParticipantes(campeonatoArgAId)
+        else
+            timeRepository.buscarTodosOrdenadosPorReputacao()
+                .filter { it.pais == "Argentina" && it.divisao == 5 }.map { it.id }
+
+        val top2SegundaDiv = if (campeonatoArgBId > 0)
+            campeonatoDao.buscarIdsParticipantes(campeonatoArgBId)
+                .let { ids -> ids.mapNotNull { timeRepository.buscarPorId(it) }
+                    .sortedByDescending { it.reputacao }.take(2).map { it.id } }
+        else
+            timeRepository.buscarTodosOrdenadosPorReputacao()
+                .filter { it.pais == "Argentina" && it.divisao == 6 }.take(2).map { it.id }
+
+        return (primeiraDiv + top2SegundaDiv).distinct().take(32)
+    }
+
+    // ── Verifica se fase atual da Copa Argentina foi concluída e avança para próxima ──
+    suspend fun verificarEAvancarFaseCopaArgentina(
+        copaArgId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean = verificarEAvancarFaseCopa(
+        copaId            = copaArgId,
+        anoAtual          = anoAtual,
+        timeJogadorId     = timeJogadorId,
+        temporadaId       = temporadaId,
+        fases             = MotorCampeonato.COPA_ARG_FASES,
+        ordemGlobal       = MotorCampeonato.COPA_ARG_ORDEM_GLOBAL,
+        divisaoHallDaFama = 9,
+        premioCampeao     = 2_000_000_00L,
+        premioVice        = 1_000_000_00L
+    )
+
+    // ── Continua Copa Argentina quando jogador já foi eliminado ──────
+    suspend fun simularProximaFaseCopaArgentinaSeJogadorEliminado(
+        copaArgId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int
+    ) {
+        if (copaArgId <= 0) return
+        if (campeonatoDao.buscarPorId(copaArgId)?.encerrado == true) return
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaArgId)
+        if (todasPartidas.any { !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId) }) return
+
+        val pendentes = todasPartidas.filter { !it.jogada }
+        if (pendentes.isEmpty()) {
+            verificarEAvancarFaseCopaArgentina(copaArgId, anoAtual)
+            return
+        }
+        pendentes.map { it.rodada }.toSortedSet().forEach { rodada ->
+            simularRodada(copaArgId, rodada)
+        }
+        verificarEAvancarFaseCopaArgentina(copaArgId, anoAtual)
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Campeonato Uruguaio — Apertura / Intermediário / Clausura / Playoff
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Cria o Torneio Apertura Uruguaio.
+     * 16 times, turno único (15 rodadas), OG = rodada*10 (10–150).
+     */
+    suspend fun criarUruguaiApertura(
+        participantes: List<Int>,
+        temporadaId: Int,
+        ano: Int
+    ): Int {
+        if (participantes.size < 2) return -1
+        val campeonatoId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Torneio Apertura Uruguai $ano",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = MotorCampeonato.URU_ROUNDS_APERTURA,
+                pais         = "Uruguay"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(participantes.map { CampeonatoTimeEntity(campeonatoId, it) })
+        val partidas = MotorCampeonato.gerarTurnoUnicoGrupo(campeonatoId, participantes, rodadaBase = 1, ogOffset = 0)
+        partidaDao.inserirTodas(partidas)
+        classificacaoDao.inserirTodos(MotorCampeonato.gerarClassificacaoInicial(campeonatoId, participantes))
+        return campeonatoId
+    }
+
+    /**
+     * Cria o Torneio Clausura Uruguaio.
+     * 16 times, turno único com mandos de campo invertidos em relação ao Apertura (15 rodadas).
+     * OG = ordemGlobal_apertura + URU_CLAUSURA_OG_OFFSET → 260–400.
+     * Adicionalmente recebe playoff phases (Semi R16/Final R17) via verificarEAvancarPlayoffUruguai.
+     */
+    suspend fun criarUruguaiClausura(
+        aperturaId: Int,
+        participantes: List<Int>,
+        temporadaId: Int,
+        ano: Int
+    ): Int {
+        if (participantes.size < 2) return -1
+        val clausuraId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Torneio Clausura Uruguai $ano",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,   // permite fases de playoff
+                totalRodadas = MotorCampeonato.URU_PLAYOFF_FINAL_RODADA, // até R17
+                pais         = "Uruguay"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(participantes.map { CampeonatoTimeEntity(clausuraId, it) })
+        // Mandos de campo invertidos: swap timeCasaId ↔ timeForaId do Apertura
+        val aperturaPartidas = partidaDao.buscarTodasPorCampeonato(aperturaId).filter { it.fase == null }
+        val clausuraPartidas = aperturaPartidas.map { ap ->
+            PartidaEntity(
+                campeonatoId = clausuraId,
+                rodada       = ap.rodada,
+                timeCasaId   = ap.timeForaId,  // invertido
+                timeForaId   = ap.timeCasaId,  // invertido
+                ordemGlobal  = ap.ordemGlobal + MotorCampeonato.URU_CLAUSURA_OG_OFFSET
+            )
+        }
+        partidaDao.inserirTodas(clausuraPartidas)
+        classificacaoDao.inserirTodos(MotorCampeonato.gerarClassificacaoInicial(clausuraId, participantes))
+        return clausuraId
+    }
+
+    /**
+     * Cria o Torneio Intermediário Uruguaio.
+     * 16 times divididos em 2 grupos de 8, turno único por grupo (7 rodadas) + Final (R8).
+     * OG de grupos: rodada*10 + URU_INTERM_OG_OFFSET (165–225); Final OG = 235.
+     * A Final é gerada ao encerrar o grupo via verificarEAvancarFaseIntermediarioUruguai.
+     */
+    suspend fun criarUruguaiIntermediario(
+        participantes: List<Int>,
+        temporadaId: Int,
+        ano: Int
+    ): Int {
+        if (participantes.size < 2) return -1
+        val shuffled = participantes.shuffled()
+        val mid      = shuffled.size / 2
+        val grupoA   = shuffled.subList(0, mid)
+        val grupoB   = shuffled.subList(mid, shuffled.size)
+
+        val campeonatoId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Torneio Intermediário Uruguai $ano",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO1,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.URU_INTERM_FINAL_RODADA,
+                pais         = "Uruguay"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(
+            grupoA.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_A) } +
+            grupoB.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_B) }
+        )
+        val partidasA = MotorCampeonato.gerarTurnoUnicoGrupo(
+            campeonatoId, grupoA, rodadaBase = 1,
+            ogOffset = MotorCampeonato.URU_INTERM_OG_OFFSET,
+            maxRodadas = MotorCampeonato.URU_ROUNDS_INTERM_GROUP
+        )
+        val partidasB = MotorCampeonato.gerarTurnoUnicoGrupo(
+            campeonatoId, grupoB, rodadaBase = 1,
+            ogOffset = MotorCampeonato.URU_INTERM_OG_OFFSET,
+            maxRodadas = MotorCampeonato.URU_ROUNDS_INTERM_GROUP
+        )
+        partidaDao.inserirTodas(partidasA + partidasB)
+        val tabela =
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoA, MotorCampeonato.ARG_GRUPO_A) +
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoB, MotorCampeonato.ARG_GRUPO_B)
+        classificacaoDao.inserirTodos(tabela)
+        return campeonatoId
+    }
+
+    /**
+     * Verifica se os grupos do Intermediário terminaram e gera a Final;
+     * e se a Final terminou, encerra o torneio e registra o Hall da Fama.
+     * Retorna true quando o torneio é encerrado.
+     */
+    suspend fun verificarEAvancarFaseIntermediarioUruguai(
+        intermedidId: Int,
         anoAtual: Int,
         timeJogadorId: Int = -1,
         temporadaId: Int = 1
     ): Boolean {
+        if (intermedidId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(intermedidId) ?: return false
+        if (camp.encerrado) return false
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(intermedidId)
+        if (todasPartidas.isEmpty()) return false
+
+        val grupoPartidas = todasPartidas.filter { it.fase == null }
+        val finalPartidas = todasPartidas.filter { it.fase == "Final" }
+
+        // Grupos → Final
+        if (grupoPartidas.isNotEmpty() && grupoPartidas.all { it.jogada } && finalPartidas.isEmpty()) {
+            val tabelaOrdenada = classificacaoDao.buscarTabelaOrdenada(intermedidId)
+            val liderA = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_A }.firstOrNull()?.timeId
+                ?: return false
+            val liderB = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_B }.firstOrNull()?.timeId
+                ?: return false
+            partidaDao.inserirTodas(listOf(PartidaEntity(
+                campeonatoId = intermedidId,
+                rodada       = MotorCampeonato.URU_INTERM_FINAL_RODADA,
+                timeCasaId   = liderA,
+                timeForaId   = liderB,
+                fase         = "Final",
+                ordemGlobal  = MotorCampeonato.URU_INTERM_OG_FINAL
+            )))
+            return false
+        }
+
+        // Final concluída → registra Hall da Fama e encerra
+        if (finalPartidas.isNotEmpty() && finalPartidas.all { it.jogada }) {
+            val finalPartida = finalPartidas.first()
+            val gC = finalPartida.golsCasa ?: return false
+            val gF = finalPartida.golsFora ?: return false
+            val campeaoId = when {
+                gC > gF -> finalPartida.timeCasaId
+                gF > gC -> finalPartida.timeForaId
+                else    -> {
+                    val pC = finalPartida.penaltisCasa; val pF = finalPartida.penaltisForaId
+                    if (pC != null && pF != null) { if (pC > pF) finalPartida.timeCasaId else finalPartida.timeForaId }
+                    else simularEPersistirPenaltisIA(finalPartida, finalPartida)
+                }
+            }
+            val viceId     = if (campeaoId == finalPartida.timeCasaId) finalPartida.timeForaId else finalPartida.timeCasaId
+            val campeaoEnt = timeRepository.buscarEntityPorId(campeaoId)
+            val viceEnt    = timeRepository.buscarEntityPorId(viceId)
+            val artilheiro = partidaDao.buscarArtilheiroTop1(intermedidId)
+            val assistente = partidaDao.buscarAssisteTop1(intermedidId)
+            hallDaFamaDao.inserir(HallDaFamaEntity(
+                ano = anoAtual, nomeCampeonato = camp.nome,
+                campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
+                viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
+                artilheiroId = artilheiro?.jogadorId ?: -1, artilheiroNome = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "", artilheiroGols = artilheiro?.total ?: 0,
+                artilheiroNomeTime = artilheiro?.nomeTime ?: "", artilheiroEscudo = artilheiro?.escudoRes ?: "",
+                assistenteId = assistente?.jogadorId ?: -1, assistenteNome = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistente?.nomeAbrev ?: "", assistenciasTotais = assistente?.total ?: 0,
+                assistenteNomeTime = assistente?.nomeTime ?: "", assistenteEscudo = assistente?.escudoRes ?: "",
+                divisao = 12  // 12 = Intermediário Uruguai
+            ))
+            // Premiação
+            if (timeJogadorId > 0 && (campeaoId == timeJogadorId || viceId == timeJogadorId)) {
+                val (valor, pos) = if (campeaoId == timeJogadorId) 5_000_000_00L to "Campeão" else 2_500_000_00L to "Vice-campeão"
+                timeRepository.creditarSaldo(timeJogadorId, valor)
+                financaDao.inserir(br.com.managerfoot.data.database.entities.FinancaEntity(
+                    timeId = timeJogadorId, temporadaId = temporadaId, mes = 13,
+                    receitaPremiacoes = valor, descricaoPremio = "${camp.nome} — $pos", saldoFinal = valor
+                ))
+            }
+            campeonatoDao.encerrar(intermedidId)
+            return true
+        }
+        return false
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Torneo Competencia – Segunda División Uruguaia
+    //  14 times → 2 grupos de 7, turno único (6 rods) + Final (R7)
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Cria o Torneo Competencia da Segunda División Uruguaia.
+     * 14 times divididos em 2 grupos de 7, turno único por grupo (6 rodadas) + Final (R7).
+     * OG de grupos: rodada*10 + URU_B_COMPET_OG_OFFSET (460–510); Final OG = 520.
+     * A Final é gerada ao encerrar o grupo via verificarEAvancarFaseCompetenciaUruguaiB.
+     */
+    suspend fun criarUruguaiSegundaDivCompetencia(
+        participantes: List<Int>,
+        temporadaId: Int,
+        ano: Int
+    ): Int {
+        if (participantes.size < 2) return -1
+        val shuffled = participantes.shuffled()
+        val mid      = shuffled.size / 2
+        val grupoA   = shuffled.subList(0, mid)
+        val grupoB   = shuffled.subList(mid, shuffled.size)
+
+        val campeonatoId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Torneo Competencia Uruguay B $ano",
+                tipo         = TipoCampeonato.EXTRANGEIRO_DIVISAO2,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.URU_B_COMPET_FINAL_RODADA,
+                pais         = "Uruguay"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(
+            grupoA.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_A) } +
+            grupoB.map { CampeonatoTimeEntity(campeonatoId, it, MotorCampeonato.ARG_GRUPO_B) }
+        )
+        val partidasA = MotorCampeonato.gerarTurnoUnicoGrupo(
+            campeonatoId, grupoA, rodadaBase = 1,
+            ogOffset = MotorCampeonato.URU_B_COMPET_OG_OFFSET,
+            maxRodadas = MotorCampeonato.URU_B_COMPET_ROUNDS_GROUP
+        )
+        val partidasB = MotorCampeonato.gerarTurnoUnicoGrupo(
+            campeonatoId, grupoB, rodadaBase = 1,
+            ogOffset = MotorCampeonato.URU_B_COMPET_OG_OFFSET,
+            maxRodadas = MotorCampeonato.URU_B_COMPET_ROUNDS_GROUP
+        )
+        partidaDao.inserirTodas(partidasA + partidasB)
+        val tabela =
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoA, MotorCampeonato.ARG_GRUPO_A) +
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoB, MotorCampeonato.ARG_GRUPO_B)
+        classificacaoDao.inserirTodos(tabela)
+        return campeonatoId
+    }
+
+    /**
+     * Verifica se os grupos do Torneo Competencia terminaram e gera a Final;
+     * e se a Final terminou, encerra o torneio e registra o Hall da Fama.
+     * Retorna true quando o torneio é encerrado.
+     */
+    suspend fun verificarEAvancarFaseCompetenciaUruguaiB(
+        competId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (competId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(competId) ?: return false
+        if (camp.encerrado) return false
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(competId)
+        if (todasPartidas.isEmpty()) return false
+
+        val grupoPartidas = todasPartidas.filter { it.fase == null }
+        val finalPartidas = todasPartidas.filter { it.fase == "Final" }
+
+        // Grupos → Final
+        if (grupoPartidas.isNotEmpty() && grupoPartidas.all { it.jogada } && finalPartidas.isEmpty()) {
+            val tabelaOrdenada = classificacaoDao.buscarTabelaOrdenada(competId)
+            val liderA = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_A }.firstOrNull()?.timeId
+                ?: return false
+            val liderB = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_B }.firstOrNull()?.timeId
+                ?: return false
+            partidaDao.inserirTodas(listOf(PartidaEntity(
+                campeonatoId = competId,
+                rodada       = MotorCampeonato.URU_B_COMPET_FINAL_RODADA,
+                timeCasaId   = liderA,
+                timeForaId   = liderB,
+                fase         = "Final",
+                ordemGlobal  = MotorCampeonato.URU_B_COMPET_OG_FINAL
+            )))
+            return false
+        }
+
+        // Final concluída → registra Hall da Fama e encerra
+        if (finalPartidas.isNotEmpty() && finalPartidas.all { it.jogada }) {
+            val finalPartida = finalPartidas.first()
+            val gC = finalPartida.golsCasa ?: return false
+            val gF = finalPartida.golsFora ?: return false
+            val campeaoId = when {
+                gC > gF -> finalPartida.timeCasaId
+                gF > gC -> finalPartida.timeForaId
+                else    -> {
+                    val pC = finalPartida.penaltisCasa; val pF = finalPartida.penaltisForaId
+                    if (pC != null && pF != null) { if (pC > pF) finalPartida.timeCasaId else finalPartida.timeForaId }
+                    else simularEPersistirPenaltisIA(finalPartida, finalPartida)
+                }
+            }
+            val viceId     = if (campeaoId == finalPartida.timeCasaId) finalPartida.timeForaId else finalPartida.timeCasaId
+            val campeaoEnt = timeRepository.buscarEntityPorId(campeaoId)
+            val viceEnt    = timeRepository.buscarEntityPorId(viceId)
+            val artilheiro = partidaDao.buscarArtilheiroTop1(competId)
+            val assistente = partidaDao.buscarAssisteTop1(competId)
+            hallDaFamaDao.inserir(HallDaFamaEntity(
+                ano = anoAtual, nomeCampeonato = camp.nome,
+                campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
+                viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
+                artilheiroId = artilheiro?.jogadorId ?: -1, artilheiroNome = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "", artilheiroGols = artilheiro?.total ?: 0,
+                artilheiroNomeTime = artilheiro?.nomeTime ?: "", artilheiroEscudo = artilheiro?.escudoRes ?: "",
+                assistenteId = assistente?.jogadorId ?: -1, assistenteNome = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistente?.nomeAbrev ?: "", assistenciasTotais = assistente?.total ?: 0,
+                assistenteNomeTime = assistente?.nomeTime ?: "", assistenteEscudo = assistente?.escudoRes ?: "",
+                divisao = 16  // 16 = Torneo Competencia URU B
+            ))
+            if (timeJogadorId > 0 && (campeaoId == timeJogadorId || viceId == timeJogadorId)) {
+                val (valor, pos) = if (campeaoId == timeJogadorId) 2_000_000_00L to "Campeão" else 1_000_000_00L to "Vice-campeão"
+                timeRepository.creditarSaldo(timeJogadorId, valor)
+                financaDao.inserir(br.com.managerfoot.data.database.entities.FinancaEntity(
+                    timeId = timeJogadorId, temporadaId = temporadaId, mes = 13,
+                    receitaPremiacoes = valor, descricaoPremio = "${camp.nome} — $pos", saldoFinal = valor
+                ))
+            }
+            campeonatoDao.encerrar(competId)
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Helper para calcular a Tabela Anual uruguaia:
+     * soma pontos do Apertura + Clausura (rodadas regulares) + Intermediário (grupos + final).
+     */
+    private suspend fun calcularTabelaAnualUruguai(
+        aperturaId: Int,
+        clausuraId: Int,
+        intermedidId: Int
+    ): Map<Int, Int> {
+        val pontos = mutableMapOf<Int, Int>()
+        suspend fun somar(campId: Int) {
+            if (campId <= 0) return
+            for (cls in classificacaoDao.buscarTabelaOrdenada(campId))
+                pontos[cls.timeId] = (pontos[cls.timeId] ?: 0) + cls.pontos
+        }
+        somar(aperturaId); somar(clausuraId); somar(intermedidId)
+        return pontos
+    }
+
+    /**
+     * Determina o campeão do Apertura/Clausura (líder da tabela do torneio).
+     * Retorna -1 se o campeonato não existe.
+     */
+    private suspend fun liderTabela(campId: Int): Int {
+        if (campId <= 0) return -1
+        return classificacaoDao.buscarTabelaOrdenada(campId)
+            .firstOrNull { it.grupo == null }?.timeId
+            ?: classificacaoDao.buscarTabelaOrdenada(campId).firstOrNull()?.timeId
+            ?: -1
+    }
+
+    /**
+     * Verifica o avanço do playoff do Campeonato Uruguaio (rodadas no Clausura):
+     *  - Após todas as rodadas regulares do Clausura:
+     *    • Arrastão → campeão direto
+     *    • Líder da Tabela Anual = Apertura ou Clausura champ → Final direto
+     *    • Caso normal → gera Semi (R16, OG 411)
+     *  - Após Semi → gera Final (R17, OG 421)
+     *  - Após Final → registra campeão e encerra
+     * Retorna true quando o torneio é encerrado.
+     */
+    suspend fun verificarEAvancarPlayoffUruguai(
+        clausuraId: Int,
+        aperturaId: Int,
+        intermedidId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (clausuraId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(clausuraId) ?: return false
+        if (camp.encerrado) return false
+
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(clausuraId)
+        if (todasPartidas.isEmpty()) return false
+
+        val rodadasReg  = todasPartidas.filter { it.fase == null }
+        val semiPartidas = todasPartidas.filter { it.fase == "Semi" }
+        val finalPartidas = todasPartidas.filter { it.fase == "Final" }
+
+        // ── Todas as rodadas regulares devem estar completas ─────────────────
+        if (rodadasReg.isEmpty() || !rodadasReg.all { it.jogada }) return false
+
+        // ── Gera playoff (Semi ou Final, ou arrastão) ────────────────────────
+        if (semiPartidas.isEmpty() && finalPartidas.isEmpty()) {
+            val aperturaChampId = liderTabela(aperturaId).takeIf { it > 0 } ?: return false
+            val clausuraChampId = liderTabela(clausuraId).takeIf { it > 0 } ?: return false
+            val tabelaAnual = calcularTabelaAnualUruguai(aperturaId, clausuraId, intermedidId)
+            val anualLiderId = tabelaAnual.maxByOrNull { it.value }?.key ?: return false
+
+            // Arrastão: mesmo time venceu Apertura e Clausura → campeão automático
+            if (aperturaChampId == clausuraChampId) {
+                registrarCampeaoUruguai(aperturaChampId, null, clausuraId, anoAtual, temporadaId, timeJogadorId)
+                campeonatoDao.encerrar(clausuraId)
+                return true
+            }
+
+            // Líder Anual = campeão do Apertura ou Clausura → Final direta (skip Semi)
+            if (anualLiderId == aperturaChampId || anualLiderId == clausuraChampId) {
+                val adversario = if (anualLiderId == aperturaChampId) clausuraChampId else aperturaChampId
+                partidaDao.inserirTodas(listOf(PartidaEntity(
+                    campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_FINAL_RODADA,
+                    timeCasaId = anualLiderId, timeForaId = adversario,
+                    fase = "Final", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_FINAL
+                )))
+            } else {
+                // Caso normal: Semi = Apertura champ vs Clausura champ
+                partidaDao.inserirTodas(listOf(PartidaEntity(
+                    campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_SEMI_RODADA,
+                    timeCasaId = aperturaChampId, timeForaId = clausuraChampId,
+                    fase = "Semi", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_SEMI
+                )))
+            }
+            return false
+        }
+
+        // ── Semi concluída → gera Final ──────────────────────────────────────
+        if (semiPartidas.isNotEmpty() && finalPartidas.isEmpty()) {
+            if (!semiPartidas.all { it.jogada }) return false
+            val semiPartida = semiPartidas.first()
+            val gC = semiPartida.golsCasa ?: return false
+            val gF = semiPartida.golsFora ?: return false
+            val semiVencedor = when {
+                gC > gF -> semiPartida.timeCasaId
+                gF > gC -> semiPartida.timeForaId
+                else    -> {
+                    val pC = semiPartida.penaltisCasa; val pF = semiPartida.penaltisForaId
+                    if (pC != null && pF != null) { if (pC > pF) semiPartida.timeCasaId else semiPartida.timeForaId }
+                    else simularEPersistirPenaltisIA(semiPartida, semiPartida)
+                }
+            }
+            val tabelaAnual  = calcularTabelaAnualUruguai(aperturaId, clausuraId, intermedidId)
+            val anualLiderId = tabelaAnual.maxByOrNull { it.value }?.key ?: return false
+            partidaDao.inserirTodas(listOf(PartidaEntity(
+                campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_FINAL_RODADA,
+                timeCasaId = semiVencedor, timeForaId = anualLiderId,
+                fase = "Final", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_FINAL
+            )))
+            return false
+        }
+
+        // ── Final concluída → determina campeão ──────────────────────────────
+        if (finalPartidas.isNotEmpty() && finalPartidas.all { it.jogada }) {
+            val finalPartida = finalPartidas.first()
+            val gC = finalPartida.golsCasa ?: return false
+            val gF = finalPartida.golsFora ?: return false
+            val campeaoId = when {
+                gC > gF -> finalPartida.timeCasaId
+                gF > gC -> finalPartida.timeForaId
+                else    -> {
+                    val pC = finalPartida.penaltisCasa; val pF = finalPartida.penaltisForaId
+                    if (pC != null && pF != null) { if (pC > pF) finalPartida.timeCasaId else finalPartida.timeForaId }
+                    else simularEPersistirPenaltisIA(finalPartida, finalPartida)
+                }
+            }
+            registrarCampeaoUruguai(campeaoId, finalPartida, clausuraId, anoAtual, temporadaId, timeJogadorId)
+            campeonatoDao.encerrar(clausuraId)
+            return true
+        }
+        return false
+    }
+
+    /** Registra Hall da Fama e premiação do Campeão Uruguaio. */
+    private suspend fun registrarCampeaoUruguai(
+        campeaoId: Int,
+        finalPartida: PartidaEntity?,
+        clausuraId: Int,
+        anoAtual: Int,
+        temporadaId: Int,
+        timeJogadorId: Int
+    ) {
+        val camp       = campeonatoDao.buscarPorId(clausuraId)
+        val viceId     = if (finalPartida != null) {
+            if (campeaoId == finalPartida.timeCasaId) finalPartida.timeForaId else finalPartida.timeCasaId
+        } else -1
+        val campeaoEnt = timeRepository.buscarEntityPorId(campeaoId)
+        val viceEnt    = if (viceId > 0) timeRepository.buscarEntityPorId(viceId) else null
+        val artilheiro = partidaDao.buscarArtilheiroTop1(clausuraId)
+        val assistente = partidaDao.buscarAssisteTop1(clausuraId)
+        hallDaFamaDao.inserir(HallDaFamaEntity(
+            ano = anoAtual, nomeCampeonato = "Campeonato Uruguaio $anoAtual",
+            campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
+            viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
+            artilheiroId = artilheiro?.jogadorId ?: -1, artilheiroNome = artilheiro?.nomeJogador ?: "",
+            artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "", artilheiroGols = artilheiro?.total ?: 0,
+            artilheiroNomeTime = artilheiro?.nomeTime ?: "", artilheiroEscudo = artilheiro?.escudoRes ?: "",
+            assistenteId = assistente?.jogadorId ?: -1, assistenteNome = assistente?.nomeJogador ?: "",
+            assistenteNomeAbrev = assistente?.nomeAbrev ?: "", assistenciasTotais = assistente?.total ?: 0,
+            assistenteNomeTime = assistente?.nomeTime ?: "", assistenteEscudo = assistente?.escudoRes ?: "",
+            divisao = 14  // 14 = Campeão Uruguaio
+        ))
+        // Ranking Geral
+        val timeEnt = campeaoEnt ?: return
+        val existing = rankingGeralDao.buscarPorTime(campeaoId)
+            ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                timeId = campeaoId, nomeTime = timeEnt.nome, escudoRes = timeEnt.escudoRes, divisaoAtual = timeEnt.divisao)
+        rankingGeralDao.inserirOuAtualizar(existing.copy(
+            titulosNacionais = existing.titulosNacionais + 1,
+            pontosAcumulados = existing.pontosAcumulados + 20L
+        ))
+        // Premiação ao jogador
+        if (timeJogadorId > 0 && (campeaoId == timeJogadorId || viceId == timeJogadorId)) {
+            val (valor, pos) = if (campeaoId == timeJogadorId) 20_000_000_00L to "Campeão" else 10_000_000_00L to "Vice-campeão"
+            timeRepository.creditarSaldo(timeJogadorId, valor)
+            financaDao.inserir(br.com.managerfoot.data.database.entities.FinancaEntity(
+                timeId = timeJogadorId, temporadaId = temporadaId, mes = 13,
+                receitaPremiacoes = valor, descricaoPremio = "Campeonato Uruguaio $anoAtual — $pos", saldoFinal = valor
+            ))
+        }
+    }
+
+    /**
+     * Simula automaticamente os torneios uruguaios quando o jogador não participa
+     * (time brasileiro, argentino, ou equipe uruguaia já eliminada do playoff).
+     */
+    suspend fun simularUruguaiSeNecessario(
+        aperturaId: Int,
+        clausuraId: Int,
+        intermedidId: Int,
+        competBId: Int = -1,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int = 1
+    ) {
+        // Não simula se o jogador ainda tem partidas pendentes em qualquer torneio uruguaio
+        val todosCampIds = listOf(aperturaId, clausuraId, intermedidId, competBId).filter { it > 0 }
+        for (campId in todosCampIds) {
+            if (campeonatoDao.buscarPorId(campId)?.encerrado == true) continue
+            val pendentes = partidaDao.buscarTodasPorCampeonato(campId).filter { !it.jogada }
+            if (pendentes.any { it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId }) return
+        }
+
+        // ── Cadência: avança EXATAMENTE UMA rodada da cadeia sequencial Apertura → Intermediário → Clausura
+        // Isso garante que o Uruguai avança no mesmo ritmo que o time do jogador (1 rodada por partida jogada).
+        // A Competencia B roda em paralelo (liga independente) e também avança 1 rodada por chamada.
+
+        // ── Apertura ─────────────────────────────────────────────────────────
+        if (aperturaId > 0 && campeonatoDao.buscarPorId(aperturaId)?.encerrado == false) {
+            val pendentes = partidaDao.buscarTodasPorCampeonato(aperturaId).filter { !it.jogada }
+            if (pendentes.isNotEmpty()) {
+                val proxRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: 0
+                pendentes.filter { it.rodada == proxRodada }
+                    .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                campeonatoDao.avancarRodada(aperturaId)
+                // Apertura rodada avançada — não prossegue para Intermediário nesta chamada
+                avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
+                return
+            }
+        }
+
+        // ── Intermediário (começa após Apertura encerrada) ────────────────────
+        if (intermedidId > 0 && campeonatoDao.buscarPorId(intermedidId)?.encerrado == false) {
+            val pendentes = partidaDao.buscarTodasPorCampeonato(intermedidId).filter { !it.jogada }
+            if (pendentes.isNotEmpty()) {
+                val proxRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: 0
+                pendentes.filter { it.rodada == proxRodada }
+                    .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                campeonatoDao.avancarRodada(intermedidId)
+                verificarEAvancarFaseIntermediarioUruguai(intermedidId, anoAtual, timeJogadorId, temporadaId)
+                avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
+                return
+            }
+            // Sem partidas pendentes mas não encerrado → grupos concluídos, gera Final
+            val encerrou = verificarEAvancarFaseIntermediarioUruguai(intermedidId, anoAtual, timeJogadorId, temporadaId)
+            if (!encerrou) {
+                // Final pode ter sido inserida — simula-a imediatamente (transição de fase, não conta como rodada extra)
+                val novas = partidaDao.buscarTodasPorCampeonato(intermedidId).filter { !it.jogada }
+                if (novas.isNotEmpty()) {
+                    val proxRodada = novas.minByOrNull { it.rodada }?.rodada ?: 0
+                    novas.filter { it.rodada == proxRodada }
+                        .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                    campeonatoDao.avancarRodada(intermedidId)
+                    verificarEAvancarFaseIntermediarioUruguai(intermedidId, anoAtual, timeJogadorId, temporadaId)
+                }
+            }
+            avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
+            return
+        }
+
+        // ── Clausura + Playoff (começa após Intermediário encerrado) ──────────
+        if (clausuraId > 0 && campeonatoDao.buscarPorId(clausuraId)?.encerrado == false) {
+            val pendentes = partidaDao.buscarTodasPorCampeonato(clausuraId).filter { !it.jogada }
+            if (pendentes.isNotEmpty()) {
+                val proxRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: 0
+                pendentes.filter { it.rodada == proxRodada }
+                    .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                campeonatoDao.avancarRodada(clausuraId)
+                verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
+                avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
+                return
+            }
+            // Sem partidas pendentes mas não encerrado → gera fase seguinte do Playoff
+            val encerrou = verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
+            if (!encerrou) {
+                val novas = partidaDao.buscarTodasPorCampeonato(clausuraId).filter { !it.jogada }
+                if (novas.isNotEmpty()) {
+                    val proxRodada = novas.minByOrNull { it.rodada }?.rodada ?: 0
+                    novas.filter { it.rodada == proxRodada }
+                        .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                    campeonatoDao.avancarRodada(clausuraId)
+                    verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
+                }
+            }
+        }
+
+        // Competencia B em paralelo (mesmo que cadeia Principal não tenha avançado)
+        avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /** Avança exatamente uma rodada do Torneo Competencia B. Chamado em paralelo com a cadeia Principal. */
+    private suspend fun avançarCompetenciaB(
+        competBId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        if (competBId <= 0) return
+        val camp = campeonatoDao.buscarPorId(competBId) ?: return
+        if (camp.encerrado) return
+        val pendentes = partidaDao.buscarTodasPorCampeonato(competBId).filter { !it.jogada }
+        if (pendentes.isNotEmpty()) {
+            val proxRodada = pendentes.minByOrNull { it.rodada }?.rodada ?: return
+            pendentes.filter { it.rodada == proxRodada }
+                .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+            campeonatoDao.avancarRodada(competBId)
+            verificarEAvancarFaseCompetenciaUruguaiB(competBId, anoAtual, timeJogadorId, temporadaId)
+        } else {
+            // Sem pendentes: tenta gerar próxima fase (Final) e simula-a
+            val encerrou = verificarEAvancarFaseCompetenciaUruguaiB(competBId, anoAtual, timeJogadorId, temporadaId)
+            if (!encerrou) {
+                val novas = partidaDao.buscarTodasPorCampeonato(competBId).filter { !it.jogada }
+                if (novas.isNotEmpty()) {
+                    val proxRodada = novas.minByOrNull { it.rodada }?.rodada ?: return
+                    novas.filter { it.rodada == proxRodada }
+                        .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
+                    campeonatoDao.avancarRodada(competBId)
+                    verificarEAvancarFaseCompetenciaUruguaiB(competBId, anoAtual, timeJogadorId, temporadaId)
+                }
+            }
+        }
+    }
+
+    /** Persiste pênaltis interativos do jogador no Intermediário e avança a fase. */
+    suspend fun persistirResultadoPenaltisJogadorUruguaiIntermediario(
+        resultado: br.com.managerfoot.domain.model.ResultadoPenaltis,
+        intermedidId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(partidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseIntermediarioUruguai(intermedidId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /** Persiste pênaltis interativos do jogador no playoff Clausura e avança. */
+    suspend fun persistirResultadoPenaltisJogadorUruguaiPlayoff(
+        resultado: br.com.managerfoot.domain.model.ResultadoPenaltis,
+        clausuraId: Int,
+        aperturaId: Int,
+        intermedidId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(partidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    // ── Supercopa Rei: jogo único entre campeão do Brasileirão e da Copa ──
+    // ordemGlobal = 1 → disputada no final de janeiro, antes de qualquer outra partida.
+    suspend fun criarSupercopa(
+        campeonatoBrasileiraoId: Int,   // timeId do campeão do Brasileirão
+        campeonatoCopaId: Int,          // timeId do campeão da Copa do Brasil
+        ano: Int,
+        temporadaId: Int
+    ): Int {
+        val supercopaId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Supercopa Rei $ano",
+                tipo         = TipoCampeonato.SUPERCOPA,
+                formato      = FormatoCampeonato.MATA_MATA_SIMPLES,
+                totalRodadas = 1
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(listOf(
+            CampeonatoTimeEntity(supercopaId, campeonatoBrasileiraoId),
+            CampeonatoTimeEntity(supercopaId, campeonatoCopaId)
+        ))
+        // Jogo único disputado no final de janeiro (ordemGlobal = 1, antes de tudo)
+        partidaDao.inserirTodas(listOf(
+            PartidaEntity(
+                campeonatoId = supercopaId,
+                rodada       = 1,
+                timeCasaId   = campeonatoBrasileiraoId,
+                timeForaId   = campeonatoCopaId,
+                fase         = "Final",
+                ordemGlobal  = 1
+            )
+        ))
+        return supercopaId
+    }
+
+    // ── Verifica se fase atual foi concluída e avança para próxima ──
+    // Retorna true se a Copa foi finalizada (Final concluída).
+    // Parâmetros opcionais permitem reutilizar a lógica para Copa Argentina.
+    suspend fun verificarEAvancarFaseCopa(
+        copaId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1,
+        fases: List<String> = MotorCampeonato.COPA_FASES,
+        ordemGlobal: IntArray = MotorCampeonato.COPA_ORDEM_GLOBAL,
+        divisaoHallDaFama: Int = 5,
+        premioCampeao: Long = 30_000_000_00L,
+        premioVice: Long = 15_000_000_00L
+    ): Boolean {
+        val campEntity = campeonatoDao.buscarPorId(copaId) ?: return false
+        if (campEntity.encerrado) return false
         val todasPartidas = partidaDao.buscarTodasPorCampeonato(copaId)
         if (todasPartidas.isEmpty()) return false
 
-        for (faseAtual in MotorCampeonato.COPA_FASES) {
+        for (faseAtual in fases) {
             val partidasFase = todasPartidas.filter { it.fase == faseAtual }
             if (partidasFase.isEmpty()) continue
 
@@ -890,7 +2345,7 @@ class GameRepository @Inject constructor(
             if (!partidasFase.all { it.jogada }) return false
 
             // Fase completa → checar se próxima já foi gerada
-            val proximaFase = MotorCampeonato.proximaFaseCopa(faseAtual)
+            val proximaFase = MotorCampeonato.proximaFaseCopa(faseAtual, fases)
             if (proximaFase != null && todasPartidas.any { it.fase == proximaFase }) {
                 continue  // próxima fase já existe
             }
@@ -934,16 +2389,17 @@ class GameRepository @Inject constructor(
                 val idaFinal = finalTie.minByOrNull { it.rodada } ?: return true
                 val viceId = if (campeaoId == idaFinal.timeCasaId) idaFinal.timeForaId else idaFinal.timeCasaId
 
-                val campeao   = timeRepository.buscarEntityPorId(campeaoId)
-                val vice      = timeRepository.buscarEntityPorId(viceId)
-                val copaEnt   = campeonatoDao.buscarPorId(copaId)
+                val campeao    = timeRepository.buscarEntityPorId(campeaoId)
+                val vice       = timeRepository.buscarEntityPorId(viceId)
+                val copaEnt    = campeonatoDao.buscarPorId(copaId)
                 val artilheiro = partidaDao.buscarArtilheiroTop1(copaId)
                 val assistente = partidaDao.buscarAssisteTop1(copaId)
+                val nomePadrao = if (divisaoHallDaFama == 9) "Copa Argentina $anoAtual" else "Copa do Brasil $anoAtual"
 
                 hallDaFamaDao.inserir(
                     HallDaFamaEntity(
                         ano                 = anoAtual,
-                        nomeCampeonato      = copaEnt?.nome ?: "Copa do Brasil $anoAtual",
+                        nomeCampeonato      = copaEnt?.nome ?: nomePadrao,
                         campeaoTimeId       = campeaoId,
                         campeaoNome         = campeao?.nome ?: "",
                         campeaoEscudo       = campeao?.escudoRes ?: "",
@@ -962,30 +2418,36 @@ class GameRepository @Inject constructor(
                         assistenciasTotais  = assistente?.total ?: 0,
                         assistenteNomeTime  = assistente?.nomeTime ?: "",
                         assistenteEscudo    = assistente?.escudoRes ?: "",
-                        divisao             = 5   // 5 = Copa
+                        divisao             = divisaoHallDaFama
                     )
                 )
-                // Incrementa copasVencidas do campeão e aplica bônus de pontos (Copa)
-                val rankCampeao = rankingGeralDao.buscarPorTime(campeaoId)
-                if (rankCampeao != null) {
-                    rankingGeralDao.inserirOuAtualizar(
-                        rankCampeao.copy(
-                            copasVencidas    = rankCampeao.copasVencidas + 1,
-                            pontosAcumulados = rankCampeao.pontosAcumulados + 30L
-                        )
+                // Incrementa copasVencidas do campeão e aplica bônus de pontos
+                val rankCampeaoBase = rankingGeralDao.buscarPorTime(campeaoId)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = campeaoId, nomeTime = campeao?.nome ?: "",
+                        escudoRes = campeao?.escudoRes ?: "", divisaoAtual = campeao?.divisao ?: 1
                     )
-                }
-                // Bônus de pontos para o vice da Copa
-                val rankVice = rankingGeralDao.buscarPorTime(viceId)
-                if (rankVice != null) {
-                    rankingGeralDao.inserirOuAtualizar(
-                        rankVice.copy(pontosAcumulados = rankVice.pontosAcumulados + 15L)
+                rankingGeralDao.inserirOuAtualizar(
+                    rankCampeaoBase.copy(
+                        copasVencidas    = rankCampeaoBase.copasVencidas + 1,
+                        pontosAcumulados = rankCampeaoBase.pontosAcumulados + 30L
                     )
-                }
+                )
+                // Bônus de pontos para o vice
+                val rankViceBase = rankingGeralDao.buscarPorTime(viceId)
+                    ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                        timeId = viceId, nomeTime = vice?.nome ?: "",
+                        escudoRes = vice?.escudoRes ?: "", divisaoAtual = vice?.divisao ?: 1
+                    )
+                rankingGeralDao.inserirOuAtualizar(
+                    rankViceBase.copy(pontosAcumulados = rankViceBase.pontosAcumulados + 15L)
+                )
                 campeonatoDao.encerrar(copaId)
-                // Premiação Copa do Brasil → campeão e vice (metade) se for o time do jogador
-                val premiosCopa = listOf(campeaoId to 30_000_000_00L, viceId to 15_000_000_00L)
-                for ((timePremiado, valorPremio) in premiosCopa) {
+                // Premiação: campeão e vice se for o time do jogador
+                val nomePremio = copaEnt?.nome ?: nomePadrao
+                val premios = listOf(campeaoId to (premioCampeao to "Campeão"), viceId to (premioVice to "Vice-campeão"))
+                for ((timePremiado, premioInfo) in premios) {
+                    val (valorPremio, posicao) = premioInfo
                     if (timeJogadorId > 0 && timePremiado == timeJogadorId) {
                         timeRepository.creditarSaldo(timeJogadorId, valorPremio)
                         financaDao.inserir(
@@ -994,12 +2456,13 @@ class GameRepository @Inject constructor(
                                 temporadaId       = temporadaId,
                                 mes               = 13,
                                 receitaPremiacoes = valorPremio,
+                                descricaoPremio   = "$nomePremio — $posicao",
                                 saldoFinal        = valorPremio
                             )
                         )
                     }
                 }
-                // Copa do Brasil: +4% de reputação para o campeão
+                // +4% de reputação para o campeão
                 val campeaoCopa = timeRepository.buscarPorId(campeaoId)
                 if (campeaoCopa != null) {
                     val bonus = (campeaoCopa.reputacao * 0.04f).coerceAtLeast(0.1f)
@@ -1009,7 +2472,7 @@ class GameRepository @Inject constructor(
             }
 
             // Gera partidas da próxima fase
-            val faseIndex   = MotorCampeonato.COPA_FASES.indexOf(proximaFase)
+            val faseIndex   = fases.indexOf(proximaFase)
             val rodadaIda   = MotorCampeonato.rodadaIdaDeFase(faseIndex)
             val maxConfId   = todasPartidas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0
             val novosPares  = MotorCampeonato.sortearPares(vencedores)
@@ -1019,8 +2482,8 @@ class GameRepository @Inject constructor(
                 fase               = proximaFase,
                 rodadaIda          = rodadaIda,
                 confrontoIdInicio  = maxConfId + 1,
-                ordemGlobalIda     = MotorCampeonato.COPA_ORDEM_GLOBAL[faseIndex * 2],
-                ordemGlobalVolta   = MotorCampeonato.COPA_ORDEM_GLOBAL[faseIndex * 2 + 1]
+                ordemGlobalIda     = ordemGlobal[faseIndex * 2],
+                ordemGlobalVolta   = ordemGlobal[faseIndex * 2 + 1]
             )
             partidaDao.inserirTodas(novasPartidas)
             return false
@@ -1060,6 +2523,154 @@ class GameRepository @Inject constructor(
         verificarEAvancarFaseCopa(copaId, anoAtual)
     }
 
+    // ── Verifica e encerra a Supercopa Rei após o jogo único ser jogado ──
+    // Registra o campeão no Hall da Fama, aplica premiação e encerra o campeonato.
+    // Retorna true se a Supercopa foi encerrada nesta chamada.
+    suspend fun verificarEEncerrarSupercopa(
+        supercopaId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (supercopaId <= 0) return false
+        val supercopa = campeonatoDao.buscarPorId(supercopaId) ?: return false
+        if (supercopa.encerrado) return false
+
+        val partidas = partidaDao.buscarTodasPorCampeonato(supercopaId)
+        if (partidas.isEmpty() || !partidas.all { it.jogada }) return false
+
+        val jogo = partidas.first()
+        val gCasa = jogo.golsCasa ?: return false
+        val gFora = jogo.golsFora ?: return false
+
+        val campeaoId = when {
+            gCasa > gFora -> jogo.timeCasaId
+            gFora > gCasa -> jogo.timeForaId
+            else -> {
+                // Pênaltis: verifica se já foram persistidos
+                val pCasa = jogo.penaltisCasa
+                val pFora = jogo.penaltisForaId
+                if (pCasa != null && pFora != null) {
+                    if (pCasa > pFora) jogo.timeCasaId else jogo.timeForaId
+                } else {
+                    // Simula pênaltis IA vs IA
+                    simularEPersistirPenaltisIA(jogo, jogo)
+                }
+            }
+        }
+        val viceId = if (campeaoId == jogo.timeCasaId) jogo.timeForaId else jogo.timeCasaId
+
+        val campeao  = timeRepository.buscarEntityPorId(campeaoId)
+        val vice     = timeRepository.buscarEntityPorId(viceId)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(supercopaId)
+        val assistente = partidaDao.buscarAssisteTop1(supercopaId)
+
+        // Registra no Hall da Fama (divisao = 6 → Supercopa)
+        hallDaFamaDao.inserir(
+            HallDaFamaEntity(
+                ano                  = anoAtual,
+                nomeCampeonato       = supercopa.nome,
+                campeaoTimeId        = campeaoId,
+                campeaoNome          = campeao?.nome ?: "",
+                campeaoEscudo        = campeao?.escudoRes ?: "",
+                viceTimeId           = viceId,
+                viceNome             = vice?.nome ?: "",
+                viceEscudo           = vice?.escudoRes ?: "",
+                artilheiroId         = artilheiro?.jogadorId ?: -1,
+                artilheiroNome       = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev  = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols       = artilheiro?.total ?: 0,
+                artilheiroNomeTime   = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo     = artilheiro?.escudoRes ?: "",
+                assistenteId         = assistente?.jogadorId ?: -1,
+                assistenteNome       = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev  = assistente?.nomeAbrev ?: "",
+                assistenciasTotais   = assistente?.total ?: 0,
+                assistenteNomeTime   = assistente?.nomeTime ?: "",
+                assistenteEscudo     = assistente?.escudoRes ?: "",
+                divisao              = 6   // 6 = Supercopa Rei
+            )
+        )
+
+        // Premiação: R$ 10M campeão, R$ 5M vice
+        val premios = listOf(campeaoId to (10_000_000_00L to "Campeão"), viceId to (5_000_000_00L to "Vice-campeão"))
+        for ((timePremiado, premioInfo) in premios) {
+            val (valorPremio, posicaoSuper) = premioInfo
+            if (timeJogadorId > 0 && timePremiado == timeJogadorId) {
+                timeRepository.creditarSaldo(timeJogadorId, valorPremio)
+                financaDao.inserir(
+                    br.com.managerfoot.data.database.entities.FinancaEntity(
+                        timeId            = timeJogadorId,
+                        temporadaId       = temporadaId,
+                        mes               = 1,
+                        receitaPremiacoes = valorPremio,
+                        descricaoPremio   = "Supercopa Rei — $posicaoSuper",
+                        saldoFinal        = valorPremio
+                    )
+                )
+            }
+        }
+
+        // Bônus de reputação +3% para o campeão
+        val campeaoTime = timeRepository.buscarPorId(campeaoId)
+        if (campeaoTime != null) {
+            val bonus = (campeaoTime.reputacao * 0.03f).coerceAtLeast(0.1f)
+            timeRepository.atualizarReputacao(campeaoId, campeaoTime.reputacao + bonus)
+        }
+
+        // Atualiza ranking geral: +1 copa e +25 pontos para o campeão, +10 para o vice
+        val rankingCampeaoBase = rankingGeralDao.buscarPorTime(campeaoId)
+            ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                timeId = campeaoId, nomeTime = campeao?.nome ?: "",
+                escudoRes = campeao?.escudoRes ?: "", divisaoAtual = campeao?.divisao ?: 1
+            )
+        rankingGeralDao.inserirOuAtualizar(
+            rankingCampeaoBase.copy(
+                nomeTime         = campeao?.nome ?: rankingCampeaoBase.nomeTime,
+                escudoRes        = campeao?.escudoRes ?: rankingCampeaoBase.escudoRes,
+                copasVencidas    = rankingCampeaoBase.copasVencidas + 1,
+                pontosAcumulados = rankingCampeaoBase.pontosAcumulados + 25L
+            )
+        )
+        val rankingViceBase = rankingGeralDao.buscarPorTime(viceId)
+            ?: br.com.managerfoot.data.database.entities.RankingGeralEntity(
+                timeId = viceId, nomeTime = vice?.nome ?: "",
+                escudoRes = vice?.escudoRes ?: "", divisaoAtual = vice?.divisao ?: 1
+            )
+        rankingGeralDao.inserirOuAtualizar(
+            rankingViceBase.copy(pontosAcumulados = rankingViceBase.pontosAcumulados + 10L)
+        )
+
+        campeonatoDao.encerrar(supercopaId)
+        return true
+    }
+
+    // ── Simula a Supercopa quando o jogador não é participante ───────
+    // Chamado passivamente após cada partida da liga/copa, para manter o resultado atualizado.
+    suspend fun simularSupercopaSeJogadorNaoParticipa(
+        supercopaId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) {
+        if (supercopaId <= 0) return
+        if (campeonatoDao.buscarPorId(supercopaId)?.encerrado == true) return
+
+        val partidas = partidaDao.buscarTodasPorCampeonato(supercopaId)
+        val jogadorParticipa = partidas.any {
+            it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId
+        }
+        if (jogadorParticipa) return  // Jogador participa — não interferir
+
+        val pendentes = partidas.filter { !it.jogada }
+        if (pendentes.isEmpty()) {
+            verificarEEncerrarSupercopa(supercopaId, anoAtual, timeJogadorId, temporadaId)
+            return
+        }
+        pendentes.forEach { simularRodada(supercopaId, it.rodada) }
+        verificarEEncerrarSupercopa(supercopaId, anoAtual, timeJogadorId, temporadaId)
+    }
+
     // ── Atualiza ranking geral após término de uma competição ────────
     // Chamado ao final de cada temporada: registra +1 temporada jogada, atualiza divisão
     // e contabiliza +1 título nacional para o campeão (1º colocado).
@@ -1080,7 +2691,11 @@ class GameRepository @Inject constructor(
         }
         for (cls in classificacoes) {
             val time      = timeRepository.buscarEntityPorId(cls.timeId) ?: continue
-            val existing  = rankingGeralDao.buscarPorTime(cls.timeId) ?: continue
+            val existing  = rankingGeralDao.buscarPorTime(cls.timeId)
+                ?: RankingGeralEntity(
+                    timeId = cls.timeId, nomeTime = time.nome,
+                    escudoRes = time.escudoRes, divisaoAtual = time.divisao
+                )
             val ehCampeao = cls.timeId == campeaoTimeId
             val ehVice    = cls.timeId == viceTimeId
             val pontosExtras = when {
@@ -1114,16 +2729,17 @@ class GameRepository @Inject constructor(
             // Série A (automáticos) + top 44 do ranking geral não presentes na Série A
             val serieASet = participantesSerieA.toSet()
             val top44 = rankingGeralDao.buscarTopN(200)
-                .filter { it.timeId !in serieASet && it.divisaoAtual != 5 } // exclui times argentinos
+                .filter { it.timeId !in serieASet && it.divisaoAtual in 1..4 } // apenas times brasileiros (exclui Argentina e Uruguai)
                 .take(64 - participantesSerieA.size)
                 .map { it.timeId }
             (participantesSerieA + top44).take(64)
         }
     }
 
-    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int, patrocinioMensal: Long = 0L, patrocinioJaCreditado: Long = 0L) {
+    suspend fun fecharMes(timeId: Int, temporadaId: Int, mes: Int, patrocinioMensal: Long = 0L, patrocinioJaCreditado: Long = 0L, anoAtual: Int = 0) {
         val time = timeRepository.buscarPorId(timeId) ?: return
-        val elenco = jogadorRepository.buscarDisponiveis(timeId)
+        // Usa todos os seniores (incluindo lesionados/suspensos) para calcular a folha salarial real
+        val elenco = jogadorRepository.buscarSeniores(timeId)
 
         val fechamento = MotorFinanceiro.processarFechamentoMensal(
             time = time,
@@ -1171,12 +2787,22 @@ class GameRepository @Inject constructor(
             timeRepository.debitarSaldo(timeId, -saldoAjuste)
         }
 
+        // Devolve ao clube de origem jogadores cujo empréstimo expirou neste mês
+        if (anoAtual > 0) {
+            jogadorRepository.processarRetornosEmprestimo(anoAtual, mes, temporadaId)
+        }
         // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
         executarContratacoesLivresIA(timeId, temporadaId, mes)
         // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
         executarReforcoMensalIA(timeId, temporadaId, mes)
         // IA faz reforços emergenciais quando o time está com desempenho ruim nos campeonatos
         executarReforcoDesempenhoIA(timeId, temporadaId, mes)
+        // Nos meses de início (1-2) e final (10-12) da temporada, gera propostas de
+        // times da IA para jogadores do time do usuário
+        if (mes in setOf(1, 2, 10, 11, 12)) {
+            gerarPropostasIAParaTimeJogador(timeId, temporadaId, mes)
+            executarTransferenciasIAParaIA(timeId, temporadaId, mes)
+        }
     }
 
     /** Credita imediatamente o patrocínio mensal ao saldo do clube quando o contrato é fechado. */
@@ -1209,9 +2835,247 @@ class GameRepository @Inject constructor(
         } catch (_: Exception) { }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    //  Propostas de transferência (IA → Time do jogador)
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * Gera propostas de compra de jogadores do time do usuário por times da IA.
+     * Chamado no início (meses 1–2) e final (meses 10–12) de temporada via [fecharMes].
+     *
+     * Cobre dois casos:
+     *  1. Jogadores fortes (top-8): IA oferece 90%–120% do valor de mercado.
+     *  2. Jogadores listados para venda pelo usuário: IA oferece 85%–100% do valor de mercado.
+     *  3. Jogadores listados para empréstimo pelo usuário: IA gera proposta de empréstimo (sem custo de compra).
+     */
+    suspend fun gerarPropostasIAParaTimeJogador(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val elenco = jogadorRepository.buscarDisponiveis(playerTimeId)
+        if (elenco.isEmpty()) return
+        val todos = timeRepository.buscarTodosOrdenadosPorReputacao().filter { it.id != playerTimeId }
+        if (todos.isEmpty()) return
+
+        // ── Caso 1: proposta espontânea para os melhores jogadores ──────────────
+        val candidatos = elenco
+            .filter { !it.lesionado && !it.categoriaBase }
+            .sortedByDescending { it.forca }
+            .take(8)
+
+        val qtdPropostas = (1..3).random()
+        val selecionados = candidatos.shuffled().take(qtdPropostas)
+
+        for (jogador in selecionados) {
+            val ativas = propostaIADao.buscarAtivasPorJogadorETipo(jogador.id, TipoProposta.VENDA)
+            if (ativas.isNotEmpty()) continue
+            val comprador = todos
+                .filter { it.saldo >= (jogador.valorMercado * 0.80).toLong() }
+                .randomOrNull() ?: continue
+            val multiplicador = kotlin.random.Random.nextDouble(0.90, 1.20)
+            val valorOferta = (jogador.valorMercado * multiplicador).toLong().coerceAtLeast(1L)
+            propostaIADao.inserir(
+                PropostaIAEntity(
+                    jogadorId       = jogador.id,
+                    timeCompradorId = comprador.id,
+                    valorOfertado   = valorOferta,
+                    temporadaId     = temporadaId,
+                    mes             = mes,
+                    tipoProposta    = TipoProposta.VENDA
+                )
+            )
+        }
+
+        // ── Caso 2 & 3: jogadores listados explicitamente pelo usuário ──────────
+        val listados = jogadorRepository.buscarListadosParaTransferencia(playerTimeId)
+        for (jogador in listados) {
+            if (jogador.disponívelParaVenda) {
+                // Apenas uma proposta de venda ativa por jogador
+                val ativas = propostaIADao.buscarAtivasPorJogadorETipo(jogador.id, TipoProposta.VENDA)
+                if (ativas.isEmpty()) {
+                    val comprador = todos
+                        .filter { it.saldo >= (jogador.valorMercado * 0.80).toLong() }
+                        .randomOrNull() ?: continue
+                    // Oferta de 85% a 100% do valor de mercado (usuário listou para vender)
+                    val multiplicador = kotlin.random.Random.nextDouble(0.85, 1.00)
+                    val valorOferta = (jogador.valorMercado * multiplicador).toLong().coerceAtLeast(1L)
+                    propostaIADao.inserir(
+                        PropostaIAEntity(
+                            jogadorId       = jogador.id,
+                            timeCompradorId = comprador.id,
+                            valorOfertado   = valorOferta,
+                            temporadaId     = temporadaId,
+                            mes             = mes,
+                            tipoProposta    = TipoProposta.VENDA
+                        )
+                    )
+                }
+            }
+            if (jogador.disponívelParaEmprestimo) {
+                // Apenas uma proposta de empréstimo ativa por jogador
+                val ativasEmp = propostaIADao.buscarAtivasPorJogadorETipo(jogador.id, TipoProposta.EMPRESTIMO)
+                if (ativasEmp.isEmpty()) {
+                    val interessado = todos.randomOrNull() ?: continue
+                    // Empréstimo: valor simbólico = 10%–20% do valor de mercado (taxa de empréstimo)
+                    val taxaEmprestimo = (jogador.valorMercado * kotlin.random.Random.nextDouble(0.10, 0.20)).toLong().coerceAtLeast(1L)
+                    propostaIADao.inserir(
+                        PropostaIAEntity(
+                            jogadorId       = jogador.id,
+                            timeCompradorId = interessado.id,
+                            valorOfertado   = taxaEmprestimo,
+                            temporadaId     = temporadaId,
+                            mes             = mes,
+                            tipoProposta    = TipoProposta.EMPRESTIMO
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /** Fluxo reativo de propostas ativas para exibição na aba Propostas do Mercado. */
+    fun observarPropostasAtivas(): Flow<List<PropostaIAEntity>> =
+        propostaIADao.observeAtivas()
+
+    /** Fluxo reativo de notificações (pendentes + aceites/recusas não lidas). */
+    fun observarNotificacoes(): Flow<List<PropostaIAEntity>> =
+        propostaIADao.observeNotificacoes()
+
+    /** Fluxo reativo do contador de notificações não lidas (para badge). */
+    fun observarContadorNotificacoes(): Flow<Int> =
+        propostaIADao.observeContadorNaoLidas()
+
+    /** Marca uma proposta como lida. */
+    suspend fun marcarNotificacaoLida(id: Int) =
+        propostaIADao.marcarLida(id)
+
+    /** Marca todas as encerradas (aceitas/recusadas) como lidas de uma vez. */
+    suspend fun marcarTodasNotificacoesLidas() =
+        propostaIADao.marcarTodasEncerradasLidas()
+
+    /**
+     * Aceita uma proposta: realiza a transferência (venda ou empréstimo) imediatamente,
+     * credita o saldo ao time do jogador e debita do time comprador.
+     * Para empréstimos, [anoAtual] é usado para calcular a data de retorno (12 meses).
+     */
+    suspend fun aceitarProposta(
+        proposta: PropostaIAEntity,
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        anoAtual: Int = 0
+    ) {
+        val jogador = jogadorRepository.buscarPorId(proposta.jogadorId) ?: return
+        timeRepository.creditarSaldo(playerTimeId, proposta.valorOfertado)
+        timeRepository.debitarSaldo(proposta.timeCompradorId, proposta.valorOfertado)
+
+        val oferta = OfertaTransferencia(
+            jogadorId       = jogador.id,
+            timeCompradorId = proposta.timeCompradorId,
+            timeVendedorId  = playerTimeId,
+            valor           = proposta.valorOfertado,
+            salarioProposto = jogador.salario,
+            contratoAnos    = 3
+        )
+
+        if (proposta.tipoProposta == TipoProposta.EMPRESTIMO) {
+            val anoRetorno = anoAtual + 1
+            val mesRetorno = mes
+            jogadorRepository.realizarEmprestimo(
+                oferta      = oferta,
+                temporadaId = temporadaId,
+                mes         = mes,
+                anoRetorno  = anoRetorno,
+                mesRetorno  = mesRetorno
+            )
+        } else {
+            jogadorRepository.realizarVenda(
+                oferta      = oferta,
+                temporadaId = temporadaId,
+                mes         = mes
+            )
+        }
+        propostaIADao.atualizarStatus(proposta.id, StatusProposta.ACEITA)
+    }
+
+    /** Recusa a proposta: o jogador permanece no elenco. */
+    suspend fun recusarProposta(propostaId: Int) {
+        propostaIADao.atualizarStatus(propostaId, StatusProposta.RECUSADA)
+    }
+
+    /**
+     * Contra-oferta do usuário: registra o valor solicitado e muda o status para
+     * AGUARDANDO_RESPOSTA_IA. A IA responderá após a próxima rodada simulada.
+     */
+    suspend fun negociarProposta(propostaId: Int, valorSolicitado: Long) {
+        val proposta = propostaIADao.buscarPorId(propostaId) ?: return
+        propostaIADao.atualizarNegociacao(
+            id              = propostaId,
+            status          = StatusProposta.AGUARDANDO_RESPOSTA_IA,
+            tentativas      = proposta.tentativasNegociacao + 1,
+            valorSolicitado = valorSolicitado
+        )
+    }
+
+    /**
+     * Processado após o usuário simular uma rodada: a IA avalia e responde a todas as
+     * contra-ofertas em estado AGUARDANDO_RESPOSTA_IA.
+     *
+     * Regras de aceite:
+     *  - 3ª tentativa atingida → rejeita automaticamente
+     *  - sobrevalorização ≤  5% → aceite garantido
+     *  - sobrevalorização ≤ 15% → 70% de probabilidade de aceite
+     *  - sobrevalorização ≤ 30% → 40% de probabilidade de aceite
+     *  - sobrevalorização > 30% → rejeita automaticamente
+     *
+     * Se aceito, a transferência é concluída imediatamente e a proposta marcada ACEITA.
+     */
+    suspend fun processarRespostasIANegociacao(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val aguardando = propostaIADao.buscarAguardandoRespostaIA()
+        for (proposta in aguardando) {
+            if (proposta.tentativasNegociacao >= 3) {
+                propostaIADao.atualizarStatus(proposta.id, StatusProposta.RECUSADA)
+                continue
+            }
+            val jogador   = jogadorRepository.buscarPorId(proposta.jogadorId) ?: continue
+            val comprador = timeRepository.buscarPorId(proposta.timeCompradorId) ?: continue
+            val valorPed  = proposta.valorSolicitadoJogador
+            val valorOrig = proposta.valorOfertado
+
+            if (comprador.saldo < valorPed) {
+                propostaIADao.atualizarStatus(proposta.id, StatusProposta.RECUSADA)
+                continue
+            }
+
+            val sobretaxa = if (valorOrig > 0L) ((valorPed - valorOrig).toDouble() / valorOrig) else 1.0
+            val aceitou = when {
+                sobretaxa <= 0.05 -> true
+                sobretaxa <= 0.15 -> kotlin.random.Random.nextDouble() < 0.70
+                sobretaxa <= 0.30 -> kotlin.random.Random.nextDouble() < 0.40
+                else              -> false
+            }
+
+            if (aceitou) {
+                timeRepository.creditarSaldo(playerTimeId, valorPed)
+                timeRepository.debitarSaldo(proposta.timeCompradorId, valorPed)
+                jogadorRepository.realizarVenda(
+                    oferta = OfertaTransferencia(
+                        jogadorId       = jogador.id,
+                        timeCompradorId = proposta.timeCompradorId,
+                        timeVendedorId  = playerTimeId,
+                        valor           = valorPed,
+                        salarioProposto = jogador.salario,
+                        contratoAnos    = 3
+                    ),
+                    temporadaId = temporadaId,
+                    mes         = mes
+                )
+                propostaIADao.atualizarStatus(proposta.id, StatusProposta.ACEITA)
+            } else {
+                propostaIADao.atualizarStatus(proposta.id, StatusProposta.RECUSADA)
+            }
+        }
+    }
+
     /**
      * Chamado imediatamente após o jogador contratar um atleta de um time da IA.
-     * Se o time vendedor ficou com menos de 18 jogadores, recompõe o elenco até 22
      * usando jogadores livres, priorizando as carências posicionais do esquema tático.
      */
     suspend fun recompletarElencoEmergenciaIA(timeVendedorId: Int?, temporadaId: Int, mes: Int) {
@@ -1278,24 +3142,28 @@ class GameRepository @Inject constructor(
         val mercadoLivre = jogadorRepository.buscarMercado(limite = 40)
         if (mercadoLivre.isEmpty()) return
 
+        // Rastreia jogadores já movimentados nesta execução para não negociar o mesmo
+        // jogador duas vezes dentro do mesmo fechamento mensal.
+        val jogadoresMovidos = mutableSetOf<Int>()
+
         for (time in todos) {
             if (time.id == playerTimeId) continue
             val elenco = jogadorRepository.buscarDisponiveis(time.id)
-            if (elenco.size >= 20) continue   // IA só contrata se abaixo de 20 jogadores
+            val precisaUrgente = elenco.size < 18
+            val podeReforcar  = elenco.size < 20 && kotlin.random.Random.nextFloat() < 0.30f
+            if (!precisaUrgente && !podeReforcar) continue
 
             val ofertas = IATimeRival.decidirContratacoes(
                 time         = time,
                 elencoAtual  = elenco,
-                mercado      = mercadoLivre.filter { it.timeId == null },  // só livres, sem custo
+                mercado      = mercadoLivre.filter { it.timeId == null && it.id !in jogadoresMovidos },
                 orcamento    = time.saldo
             )
 
-            for (oferta in ofertas.take(2)) {
-                // Livre = valor 0; não debitar saldo da IA por passe livre
-                val ofertaLivre = oferta.copy(valor = 0L, timeVendedorId = null)
-                jogadorRepository.realizarTransferencia(ofertaLivre, temporadaId, mes)
-                // Atualiza salário do jogador no banco (apenas timeId já foi atualizado em realizarTransferencia)
-            }
+            val oferta = ofertas.firstOrNull() ?: continue
+            val ofertaLivre = oferta.copy(valor = 0L, timeVendedorId = null)
+            jogadorRepository.realizarTransferencia(ofertaLivre, temporadaId, mes)
+            jogadoresMovidos.add(oferta.jogadorId)
         }
     }
 
@@ -1309,19 +3177,24 @@ class GameRepository @Inject constructor(
         val livres = jogadorRepository.buscarMercado(limite = 60).filter { it.timeId == null }
         if (livres.isEmpty()) return
 
+        val jogadoresMovidos = mutableSetOf<Int>()
+
         for (time in todos) {
             if (time.id == playerTimeId) continue
             val elencoAtual = jogadorRepository.buscarDisponiveis(time.id)
             if (elencoAtual.isEmpty()) continue
+            if (elencoAtual.size >= 26) continue
+            if (kotlin.random.Random.nextFloat() >= 0.25f) continue
 
             val escalacao = IATimeRival.gerarEscalacao(time, elencoAtual)
             val maisFrago = escalacao.titulares.minByOrNull { it.jogador.forca } ?: continue
             val posNecessaria = maisFrago.posicaoUsada
 
-            val orcamentoReforco = (time.saldo * 0.30).toLong()
+            val orcamentoReforco = (time.saldo * 0.25).toLong()
             if (orcamentoReforco <= 0L) continue
 
             val candidato = livres
+                .filter { it.id !in jogadoresMovidos }
                 .filter { it.posicao == posNecessaria || it.posicaoSecundaria == posNecessaria }
                 .filter { it.forca > maisFrago.jogador.forca }
                 .filter { it.valorMercado <= orcamentoReforco }
@@ -1338,6 +3211,7 @@ class GameRepository @Inject constructor(
                     contratoAnos    = 2
                 ), temporadaId, mes
             )
+            jogadoresMovidos.add(candidato.id)
         }
     }
 
@@ -1375,14 +3249,12 @@ class GameRepository @Inject constructor(
                 if (classi.jogos < 5) return@forEachIndexed          // muito cedo para agir
                 if (classi.aproveitamento >= 0.40f) return@forEachIndexed  // desempenho aceitável
 
-                val qtd = when {
-                    classi.aproveitamento < 0.20f -> 3
-                    classi.aproveitamento < 0.30f -> 2
-                    else                          -> 1
-                }
+                // Emergencial: máximo 1 reforço livre por time por mês,
+                // independente de quão ruim esteja o desempenho.
+                val qtd = 1
 
                 val elenco = jogadorRepository.buscarDisponiveis(classi.timeId)
-                if (elenco.size >= 30) return@forEachIndexed   // elenco grande demais, não precisa
+                if (elenco.size >= 24) return@forEachIndexed   // elenco suficiente, não precisa
 
                 val time = timeRepository.buscarPorId(classi.timeId) ?: return@forEachIndexed
                 val carencias = IATimeRival.detectarCarencias(elenco, time.taticaFormacao)
@@ -1464,11 +3336,14 @@ class GameRepository @Inject constructor(
     private suspend fun simularPartidaInterna(partida: PartidaEntity) {
         val escalacaoCasa = gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFora = gerarEscalacaoIA(partida.timeForaId)
+        val campoNeutro = campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
+                       || partida.fase == "Final"
 
         val resultado = simulador.simular(
-            partidaId = partida.id,
-            casa = escalacaoCasa,
-            fora = escalacaoFora
+            partidaId   = partida.id,
+            casa        = escalacaoCasa,
+            fora        = escalacaoFora,
+            campoNeutro = campoNeutro
         )
         persistirResultado(resultado)
     }
@@ -1604,6 +3479,146 @@ class GameRepository @Inject constructor(
     ) {
         partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
         verificarEAvancarFaseCopa(copaId, anoAtual)
+    }
+
+    /** Persiste pênaltis da UI interativa e avança a fase do torneio Argentine (jogo único). */
+    suspend fun persistirResultadoPenaltisJogadorArgentina(
+        resultado: ResultadoPenaltis,
+        argCampeonatoId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(partidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseArgentina(argCampeonatoId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /** Simula pênaltis com cobradores do jogador e avança a fase do torneio Argentine. */
+    suspend fun simularEPersistirPenaltisJogadorArgentina(
+        argCampeonatoId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        cobradoresJogador: List<JogadorNaEscalacao>,
+        timeJogadorId: Int,
+        goleiroJogadorDefesa: Int,
+        temporadaId: Int
+    ): ResultadoPenaltis {
+        val todasPartidas = partidaDao.buscarTodasPorCampeonato(argCampeonatoId)
+        val partida = todasPartidas.firstOrNull { it.id == partidaId }
+            ?: error("Partida não encontrada ($partidaId)")
+
+        val adversarioId = if (timeJogadorId == partida.timeCasaId) partida.timeForaId else partida.timeCasaId
+        val escAdversario = gerarEscalacaoIA(adversarioId)
+        val cobraAdversario = escAdversario.titulares
+            .filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+            .sortedByDescending { it.jogador.finalizacao }
+            .take(5).let { lista ->
+                lista.map { it.jogador.id to it.jogador.nomeAbreviado } to
+                        lista.map { it.jogador.finalizacao }
+            }
+        val gkAdversarioDefesa = escAdversario.titulares
+            .firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }?.jogador?.defesa ?: 70
+
+        val cobraJogadorPairs = cobradoresJogador.map { it.jogador.id to it.jogador.nomeAbreviado }
+        val finJogador        = cobradoresJogador.map { it.jogador.finalizacao }
+
+        val resultado: ResultadoPenaltis = if (timeJogadorId == partida.timeCasaId) {
+            simulador.simularDisputaPenaltis(
+                timeCasaId            = partida.timeCasaId,
+                cobraCasa             = cobraJogadorPairs,
+                cobraFinalizacaoCasa  = finJogador,
+                goleiroCasaDefesa     = goleiroJogadorDefesa,
+                timeForaId            = partida.timeForaId,
+                cobraFora             = cobraAdversario.first,
+                cobraFinalizacaoFora  = cobraAdversario.second,
+                goleiroForaDefesa     = gkAdversarioDefesa
+            )
+        } else {
+            simulador.simularDisputaPenaltis(
+                timeCasaId            = partida.timeCasaId,
+                cobraCasa             = cobraAdversario.first,
+                cobraFinalizacaoCasa  = cobraAdversario.second,
+                goleiroCasaDefesa     = gkAdversarioDefesa,
+                timeForaId            = partida.timeForaId,
+                cobraFora             = cobraJogadorPairs,
+                cobraFinalizacaoFora  = finJogador,
+                goleiroForaDefesa     = goleiroJogadorDefesa
+            )
+        }
+
+        partidaDao.registrarPenaltis(partida.id, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseArgentina(argCampeonatoId, anoAtual, timeJogadorId, temporadaId)
+        return resultado
+    }
+
+    /** Simula e persiste pênaltis para a Supercopa (jogo único). */
+    suspend fun simularEPersistirPenaltisJogadorSupercopa(
+        supercopaId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        cobradoresJogador: List<JogadorNaEscalacao>,
+        timeJogadorId: Int,
+        goleiroJogadorDefesa: Int,
+        temporadaId: Int
+    ): ResultadoPenaltis {
+        val partida = partidaDao.buscarPorId(partidaId)
+            ?: error("Partida não encontrada ($partidaId)")
+        val adversarioId = if (timeJogadorId == partida.timeCasaId) partida.timeForaId else partida.timeCasaId
+        val escAdversario = gerarEscalacaoIA(adversarioId)
+        val naoGoleiros = escAdversario.titulares
+            .filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+            .sortedByDescending { it.jogador.finalizacao }
+            .take(5)
+        val cobraAdversario = naoGoleiros.map { it.jogador.id to it.jogador.nomeAbreviado } to
+                naoGoleiros.map { it.jogador.finalizacao }
+        val gkAdversarioDefesa = escAdversario.titulares
+            .firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }?.jogador?.defesa ?: 70
+
+        val cobraJogadorPairs = cobradoresJogador.map { it.jogador.id to it.jogador.nomeAbreviado }
+        val finJogador        = cobradoresJogador.map { it.jogador.finalizacao }
+
+        val resultado: ResultadoPenaltis
+        if (timeJogadorId == partida.timeCasaId) {
+            resultado = simulador.simularDisputaPenaltis(
+                timeCasaId           = partida.timeCasaId,
+                cobraCasa            = cobraJogadorPairs,
+                cobraFinalizacaoCasa = finJogador,
+                goleiroCasaDefesa    = goleiroJogadorDefesa,
+                timeForaId           = partida.timeForaId,
+                cobraFora            = cobraAdversario.first,
+                cobraFinalizacaoFora = cobraAdversario.second,
+                goleiroForaDefesa    = gkAdversarioDefesa
+            )
+        } else {
+            resultado = simulador.simularDisputaPenaltis(
+                timeCasaId           = partida.timeCasaId,
+                cobraCasa            = cobraAdversario.first,
+                cobraFinalizacaoCasa = cobraAdversario.second,
+                goleiroCasaDefesa    = gkAdversarioDefesa,
+                timeForaId           = partida.timeForaId,
+                cobraFora            = cobraJogadorPairs,
+                cobraFinalizacaoFora = finJogador,
+                goleiroForaDefesa    = goleiroJogadorDefesa
+            )
+        }
+
+        partidaDao.registrarPenaltis(partida.id, resultado.golsCasa, resultado.golsFora)
+        verificarEEncerrarSupercopa(supercopaId, anoAtual, timeJogadorId, temporadaId)
+        return resultado
+    }
+
+    /** Persiste o resultado interativo de pênaltis e encerra a Supercopa. */
+    suspend fun persistirResultadoPenaltisJogadorSupercopa(
+        resultado: ResultadoPenaltis,
+        supercopaId: Int,
+        anoAtual: Int,
+        partidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(partidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEEncerrarSupercopa(supercopaId, anoAtual, timeJogadorId, temporadaId)
     }
 
     private suspend fun gerarEscalacaoIA(timeId: Int): Escalacao {
@@ -1865,4 +3880,277 @@ class GameRepository @Inject constructor(
 
     private suspend fun buscarCampeonatoIdDaPartida(partidaId: Int): Int? =
         partidaDao.buscarCampeonatoId(partidaId)
+
+    /**
+     * Nas janelas de transferência (meses 1, 2, 10, 11, 12), times da IA mais fortes
+     * compram jogadores de outros times da IA (não do usuário).
+     *
+     * Regras:
+     *  - Compradores: times ordenados por reputação (melhores primeiro)
+     *  - Alvo: jogadores de outros times da IA cujo nível de força seja compatível
+     *    com o time comprador (±10 de força média)
+     *  - Preço ofertado: 90%–110% do valor de mercado do jogador alvo
+     *  - O time vendedor recebe o valor e o jogador é transferido
+     *  - Cada time da IA executa no máximo 1 compra de outro time da IA por ciclo
+     */
+    private suspend fun executarTransferenciasIAParaIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+        val todos = timeRepository.buscarTodosOrdenadosPorReputacao()
+        val timesIA = todos.filter { it.id != playerTimeId }
+        if (timesIA.size < 2) return
+
+        val probabilidade = if (mes <= 2) 0.30f else 0.15f
+
+        // Jogadores já transferidos nesta rodada — impede que o mesmo jogador
+        // seja negociado por mais de um time dentro do mesmo fechamento mensal.
+        val jogadoresMovidos = mutableSetOf<Int>()
+
+        for (comprador in timesIA) {
+            if (kotlin.random.Random.nextFloat() >= probabilidade) continue
+
+            val orcamento = (comprador.saldo * 0.20).toLong()
+            if (orcamento <= 0L) continue
+
+            val elencoComprador = jogadorRepository.buscarDisponiveis(comprador.id)
+            if (elencoComprador.size >= 26) continue
+            val forcaMediaComprador = if (elencoComprador.isNotEmpty())
+                elencoComprador.map { it.forca }.average().toInt() else 50
+
+            val candidatos = timesIA
+                .filter { it.id != comprador.id }
+                .flatMap { timeVendedor ->
+                    val elencoVendedor = jogadorRepository.buscarDisponiveis(timeVendedor.id)
+                    if (elencoVendedor.size <= 18) return@flatMap emptyList()
+                    elencoVendedor
+                        .filter { !it.lesionado && !it.categoriaBase }
+                        .filter { it.id !in jogadoresMovidos }  // não negociar jogador já transferido
+                        .filter { it.forca in (forcaMediaComprador - 8)..(forcaMediaComprador + 12) }
+                        .filter { (it.valorMercado * 0.90).toLong() <= orcamento }
+                        .map { jogador -> Pair(timeVendedor.id, jogador) }
+                }
+            if (candidatos.isEmpty()) continue
+
+            val (vendedorId, alvo) = candidatos
+                .sortedByDescending { (_, j) -> j.forca }
+                .firstOrNull() ?: continue
+
+            val valorOferta = (alvo.valorMercado * kotlin.random.Random.nextDouble(0.90, 1.10)).toLong()
+                .coerceAtLeast(1L)
+
+            timeRepository.debitarSaldo(comprador.id, valorOferta)
+            timeRepository.creditarSaldo(vendedorId, valorOferta)
+            jogadorRepository.realizarTransferencia(
+                OfertaTransferencia(
+                    jogadorId       = alvo.id,
+                    timeCompradorId = comprador.id,
+                    timeVendedorId  = vendedorId,
+                    valor           = valorOferta,
+                    salarioProposto = alvo.salario,
+                    contratoAnos    = 3
+                ),
+                temporadaId, mes
+            )
+            jogadoresMovidos.add(alvo.id)
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Propostas de trabalho (clube → treinador)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Fluxo reativo de notificações de proposta de clube (pendentes + encerradas não lidas). */
+    fun observarPropostasClube(): Flow<List<PropostaClubeEntity>> =
+        propostaClubeDao.observeNotificacoes()
+
+    /** Fluxo reativo do contador de propostas de clube não lidas. */
+    fun observarContadorPropostasClube(): Flow<Int> =
+        propostaClubeDao.observeContadorNaoLidas()
+
+    /** Marca uma proposta de clube como lida. */
+    suspend fun marcarPropostaClubeComoLida(id: Int) =
+        propostaClubeDao.marcarLida(id)
+
+    /** Marca todas as encerradas como lidas de uma vez. */
+    suspend fun marcarTodasPropostasClubeLidas() =
+        propostaClubeDao.marcarTodasEncerradasLidas()
+
+    /** Recusa a proposta de clube. */
+    suspend fun recusarPropostaClube(id: Int) {
+        propostaClubeDao.atualizarStatus(id, StatusPropostaClube.RECUSADA)
+    }
+
+    /**
+     * Aceita a proposta de clube: o jogador passa a controlar [novoTimeId].
+     * Atualiza os flags controladoPorJogador em ambos os times.
+     */
+    suspend fun aceitarPropostaClube(id: Int, timeAtualId: Int, novoTimeId: Int) {
+        propostaClubeDao.atualizarStatus(id, StatusPropostaClube.ACEITA)
+        // Recusa todas as outras propostas pendentes
+        propostaClubeDao.buscarPendentes().forEach { p ->
+            if (p.id != id) propostaClubeDao.atualizarStatus(p.id, StatusPropostaClube.RECUSADA)
+        }
+        val timeAtual = db.timeDao().buscarPorId(timeAtualId)
+        if (timeAtual != null) {
+            db.timeDao().atualizar(timeAtual.copy(controladoPorJogador = false))
+        }
+        val novoTime = db.timeDao().buscarPorId(novoTimeId)
+        if (novoTime != null) {
+            db.timeDao().atualizar(novoTime.copy(controladoPorJogador = true))
+        }
+    }
+
+    /**
+     * Retorna informações detalhadas de um clube para exibição no painel de proposta.
+     * Inclui: saldo, força média do elenco, capacidade do estádio e resultados da temporada passada.
+     */
+    suspend fun buscarInfoPropostaClube(timeId: Int, temporadaEncerradaId: Int): InfoPropostaClube? {
+        val time = timeRepository.buscarPorId(timeId) ?: return null
+        val jogadores = db.jogadorDao().buscarDisponiveisPorTime(timeId)
+        val forcaMedia = if (jogadores.isNotEmpty()) jogadores.map { it.forca }.average().toFloat() else 0f
+
+        // Campeonatos da temporada recém-encerrada em que o time participou
+        val campeonatosTemporada = db.campeonatoDao().buscarPorTemporadaId(temporadaEncerradaId)
+        val resultados = mutableListOf<ResultadoTemporadaClube>()
+        for (camp in campeonatosTemporada) {
+            val participantes = db.campeonatoDao().buscarIdsParticipantes(camp.id)
+            if (timeId !in participantes) continue
+            val tabela = classificacaoDao.buscarTabelaOrdenada(camp.id)
+            val posicao = tabela.indexOfFirst { it.timeId == timeId }.takeIf { it >= 0 }?.plus(1)
+            val classif = tabela.firstOrNull { it.timeId == timeId }
+            if (classif != null) {
+                resultados.add(
+                    ResultadoTemporadaClube(
+                        nomeCampeonato = camp.nome,
+                        tipoCampeonato = camp.tipo,
+                        posicao = posicao,
+                        vitorias = classif.vitorias,
+                        empates = classif.empates,
+                        derrotas = classif.derrotas,
+                        pontos = classif.pontos,
+                        jogos = classif.jogos
+                    )
+                )
+            }
+        }
+
+        return InfoPropostaClube(
+            timeId            = time.id,
+            nomeClube         = time.nome,
+            nivel             = time.nivel,
+            divisao           = time.divisao,
+            escudoRes         = time.escudoRes,
+            saldo             = time.saldo,
+            forcaMediaElenco  = forcaMedia,
+            capacidadeEstadio = time.estadioCapacidade,
+            resultadosTemporada = resultados
+        )
+    }
+
+    /**
+     * Gera propostas de trabalho de outros clubes com base nos resultados da temporada.
+     * Chamado ao final de cada temporada, antes de criar a nova.
+     *
+     * Regras:
+     * - Campeão da copa nacional OU liga nacional → clubes nivel 8–10 podem oferecer
+     * - Top 5 na liga (sem título) → clubes nivel 6–9
+     * - 6º ao 11º na liga → clubes nivel 5–7
+     * - Fora das condições acima → clubes nivel ≤ 5
+     */
+    suspend fun gerarPropostasDeClube(
+        campeonatoLigaId: Int,
+        copaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        if (timeJogadorId <= 0) return
+        // Limpa propostas anteriores
+        propostaClubeDao.limparTodas()
+
+        // Determina posição na liga
+        val tabelaLiga = classificacaoDao.buscarTabelaOrdenada(campeonatoLigaId)
+        val posicaoLiga = tabelaLiga.indexOfFirst { it.timeId == timeJogadorId }.takeIf { it >= 0 }?.plus(1)
+
+        // Verifica se ganhou a copa nacional
+        val campeaoCopa = if (copaId > 0) classificacaoDao.buscarTop2(copaId).firstOrNull()?.timeId else null
+        val ganhouCopa = campeaoCopa == timeJogadorId
+
+        // Verifica se ganhou a liga
+        val campeaoLiga = tabelaLiga.firstOrNull()?.timeId
+        val ganhouLiga = campeaoLiga == timeJogadorId
+
+        // Define faixa de nível dos clubes que podem oferecer
+        val (nivelMin, nivelMax) = when {
+            ganhouCopa || ganhouLiga           -> 8 to 10
+            posicaoLiga != null && posicaoLiga <= 5  -> 6 to 9
+            posicaoLiga != null && posicaoLiga <= 11 -> 5 to 7
+            else                                     -> 1 to 5
+        }
+
+        val todosOsTimes = db.timeDao().buscarTodos()
+
+        // Determina as divisões do mesmo país do jogador
+        val timeJogador = db.timeDao().buscarPorId(timeJogadorId)
+        val divisoesDoMesmoPais: IntRange = when (timeJogador?.divisao) {
+            in 1..4  -> 1..4    // Brasil
+            in 5..6  -> 5..6    // Argentina
+            in 9..10 -> 9..10   // Uruguai
+            else     -> 1..4
+        }
+
+        // Candidatos da mesma liga do jogador
+        val candidatosMesmaLiga = todosOsTimes.filter { time ->
+            !time.controladoPorJogador &&
+            time.id != timeJogadorId &&
+            time.nivel in nivelMin..nivelMax &&
+            time.divisao in divisoesDoMesmoPais
+        }.shuffled()
+
+        // Candidatos de outras ligas/países
+        val candidatosOutrasLigas = todosOsTimes.filter { time ->
+            !time.controladoPorJogador &&
+            time.id != timeJogadorId &&
+            time.nivel in nivelMin..nivelMax &&
+            time.divisao !in divisoesDoMesmoPais
+        }.shuffled()
+
+        // Garante ao menos 1 proposta da própria liga e 1 de outra liga
+        val propostasParaInserir = mutableListOf<TimeEntity>()
+        candidatosMesmaLiga.firstOrNull()?.let { propostasParaInserir.add(it) }
+        candidatosOutrasLigas.firstOrNull()?.let { propostasParaInserir.add(it) }
+
+        propostasParaInserir.forEach { time ->
+            propostaClubeDao.inserir(
+                PropostaClubeEntity(
+                    timeOfertanteId = time.id,
+                    temporadaId     = temporadaId
+                )
+            )
+        }
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+//  Modelos de dados para propostas de clube
+// ─────────────────────────────────────────────────────────────────────
+
+data class ResultadoTemporadaClube(
+    val nomeCampeonato: String,
+    val tipoCampeonato: br.com.managerfoot.data.database.entities.TipoCampeonato,
+    val posicao: Int?,
+    val vitorias: Int,
+    val empates: Int,
+    val derrotas: Int,
+    val pontos: Int,
+    val jogos: Int
+)
+
+data class InfoPropostaClube(
+    val timeId: Int,
+    val nomeClube: String,
+    val nivel: Int,
+    val divisao: Int,
+    val escudoRes: String,
+    val saldo: Long,
+    val forcaMediaElenco: Float,
+    val capacidadeEstadio: Int,
+    val resultadosTemporada: List<ResultadoTemporadaClube>
+)

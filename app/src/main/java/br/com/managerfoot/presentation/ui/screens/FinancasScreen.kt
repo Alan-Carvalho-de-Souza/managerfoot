@@ -274,7 +274,7 @@ private fun ReceitasTab(
         }
         if (premiacoes.isNotEmpty()) {
             item { SectionTitle("Premiações") }
-            items(premiacoes) { f -> SimpleFinancaRow("Prêmio de campeão", NOMES_MESES_FIN.getOrElse(f.mes) { "—" }, f.receitaPremiacoes, positivo = true) }
+            items(premiacoes) { f -> SimpleFinancaRow(f.descricaoPremio ?: "Prêmio de campeão", NOMES_MESES_FIN.getOrElse(f.mes) { "—" }, f.receitaPremiacoes, positivo = true) }
         }
         if (partidas.isEmpty() && vendas.isEmpty() && patrocinios.isEmpty() && premiacoes.isEmpty()) {
             item { EmptyFinancas("Nenhuma receita registrada ainda") }
@@ -349,7 +349,8 @@ private fun SaldoCaixaTab(
     val totalBilheteria = partidas.sumOf { it.receitaPartida ?: 0L }
     val totalPatrocinio = historico.sumOf { it.receitaPatrocinio }
     val totalVendas = vendas.sumOf { it.valor }
-    val totalEntradas = totalBilheteria + totalPatrocinio + totalVendas
+    val totalPremiacoes = historico.sumOf { it.receitaPremiacoes }
+    val totalEntradas = totalBilheteria + totalPatrocinio + totalVendas + totalPremiacoes
 
     val totalSalarios = historico.sumOf { it.despesaSalarios }
     val totalAmpliacoes = historico.sumOf { it.despesaAmpliacaoEstadio }
@@ -379,6 +380,9 @@ private fun SaldoCaixaTab(
                     BalancoLinha("Bilheteria", totalBilheteria, positivo = true)
                     BalancoLinha("Patrocínio", totalPatrocinio, positivo = true)
                     BalancoLinha("Vendas de jogadores", totalVendas, positivo = true)
+                    if (totalPremiacoes > 0) {
+                        BalancoLinha("Premiações", totalPremiacoes, positivo = true)
+                    }
                     BalancoSubtotal("Subtotal entradas", totalEntradas, positivo = true)
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)

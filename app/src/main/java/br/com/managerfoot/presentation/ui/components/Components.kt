@@ -130,13 +130,20 @@ fun TimeHeaderCard(
     posicao: Int = 0,
     rodadaAtual: Int = 0,
     mes: Int = 0,
+    dia: Int = 0,
     ano: Int = 0,
     forma: List<Resultado> = emptyList()
 ) {
     val serieLabel = when (time.divisao) {
-        1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; 5 -> "Primera Div."; else -> "Série"
+        1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"
+        5 -> "Primera Div."; 6 -> "Segunda Div. (ARG)"
+        in 11..12 -> "Primera Div. (URU)"; in 13..16 -> "Segunda Div. (URU)"
+        else -> "Série"
     }
-    val periodoLabel = if (mes in 1..12 && ano > 0) "${NOMES_MESES_HEADER[mes]} $ano" else ""
+    val periodoLabel = if (mes in 1..12 && ano > 0) {
+        if (dia > 0) "$dia ${NOMES_MESES_HEADER[mes]} $ano"
+        else "${NOMES_MESES_HEADER[mes]} $ano"
+    } else ""
     val subtitle = buildString {
         append(serieLabel)
         if (posicao > 0) append(" · ${posicao}º")
@@ -588,6 +595,7 @@ fun MatchCard(
     escudoFora: String = "",
     competicao: String = "",
     rodada: Int,
+    dataJogo: String = "",
     enabled: Boolean = true,
     onSimular: () -> Unit,
     onEscalacao: (() -> Unit)? = null,
@@ -595,9 +603,15 @@ fun MatchCard(
 ) {
     val infoLinha = buildString {
         if (competicao.isNotBlank()) append(competicao)
-        if (rodada > 0) {
+        // Para fases de copa o "competicao" já vem com formato "Copa — Fase",
+        // então só adiciona "Rodada N" quando é campeonato regular.
+        if (rodada > 0 && !competicao.contains("—")) {
             if (isNotEmpty()) append(" · ")
             append("Rodada $rodada")
+        }
+        if (dataJogo.isNotBlank()) {
+            if (isNotEmpty()) append(" · ")
+            append(dataJogo)
         }
     }
     Card(
@@ -1127,6 +1141,8 @@ fun StandingsRow(
     empates: Int,
     derrotas: Int,
     saldoGols: Int,
+    golsPro: Int? = null,
+    golsContra: Int? = null,
     forma: List<Resultado> = emptyList(),
     zonaColor: Color = Color.Transparent,
     destaque: Boolean = false,
@@ -1180,6 +1196,8 @@ fun StandingsRow(
             StandingsCell(vitorias.toString())
             StandingsCell(empates.toString())
             StandingsCell(derrotas.toString())
+            if (golsPro != null) StandingsCell(golsPro.toString())
+            if (golsContra != null) StandingsCell(golsContra.toString())
             StandingsCell(
                 text = if (saldoGols >= 0) "+$saldoGols" else saldoGols.toString(),
                 color = when {
@@ -1336,10 +1354,12 @@ fun PosicaoBadge(
 
 fun formatarSaldo(centavos: Long): String {
     val reais = centavos / 100.0
+    val sign = if (reais < 0) "-" else ""
+    val abs = kotlin.math.abs(reais)
     return when {
-        reais >= 1_000_000_000 -> "R$ %.2f bi".format(reais / 1_000_000_000)
-        reais >= 1_000_000     -> "R$ %.1f M".format(reais / 1_000_000)
-        reais >= 1_000         -> "R$ %.0f mil".format(reais / 1_000)
-        else                   -> "R$ %.0f".format(reais)
+        abs >= 1_000_000_000 -> "${sign}R$ %.2f bi".format(abs / 1_000_000_000)
+        abs >= 1_000_000     -> "${sign}R$ %.1f M".format(abs / 1_000_000)
+        abs >= 1_000         -> "${sign}R$ %.0f mil".format(abs / 1_000)
+        else                 -> "${sign}R$ %.0f".format(abs)
     }
 }

@@ -48,6 +48,7 @@ data class FinancaEntity(
     val receitaPatrocinio: Long = 0,
     val receitaTransferencias: Long = 0,
     val receitaPremiacoes: Long = 0,
+    val descricaoPremio: String? = null,   // ex: "Série A — Campeão" ou "Copa do Brasil — Vice"
     val despesaSalarios: Long = 0,
     val despesaTransferencias: Long = 0,
     val despesaInfraestrutura: Long = 0,

@@ -34,10 +34,12 @@ enum class TipoCampeonato {
     NACIONAL_DIVISAO4,
     ESTADUAL,
     COPA_NACIONAL,          // Copa do Brasil
+    SUPERCOPA,              // Supercopa Rei (campeão brasileiro x campeão da copa)
     CONTINENTAL,            // Libertadores / Copa Sul-Americana
     MUNDIAL_CLUBES,
     SELECOES,
-    EXTRANGEIRO_DIVISAO1    // Primera División Argentina (e futuros)
+    EXTRANGEIRO_DIVISAO1,   // Primera División Argentina (e futuros)
+    EXTRANGEIRO_DIVISAO2    // Segunda División Argentina (Primera Nacional)
 }
 
 enum class FormatoCampeonato {
