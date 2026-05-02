@@ -1,16 +1,15 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -20,10 +19,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.dao.ArtilheiroDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
 import br.com.managerfoot.domain.model.Time
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
+import br.com.managerfoot.presentation.ui.components.SectionTitle
 import br.com.managerfoot.presentation.ui.components.TeamBadge
+import br.com.managerfoot.presentation.ui.theme.*
 import br.com.managerfoot.presentation.viewmodel.ConfrontoStats
 import br.com.managerfoot.presentation.viewmodel.ConfrontoViewModel
 
+// ─────────────────────────────────────────────────────────────
+//  ConfrontoScreen — Tactical Dark
+//  Histórico de confrontos entre dois times
+// ─────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfrontoScreen(
@@ -38,123 +44,116 @@ fun ConfrontoScreen(
     val timeB by vm.timeBSelecionado.collectAsState()
     val stats by vm.stats.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Histórico de Confrontos") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        ScreenTopBar(
+            titulo = "Confrontos",
+            subtitulo = "Histórico entre dois clubes",
+            onVoltar = onVoltar
+        )
+
+        // ── Seletores de time ──────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            TimeDropdownMenu(
+                label = "Time A",
+                times = todos,
+                selecionado = timeA,
+                onSelecionar = { vm.selecionarTimeA(it) },
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "vs",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = GreenElectric,
+                modifier = Modifier.padding(top = Spacing.sm)
+            )
+            TimeDropdownMenu(
+                label = "Time B",
+                times = todos,
+                selecionado = timeB,
+                onSelecionar = { vm.selecionarTimeB(it) },
+                modifier = Modifier.weight(1f)
             )
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-        ) {
-            Spacer(Modifier.height(12.dp))
 
-            // Seletores de time
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TimeDropdownMenu(
-                    label = "Time A",
-                    times = todos,
-                    selecionado = timeA,
-                    onSelecionar = { vm.selecionarTimeA(it) },
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "vs",
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-                TimeDropdownMenu(
-                    label = "Time B",
-                    times = todos,
-                    selecionado = timeB,
-                    onSelecionar = { vm.selecionarTimeB(it) },
-                    modifier = Modifier.weight(1f)
-                )
+        when {
+            timeA == null || timeB == null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(Spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Selecione dois times para ver o histórico de confrontos",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            when {
-                timeA == null || timeB == null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Selecione dois times para ver o histórico de confrontos",
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(32.dp)
-                        )
-                    }
+            stats == null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = GreenElectric)
                 }
-
-                stats == null -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+            }
+            stats!!.partidas.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(Spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Nenhuma partida encontrada entre ${timeA!!.nome} e ${timeB!!.nome}",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-
-                stats!!.partidas.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Nenhuma partida encontrada entre ${timeA!!.nome} e ${timeB!!.nome}",
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(32.dp)
-                        )
+            }
+            else -> {
+                val s = stats!!
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        horizontal = Spacing.md,
+                        vertical = Spacing.sm
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    item { RetrospectoCard(timeA!!, timeB!!, s) }
+                    item { GolsCard(timeA!!, timeB!!, s) }
+                    item { SequenciasCard(timeA!!, timeB!!, s) }
+                    if (s.artilheiros.isNotEmpty()) {
+                        item { ArtilheirosConfrontoCard(s.artilheiros) }
                     }
-                }
-
-                else -> {
-                    val s = stats!!
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
-                    ) {
-                        item { RetrospectCard(timeA!!, timeB!!, s) }
-                        item { GolsCard(timeA!!, timeB!!, s) }
-                        item { SequenciasCard(timeA!!, timeB!!, s) }
-                        if (s.artilheiros.isNotEmpty()) {
-                            item { ArtilheirosConfrontoCard(s.artilheiros) }
-                        }
-                        item {
-                            Text(
-                                "Partidas (${s.partidas.size})",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        items(s.partidas.reversed(), key = { it.partidaId }) { partida ->
-                            ConfrontoPartidaRow(partida, timeA!!, timeB!!)
-                        }
+                    item {
+                        Spacer(Modifier.height(Spacing.xs))
+                        SectionTitle("Partidas (${s.partidas.size})")
                     }
+                    items(s.partidas.reversed(), key = { it.partidaId }) { partida ->
+                        ConfrontoPartidaRow(partida, timeA!!, timeB!!)
+                    }
+                    item { Spacer(Modifier.height(Spacing.lg)) }
                 }
             }
         }
     }
 }
 
-// ─── Dropdown de seleção de time ──────────────────────────
-
+// ─────────────────────────────────────────────────────────────
+//  Dropdown de seleção de time (Tactical Dark)
+// ─────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeDropdownMenu(
@@ -175,22 +174,37 @@ private fun TimeDropdownMenu(
             value = selecionado?.nome ?: "",
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, fontSize = 11.sp) },
-            placeholder = { Text("Selecione", fontSize = 13.sp) },
+            label = { Text(label, fontWeight = FontWeight.SemiBold) },
+            placeholder = { Text("Selecione", style = MaterialTheme.typography.bodySmall) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            shape = RoundedCornerShape(Radius.md),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = GreenElectric,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                focusedLabelColor = GreenElectric
+            )
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
             times.forEach { time ->
+                val sel = time.id == selecionado?.id
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TeamBadge(nome = time.nome, escudoRes = time.escudoRes, size = 22.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text(time.nome, fontSize = 14.sp)
+                            Spacer(Modifier.width(Spacing.sm))
+                            Text(
+                                time.nome,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                color = if (sel) GreenElectric else MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     },
                     onClick = {
@@ -203,24 +217,29 @@ private fun TimeDropdownMenu(
     }
 }
 
-// ─── Card de retrospecto geral ────────────────────────────
-
+// ─────────────────────────────────────────────────────────────
+//  Card de retrospecto geral (V-E-D + escudos grandes)
+// ─────────────────────────────────────────────────────────────
 @Composable
-private fun RetrospectCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
+private fun RetrospectoCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, GreenMid)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.md),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "Retrospecto geral · ${stats.partidas.size} partidas",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                "RETROSPECTO GERAL · ${stats.partidas.size} PARTIDAS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.md))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -232,59 +251,39 @@ private fun RetrospectCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
                     modifier = Modifier.weight(1f)
                 ) {
                     TeamBadge(nome = timeA.nome, escudoRes = timeA.escudoRes, size = 54.dp)
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     Text(
                         timeA.nome,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
-                        fontSize = 13.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
                 // Placar V - E - D (perspectiva de A)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalAlignment = Alignment.Bottom
                     ) {
-                        Text(
-                            "${stats.vitoriasA}",
-                            fontSize = 38.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        ContagemBig(
+                            valor = stats.vitoriasA,
+                            label = "V",
+                            cor = PromotionGreen
                         )
-                        Text(
-                            "-",
-                            fontSize = 24.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(bottom = 6.dp)
+                        ContagemBig(
+                            valor = stats.empates,
+                            label = "E",
+                            cor = AmberAccent
                         )
-                        Text(
-                            "${stats.empates}",
-                            fontSize = 38.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        ContagemBig(
+                            valor = stats.vitoriasB,
+                            label = "D",
+                            cor = RelegationRed
                         )
-                        Text(
-                            "-",
-                            fontSize = 24.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-                        Text(
-                            "${stats.vitoriasB}",
-                            fontSize = 38.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Text("V", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
-                        Text("E", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
-                        Text("D", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
                     }
                 }
 
@@ -294,15 +293,15 @@ private fun RetrospectCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
                     modifier = Modifier.weight(1f)
                 ) {
                     TeamBadge(nome = timeB.nome, escudoRes = timeB.escudoRes, size = 54.dp)
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     Text(
                         timeB.nome,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
-                        fontSize = 13.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -310,75 +309,109 @@ private fun RetrospectCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
     }
 }
 
-// ─── Card de gols ─────────────────────────────────────────
+@Composable
+private fun ContagemBig(valor: Int, label: String, cor: androidx.compose.ui.graphics.Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "$valor",
+            fontSize = 36.sp,
+            fontWeight = FontWeight.Bold,
+            color = cor
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = cor.copy(alpha = 0.7f),
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
 
+// ─────────────────────────────────────────────────────────────
+//  Card de gols
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun GolsCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "Gols no confronto",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            SectionTitle("Gols no confronto")
+            Spacer(Modifier.height(Spacing.sm))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "${stats.golsA}",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        timeA.nome,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                GolsColuna(
+                    nome = timeA.nome,
+                    escudoRes = timeA.escudoRes,
+                    gols = stats.golsA,
+                    modifier = Modifier.weight(1f)
+                )
                 Text(
                     "×",
-                    fontSize = 20.sp,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "${stats.golsB}",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        timeB.nome,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                GolsColuna(
+                    nome = timeB.nome,
+                    escudoRes = timeB.escudoRes,
+                    gols = stats.golsB,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
 }
 
-// ─── Card de sequências ───────────────────────────────────
+@Composable
+private fun GolsColuna(
+    nome: String,
+    escudoRes: String,
+    gols: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
+    ) {
+        TeamBadge(nome = nome, escudoRes = escudoRes, size = 28.dp)
+        Text(
+            "$gols",
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            nome,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
 
+// ─────────────────────────────────────────────────────────────
+//  Card de sequências
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun SequenciasCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "Maiores sequências",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            SectionTitle("Maiores sequências")
+            Spacer(Modifier.height(Spacing.sm))
             SequenciaLinha(
                 titulo = "Vitórias consecutivas",
                 nomeA = timeA.nome,
@@ -386,9 +419,10 @@ private fun SequenciasCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
                 nomeB = timeB.nome,
                 valB = stats.maiorSequenciaVitoriasB
             )
-            Spacer(Modifier.height(10.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                modifier = Modifier.padding(vertical = Spacing.sm)
+            )
             SequenciaLinha(
                 titulo = "Invencibilidade (sem derrota)",
                 nomeA = timeA.nome,
@@ -402,80 +436,74 @@ private fun SequenciasCard(timeA: Time, timeB: Time, stats: ConfrontoStats) {
 
 @Composable
 private fun SequenciaLinha(titulo: String, nomeA: String, valA: Int, nomeB: String, valB: Int) {
-    Text(titulo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(6.dp))
+    Text(
+        titulo,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(Modifier.height(Spacing.xs))
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(horizontalAlignment = Alignment.Start, modifier = Modifier.weight(1f)) {
-            Text("$valA jogo${if (valA != 1) "s" else ""}", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text(nomeA, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "$valA jogo${if (valA != 1) "s" else ""}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                nomeA,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
-            Text("$valB jogo${if (valB != 1) "s" else ""}", fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
-            Text(nomeB, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+            Text(
+                "$valB jogo${if (valB != 1) "s" else ""}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                nomeB,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
-// ─── Card de artilheiros do confronto ─────────────────────
-
+// ─────────────────────────────────────────────────────────────
+//  Card de artilheiros (com pódio Gold/Silver/Bronze)
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun ArtilheirosConfrontoCard(artilheiros: List<ArtilheiroDto>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "Artilheiros do confronto",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(10.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            SectionTitle("Artilheiros do confronto")
+            Spacer(Modifier.height(Spacing.sm))
             artilheiros.forEachIndexed { idx, a ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${idx + 1}",
-                        modifier = Modifier.width(24.dp),
-                        textAlign = TextAlign.Center,
-                        fontSize = 13.sp,
-                        fontWeight = if (idx < 3) FontWeight.Bold else FontWeight.Normal,
-                        color = when (idx) {
-                            0 -> MaterialTheme.colorScheme.primary
-                            1 -> MaterialTheme.colorScheme.secondary
-                            2 -> MaterialTheme.colorScheme.tertiary
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        a.nomeAbrev,
-                        modifier = Modifier.weight(1f),
-                        fontSize = 13.sp,
-                        fontWeight = if (idx < 3) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    TeamBadge(nome = a.nomeTime, escudoRes = a.escudoRes, size = 18.dp)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        a.nomeTime,
-                        modifier = Modifier.width(80.dp),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "${a.total} gols",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                ArtilheiroLinha(idx = idx, artilheiro = a)
+                if (idx < artilheiros.lastIndex) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                        modifier = Modifier.padding(vertical = Spacing.xxs)
                     )
                 }
             }
@@ -483,8 +511,68 @@ private fun ArtilheirosConfrontoCard(artilheiros: List<ArtilheiroDto>) {
     }
 }
 
-// ─── Linha de partida individual ──────────────────────────
+@Composable
+private fun ArtilheiroLinha(idx: Int, artilheiro: ArtilheiroDto) {
+    val (corPos, medalha) = when (idx) {
+        0 -> GoldChampion to "🥇"
+        1 -> SilverRunnerUp to "🥈"
+        2 -> BronzePlace to "🥉"
+        else -> MaterialTheme.colorScheme.onSurfaceVariant to ""
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Posição
+        Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) {
+            if (idx < 3) {
+                Text(medalha, fontSize = 16.sp)
+            } else {
+                Text(
+                    "${idx + 1}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = corPos
+                )
+            }
+        }
+        Spacer(Modifier.width(Spacing.sm))
+        // Nome
+        Text(
+            artilheiro.nomeAbrev,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (idx < 3) FontWeight.Bold else FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        // Time
+        TeamBadge(nome = artilheiro.nomeTime, escudoRes = artilheiro.escudoRes, size = 18.dp)
+        Spacer(Modifier.width(Spacing.xs))
+        Text(
+            artilheiro.nomeTime,
+            modifier = Modifier.width(80.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        // Total
+        Text(
+            "${artilheiro.total} gols",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
 
+// ─────────────────────────────────────────────────────────────
+//  Linha de partida individual (com badge V/E/D)
+// ─────────────────────────────────────────────────────────────
 @Composable
 private fun ConfrontoPartidaRow(
     partida: ConfrontoPartidaDto,
@@ -496,33 +584,36 @@ private fun ConfrontoPartidaRow(
     val golsB = if (aEhCasa) partida.golsFora else partida.golsCasa
 
     val (labelResultado, corResultado) = when {
-        golsA > golsB -> "V" to Color(0xFF388E3C)
-        golsA < golsB -> "D" to MaterialTheme.colorScheme.error
-        else          -> "E" to MaterialTheme.colorScheme.secondary
+        golsA > golsB -> "V" to PromotionGreen
+        golsA < golsB -> "D" to RelegationRed
+        else          -> "E" to AmberAccent
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, corResultado.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Badge V / E / D
             Surface(
-                color = corResultado,
-                shape = RoundedCornerShape(4.dp),
-                modifier = Modifier.padding(end = 10.dp)
+                color = corResultado.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(Radius.sm),
+                border = BorderStroke(0.5.dp, corResultado.copy(alpha = 0.6f)),
+                modifier = Modifier.padding(end = Spacing.sm)
             ) {
                 Text(
                     labelResultado,
-                    color = Color.White,
+                    color = corResultado,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 4.dp)
                 )
             }
 
@@ -530,28 +621,30 @@ private fun ConfrontoPartidaRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     partida.nomeCampeonato,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     "Rodada ${partida.rodada} · ${if (aEhCasa) "Casa" else "Fora"}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Placar com badges
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 TeamBadge(nome = timeA.nome, escudoRes = timeA.escudoRes, size = 22.dp)
                 Text(
                     "$golsA × $golsB",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 TeamBadge(nome = timeB.nome, escudoRes = timeB.escudoRes, size = 22.dp)
             }
