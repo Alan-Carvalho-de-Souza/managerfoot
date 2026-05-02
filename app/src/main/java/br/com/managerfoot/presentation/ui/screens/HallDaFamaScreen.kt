@@ -5,13 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.painterResource
-import br.com.managerfoot.R
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,17 +18,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import br.com.managerfoot.R
 import br.com.managerfoot.data.database.entities.HallDaFamaEntity
-import br.com.managerfoot.presentation.viewmodel.HallDaFamaViewModel
+import br.com.managerfoot.presentation.ui.components.FilterChipPill
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
 import br.com.managerfoot.presentation.ui.components.TeamBadge
+import br.com.managerfoot.presentation.ui.theme.BronzePlace
+import br.com.managerfoot.presentation.ui.theme.GoldChampion
+import br.com.managerfoot.presentation.ui.theme.Radius
+import br.com.managerfoot.presentation.ui.theme.SilverRunnerUp
+import br.com.managerfoot.presentation.ui.theme.Spacing
+import br.com.managerfoot.presentation.viewmodel.HallDaFamaViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HallDaFamaScreen(
     onVoltar: () -> Unit,
@@ -38,7 +45,7 @@ fun HallDaFamaScreen(
     val hallDaFama by vm.hallDaFama.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
 
-    // Opções por país
+    // Opções por país (preservadas do dev)
     val opcoesBrasil = listOf(
         100 to "Todas",
         1 to "Série A", 2 to "Série B", 3 to "Série C", 4 to "Série D",
@@ -58,289 +65,281 @@ fun HallDaFamaScreen(
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
-            in 7..10, 17, 200  -> "Argentina"
+            in 7..10, 17, 200 -> "Argentina"
             in 11..16, 300 -> "Uruguai"
-            0              -> "Todos"
-            else           -> "Brasil"
+            0 -> "Todos"
+            else -> "Brasil"
         }
     }
     var paisSelecionado by remember(divisaoSelecionada) { mutableStateOf(paisDaDivisao) }
 
     val opcoesDaDiv = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
-        "Uruguai"   -> opcoesUruguai
-        "Brasil"    -> opcoesBrasil
-        else        -> emptyList()
+        "Uruguai" -> opcoesUruguai
+        "Brasil" -> opcoesBrasil
+        else -> emptyList()
     }
 
-    fun bandeiraPais(pais: String) = when (pais) {
-        "Brasil"    -> "\uD83C\uDDE7\uD83C\uDDF7"
-        "Argentina" -> "\uD83C\uDDE6\uD83C\uDDF7"
-        "Uruguai"   -> "\uD83C\uDDFA\uD83C\uDDFE"
-        else -> ""
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        ScreenTopBar(
+            titulo = "Hall da Fama",
+            subtitulo = if (hallDaFama.isEmpty()) "Nenhuma temporada registrada"
+                        else "${hallDaFama.size} título${if (hallDaFama.size != 1) "s" else ""} registrado${if (hallDaFama.size != 1) "s" else ""}",
+            onVoltar = onVoltar
+        )
 
-    var expandidoComp by remember { mutableStateOf(false) }
-
-    Scaffold(
-        containerColor = Color(0xFF0F1115),
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F1115), titleContentColor = Color.White, navigationIconContentColor = Color.White),
-                title = { Text("Hall da Fama") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
+        // Filtro de país (chips horizontais)
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai")
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = Spacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0F1115))
-                .padding(innerPadding)
+                .fillMaxWidth()
+                .padding(top = Spacing.md, bottom = Spacing.sm)
         ) {
-            // Chips de país
-            Row(
+            items(paises) { pais ->
+                FilterChipPill(
+                    label = if (pais == "Todos") pais else "${bandeiraPais(pais)} $pais",
+                    selected = paisSelecionado == pais,
+                    onClick = {
+                        paisSelecionado = pais
+                        val div = when (pais) {
+                            "Argentina" -> 200
+                            "Brasil" -> 100
+                            "Uruguai" -> 300
+                            else -> 0
+                        }
+                        vm.selecionarDivisao(div)
+                    }
+                )
+            }
+        }
+
+        // Filtro de competição (chips horizontais) — só quando país específico selecionado
+        if (paisSelecionado != "Todos") {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(bottom = Spacing.md)
             ) {
-                val paises = listOf("Todos", "Argentina", "Brasil", "Uruguai")
-                paises.forEach { pais ->
-                    FilterChip(
-                        selected = paisSelecionado == pais,
-                        onClick = {
-                            paisSelecionado = pais
-                            val div = when (pais) {
-                                "Argentina" -> 200; "Brasil" -> 100; "Uruguai" -> 300; else -> 0
-                            }
-                            vm.selecionarDivisao(div)
-                            expandidoComp = false
-                        },
-                        label = {
-                            Text(
-                                if (pais == "Todos") pais else "${bandeiraPais(pais)} $pais",
-                                fontSize = 12.sp
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF1C2026),
-                            selectedContainerColor = Color(0xFF1C2026),
-                            labelColor = Color(0xFF9BA1A6),
-                            selectedLabelColor = Color(0xFFD4AF37)
-                        ),
-                        border = if (paisSelecionado == pais)
-                            BorderStroke(1.dp, Color(0xFFD4AF37))
-                        else
-                            BorderStroke(1.dp, Color(0xFF2C313A))
+                items(opcoesDaDiv) { (div, label) ->
+                    FilterChipPill(
+                        label = label,
+                        selected = div == divisaoSelecionada,
+                        onClick = { vm.selecionarDivisao(div) }
                     )
                 }
             }
+        } else {
+            Spacer(Modifier.height(Spacing.sm))
+        }
 
-            // Dropdown de competição (só quando país específico selecionado)
-            if (paisSelecionado != "Todos") {
-                val labelComp = opcoesDaDiv.firstOrNull { it.first == divisaoSelecionada }?.second
-                    ?: opcoesDaDiv.firstOrNull()?.second ?: ""
-                ExposedDropdownMenuBox(
-                    expanded = expandidoComp,
-                    onExpandedChange = { expandidoComp = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    OutlinedTextField(
-                        value = labelComp,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Competição") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoComp) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expandidoComp,
-                        onDismissRequest = { expandidoComp = false }
-                    ) {
-                        opcoesDaDiv.forEach { (div, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    vm.selecionarDivisao(div)
-                                    expandidoComp = false
-                                }
-                            )
-                        }
-                    }
+        if (hallDaFama.isEmpty()) {
+            HallDaFamaEmptyState(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(Spacing.xl)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                items(hallDaFama, key = { it.id }) { entrada ->
+                    HallDaFamaCard(entrada)
                 }
-            }
-
-            if (hallDaFama.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "Nenhuma temporada concluída ainda.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(hallDaFama, key = { it.id }) { entrada ->
-                        HallDaFamaCard(entrada)
-                    }
-                }
+                item { Spacer(Modifier.height(Spacing.lg)) }
             }
         }
     }
 }
 
+// ─── Empty state ────────────────────────────────────────────
 @Composable
-private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
-    val gold          = Color(0xFFD4AF37)
-    val cardGradTop   = Color(0xFF252A32)
-    val cardGradBot   = Color(0xFF1C2026)
-    val borderColor   = Color(0xFF2C313A)
-    val textPrimary   = Color.White
-    val textSecondary = Color(0xFF9BA1A6)
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+private fun HallDaFamaEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(cardGradTop, cardGradBot)))
-                .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(GoldChampion.copy(alpha = 0.10f))
+                .border(2.dp, GoldChampion.copy(alpha = 0.4f), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = GoldChampion.copy(alpha = 0.7f),
+                modifier = Modifier.size(56.dp)
+            )
+        }
+        Spacer(Modifier.height(Spacing.lg))
+        Text(
+            "AINDA SEM CONQUISTAS",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = GoldChampion,
+            letterSpacing = 1.5.sp
+        )
+        Spacer(Modifier.height(Spacing.xs))
+        Text(
+            "Conquiste seu primeiro título para começar a construir a história do clube.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Spacing.lg)
+        )
+    }
+}
+
+// ─── Card de uma temporada ──────────────────────────────────
+@Composable
+private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.lg),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, GoldChampion.copy(alpha = 0.4f))
+    ) {
+        Box {
+            // Gradiente dourado sutil de fundo
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // ── Título ────────────────────────────────────────────
-                Text(
-                    text = "${entrada.ano} — ${entrada.nomeCampeonato.uppercase()}",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary,
-                    textAlign = TextAlign.Center,
-                    letterSpacing = 0.5.sp
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                // ── Troféu ────────────────────────────────────────────
-                Text("🏆", fontSize = 48.sp)
-
-                Spacer(Modifier.height(20.dp))
-
-                // ── Escudo do campeão (grande) ────────────────────────
-                TeamBadge(
-                    nome = entrada.campeaoNome,
-                    escudoRes = entrada.campeaoEscudo,
-                    size = 120.dp
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                // ── Nome do campeão ───────────────────────────────────
-                Text(
-                    text = entrada.campeaoNome.uppercase(),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = gold,
-                    textAlign = TextAlign.Center,
-                    letterSpacing = 1.sp
-                )
-
-                // ── Vice-campeão ──────────────────────────────────────
-                if (entrada.viceNome.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        TeamBadge(nome = entrada.viceNome, escudoRes = entrada.viceEscudo, size = 24.dp)
-                        Spacer(Modifier.width(8.dp))
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                GoldChampion.copy(alpha = 0.12f),
+                                GoldChampion.copy(alpha = 0.02f)
+                            )
+                        )
+                    )
+            )
+            Column(modifier = Modifier.padding(Spacing.lg)) {
+                // ── Header: ano gigante + nome do campeonato ──
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    Text(
+                        text = entrada.ano.toString(),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Black,
+                        color = GoldChampion,
+                        letterSpacing = (-1).sp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(36.dp)
+                            .background(GoldChampion.copy(alpha = 0.4f))
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Vice-campeão: ${entrada.viceNome}",
-                            fontSize = 16.sp,
-                            fontStyle = FontStyle.Italic,
-                            color = textSecondary
+                            "TEMPORADA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GoldChampion.copy(alpha = 0.8f),
+                            letterSpacing = 1.5.sp
+                        )
+                        Text(
+                            text = entrada.nomeCampeonato,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                val temStats = entrada.artilheiroNome.isNotEmpty() || entrada.assistenteNome.isNotEmpty()
-                if (temStats) {
-                    Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Spacing.lg))
 
-                    HorizontalDivider(color = borderColor)
+                // ── Linha do campeão (destaque dourado) ──
+                CampeaoLinha(
+                    posicao = "CAMPEÃO",
+                    nome = entrada.campeaoNome,
+                    escudo = entrada.campeaoEscudo,
+                    cor = GoldChampion,
+                    medalha = "🥇",
+                    forte = true
+                )
 
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        "Estatísticas de Destaque",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = textPrimary,
-                        textAlign = TextAlign.Center
+                // ── Linha do vice (prata) ──
+                if (entrada.viceNome.isNotEmpty()) {
+                    Spacer(Modifier.height(Spacing.sm))
+                    CampeaoLinha(
+                        posicao = "VICE-CAMPEÃO",
+                        nome = entrada.viceNome,
+                        escudo = entrada.viceEscudo,
+                        cor = SilverRunnerUp,
+                        medalha = "🥈",
+                        forte = false
                     )
+                }
 
-                    Spacer(Modifier.height(16.dp))
+                // ── Premiações individuais (Artilheiro / Garçom) ──
+                val temArtilheiro = entrada.artilheiroNome.isNotEmpty()
+                val temAssistente = entrada.assistenteNome.isNotEmpty()
+                if (temArtilheiro || temAssistente) {
+                    Spacer(Modifier.height(Spacing.md))
+                    HorizontalDivider(color = GoldChampion.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(Spacing.md))
+                    Text(
+                        "PRÊMIOS INDIVIDUAIS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalAlignment = Alignment.Top
                     ) {
-                        if (entrada.artilheiroNome.isNotEmpty()) {
-                            EstatisticaColuna(
+                        if (temArtilheiro) {
+                            PremioColuna(
                                 modifier = Modifier.weight(1f),
                                 painter = painterResource(R.drawable.ic_artilheiro_trophy),
-                                iconTint = Color.Unspecified,
-                                titulo = "Artilheiro",
-                                nome = entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome },
+                                label = "Artilheiro",
+                                nomeJogador = entrada.artilheiroNomeAbrev.ifEmpty { entrada.artilheiroNome },
                                 nomeTime = entrada.artilheiroNomeTime,
                                 escudoTime = entrada.artilheiroEscudo,
                                 valor = "${entrada.artilheiroGols} gols",
-                                gold = gold,
-                                textSecondary = textSecondary
+                                accent = MaterialTheme.colorScheme.primary
                             )
                         }
-                        if (entrada.artilheiroNome.isNotEmpty() && entrada.assistenteNome.isNotEmpty()) {
+                        if (temArtilheiro && temAssistente) {
                             Box(
                                 modifier = Modifier
                                     .width(1.dp)
-                                    .height(72.dp)
-                                    .background(borderColor)
+                                    .height(96.dp)
+                                    .background(GoldChampion.copy(alpha = 0.25f))
                             )
                         }
-                        if (entrada.assistenteNome.isNotEmpty()) {
-                            EstatisticaColuna(
+                        if (temAssistente) {
+                            PremioColuna(
                                 modifier = Modifier.weight(1f),
                                 painter = painterResource(R.drawable.ic_garcom_trophy),
-                                iconTint = Color.Unspecified,
-                                titulo = "Garçom",
-                                nome = entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome },
+                                label = "Garçom",
+                                nomeJogador = entrada.assistenteNomeAbrev.ifEmpty { entrada.assistenteNome },
                                 nomeTime = entrada.assistenteNomeTime,
                                 escudoTime = entrada.assistenteEscudo,
-                                valor = "${entrada.assistenciasTotais} assistências",
-                                gold = gold,
-                                textSecondary = textSecondary
+                                valor = "${entrada.assistenciasTotais} assist.",
+                                accent = BronzePlace
                             )
                         }
                     }
@@ -351,54 +350,126 @@ private fun HallDaFamaCard(entrada: HallDaFamaEntity) {
 }
 
 @Composable
-private fun EstatisticaColuna(
+private fun CampeaoLinha(
+    posicao: String,
+    nome: String,
+    escudo: String,
+    cor: Color,
+    medalha: String,
+    forte: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radius.md))
+            .background(cor.copy(alpha = if (forte) 0.14f else 0.08f))
+            .border(0.5.dp, cor.copy(alpha = if (forte) 0.5f else 0.3f), RoundedCornerShape(Radius.md))
+            .padding(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        // Avatar circular dourado/prata com escudo dentro
+        Box(
+            modifier = Modifier
+                .size(if (forte) 56.dp else 44.dp)
+                .clip(CircleShape)
+                .background(cor.copy(alpha = 0.20f))
+                .border(if (forte) 2.dp else 1.5.dp, cor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            TeamBadge(
+                nome = nome,
+                escudoRes = escudo,
+                size = if (forte) 42.dp else 32.dp
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = posicao,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = cor,
+                letterSpacing = 1.5.sp
+            )
+            Text(
+                text = nome,
+                style = if (forte) MaterialTheme.typography.titleMedium
+                        else MaterialTheme.typography.titleSmall,
+                fontWeight = if (forte) FontWeight.Bold else FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = medalha,
+            style = MaterialTheme.typography.headlineSmall
+        )
+    }
+}
+
+@Composable
+private fun PremioColuna(
     modifier: Modifier = Modifier,
     painter: Painter,
-    iconTint: Color = Color.Unspecified,
-    titulo: String,
-    nome: String,
+    label: String,
+    nomeJogador: String,
     nomeTime: String,
     escudoTime: String,
     valor: String,
-    gold: Color,
-    textSecondary: Color
+    accent: Color
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 8.dp),
+        modifier = modifier.padding(horizontal = Spacing.xs),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
         Icon(
             painter = painter,
             contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(64.dp)
+            tint = Color.Unspecified,
+            modifier = Modifier.size(48.dp)
         )
         Text(
-            titulo,
-            fontSize = 14.sp,
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+        Text(
+            nomeJogador,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-            textAlign = TextAlign.Center
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
         ) {
-            TeamBadge(nome = nomeTime, escudoRes = escudoTime, size = 16.dp)
-            Spacer(Modifier.width(4.dp))
+            TeamBadge(nome = nomeTime, escudoRes = escudoTime, size = 14.dp)
             Text(
-                nome,
-                fontSize = 12.sp,
-                color = textSecondary,
-                textAlign = TextAlign.Center
+                nomeTime,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         Text(
-            "($nomeTime) — $valor",
-            fontSize = 12.sp,
-            color = textSecondary,
-            textAlign = TextAlign.Center
+            valor,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = accent
         )
     }
+}
+
+private fun bandeiraPais(pais: String): String = when (pais) {
+    "Brasil" -> "🇧🇷"
+    "Argentina" -> "🇦🇷"
+    "Uruguai" -> "🇺🇾"
+    else -> ""
 }
