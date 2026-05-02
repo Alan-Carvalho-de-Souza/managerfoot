@@ -1141,6 +1141,8 @@ fun StandingsRow(
     empates: Int,
     derrotas: Int,
     saldoGols: Int,
+    golsPro: Int? = null,
+    golsContra: Int? = null,
     forma: List<Resultado> = emptyList(),
     zonaColor: Color = Color.Transparent,
     destaque: Boolean = false,
@@ -1194,6 +1196,8 @@ fun StandingsRow(
             StandingsCell(vitorias.toString())
             StandingsCell(empates.toString())
             StandingsCell(derrotas.toString())
+            if (golsPro != null) StandingsCell(golsPro.toString())
+            if (golsContra != null) StandingsCell(golsContra.toString())
             StandingsCell(
                 text = if (saldoGols >= 0) "+$saldoGols" else saldoGols.toString(),
                 color = when {

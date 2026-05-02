@@ -1,27 +1,38 @@
 package br.com.managerfoot.presentation.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import br.com.managerfoot.data.database.entities.ClassificacaoEntity
+import br.com.managerfoot.presentation.ui.components.FilterChipPill
+import br.com.managerfoot.presentation.ui.components.ScreenTopBar
+import br.com.managerfoot.presentation.ui.components.StandingsRow
+import br.com.managerfoot.presentation.ui.theme.GoldChampion
+import br.com.managerfoot.presentation.ui.theme.LibertadoresBlue
+import br.com.managerfoot.presentation.ui.theme.Radius
+import br.com.managerfoot.presentation.ui.theme.RelegationRed
+import br.com.managerfoot.presentation.ui.theme.Spacing
+import br.com.managerfoot.presentation.ui.theme.SulAmericanaTeal
 import br.com.managerfoot.presentation.viewmodel.TabelaViewModel
-import br.com.managerfoot.presentation.ui.components.TeamBadge
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Cor especial para playoff (Uruguai Segunda Divisão) — sem token semântico ainda
+private val PlayoffOrange = Color(0xFFFF6F00)
+
 @Composable
 fun TabelaScreen(
     campeonatoAId: Int,
@@ -53,11 +64,27 @@ fun TabelaScreen(
         else -1
     }
 
-    LaunchedEffect(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId, campeonatoUruIntermedId, campeonatoUruBCompetId, copaId) {
-        vm.carregar(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campArgClausuraId = campeonatoArgClausuraId, campUruAperturaId = campeonatoUruAperturaId, campUruBId = campeonatoUruBId, campUruClausuraId = campeonatoUruClausuraId, campUruIntermedId = campeonatoUruIntermedId, campUruBCompetId = campeonatoUruBCompetId, copaIdBrasil = copaId, timeJogadorId = timeJogadorId)
+    LaunchedEffect(
+        campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
+        campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
+        campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
+        campeonatoUruIntermedId, campeonatoUruBCompetId, copaId
+    ) {
+        vm.carregar(
+            campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
+            campeonatoArgAId, campeonatoArgBId,
+            campArgClausuraId = campeonatoArgClausuraId,
+            campUruAperturaId = campeonatoUruAperturaId,
+            campUruBId = campeonatoUruBId,
+            campUruClausuraId = campeonatoUruClausuraId,
+            campUruIntermedId = campeonatoUruIntermedId,
+            campUruBCompetId = campeonatoUruBCompetId,
+            copaIdBrasil = copaId,
+            timeJogadorId = timeJogadorId
+        )
     }
 
-    // Opções por país
+    // Opções por país (preservadas do dev)
     val opcoesBrasil = buildList {
         add(1 to "Série A")
         add(2 to "Série B")
@@ -85,266 +112,274 @@ fun TabelaScreen(
         if (opcoesUruguai.isNotEmpty()) add("Uruguai")
     }
 
-    fun bandeiraPais(pais: String) = when (pais) {
-        "Brasil"    -> "\uD83C\uDDE7\uD83C\uDDF7"
-        "Argentina" -> "\uD83C\uDDE6\uD83C\uDDF7"
-        "Uruguai"   -> "\uD83C\uDDFA\uD83C\uDDFE"
-        else -> ""
-    }
-
-    val paisesOrdenados = paises.sortedBy { it }
-
     // País selecionado: derivado da divisão atual
     val paisSelecionado = remember(divisaoSelecionada) {
-        if (divisaoSelecionada in 5..8) "Argentina"
-        else if (divisaoSelecionada in 9..14) "Uruguai"
-        else "Brasil"
+        when (divisaoSelecionada) {
+            in 5..8 -> "Argentina"
+            in 9..14 -> "Uruguai"
+            else -> "Brasil"
+        }
     }
-
     val opcoesDivisaoPais = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
         "Uruguai" -> opcoesUruguai
         else -> opcoesBrasil
     }
-
-    val labelSelecionado = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
+    val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoPais.firstOrNull()?.second ?: ""
-    var expandidoPais by remember { mutableStateOf(false) }
-    var expandido by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Tabela de Classificação") },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
-            )
+    // Posição do clube do jogador (se na divisão atual e não em modo grupos)
+    val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 || divisaoSelecionada == 14
+    val posicaoJogador = remember(tabela, timeJogadorId, ehGrupos) {
+        if (ehGrupos) null
+        else {
+            val idx = tabela.indexOfFirst { it.timeId == timeJogadorId }
+            if (idx >= 0) idx + 1 else null
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        ScreenTopBar(
+            titulo = "Classificação",
+            subtitulo = buildString {
+                if (paisSelecionado != "Brasil" || paises.size > 1) {
+                    append(bandeiraPais(paisSelecionado)).append(" ")
+                }
+                append(labelDivisaoAtual)
+                if (posicaoJogador != null) append(" · seu time em ${posicaoJogador}º")
+            }.trim(),
+            onVoltar = onVoltar
+        )
+
+        // Filtro de país (chips horizontais) — só aparece se houver mais de um
+        if (paises.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(bottom = Spacing.sm)
             ) {
-                // Filtro de país (dropdown — só exibe se houver mais de um)
-                if (paises.size > 1) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandidoPais,
-                        onExpandedChange = { expandidoPais = it },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = "${bandeiraPais(paisSelecionado)} $paisSelecionado",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("País") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoPais) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandidoPais,
-                            onDismissRequest = { expandidoPais = false }
-                        ) {
-                            paisesOrdenados.forEach { pais ->
-                                DropdownMenuItem(
-                                    text = { Text("${bandeiraPais(pais)} $pais") },
-                                    onClick = {
-                                        val primeiraDivisao = when (pais) {
-                                        "Argentina" -> opcoesArgentina.firstOrNull()?.first ?: 5
-                                        "Uruguai" -> opcoesUruguai.firstOrNull()?.first ?: 9
-                                        else -> opcoesBrasil.firstOrNull()?.first ?: 1
-                                    }
-                                        vm.selecionarDivisao(primeiraDivisao)
-                                        expandidoPais = false
-                                        expandido = false
-                                    }
-                                )
+                items(paises) { pais ->
+                    FilterChipPill(
+                        label = "${bandeiraPais(pais)} $pais",
+                        selected = pais == paisSelecionado,
+                        onClick = {
+                            val primeiraDivisao = when (pais) {
+                                "Argentina" -> opcoesArgentina.firstOrNull()?.first ?: 5
+                                "Uruguai" -> opcoesUruguai.firstOrNull()?.first ?: 9
+                                else -> opcoesBrasil.firstOrNull()?.first ?: 1
                             }
+                            vm.selecionarDivisao(primeiraDivisao)
                         }
-                    }
-                }
-
-                // Seletor de divisão (dropdown — só exibe se houver mais de uma divisão no país)
-                if (opcoesDivisaoPais.size > 1) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandido,
-                        onExpandedChange = { expandido = it },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = labelSelecionado,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Divisão") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandido,
-                            onDismissRequest = { expandido = false }
-                        ) {
-                            opcoesDivisaoPais.forEach { (div, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        vm.selecionarDivisao(div)
-                                        expandido = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
             }
+        }
 
-            val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 || divisaoSelecionada == 14
-            val gruposArgentina = remember(tabela, ehGrupos) {
-                if (ehGrupos) tabela.groupBy { it.grupo ?: "?" }.entries.sortedBy { it.key }
-                else emptyList()
+        // Filtro de divisão (chips horizontais)
+        if (opcoesDivisaoPais.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(bottom = Spacing.md)
+            ) {
+                items(opcoesDivisaoPais) { (div, label) ->
+                    FilterChipPill(
+                        label = label,
+                        selected = div == divisaoSelecionada,
+                        onClick = { vm.selecionarDivisao(div) }
+                    )
+                }
             }
+        } else {
+            Spacer(Modifier.height(Spacing.sm))
+        }
 
-            // Header row (só para visualização plana)
-            if (!ehGrupos) {
-                TabelaHeader()
-                HorizontalDivider()
-            }
+        // Conteúdo: tabela única ou em grupos
+        val gruposCompetencia = remember(tabela, ehGrupos) {
+            if (ehGrupos) tabela.groupBy { it.grupo ?: "?" }.entries.sortedBy { it.key }
+            else emptyList()
+        }
 
-            LazyColumn {
-                if (ehGrupos) {
-                    gruposArgentina.forEach { (grupo, grupoTabela) ->
-                        item {
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    "Zona $grupo",
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                            }
-                            TabelaHeader()
-                            HorizontalDivider()
-                        }
-                        itemsIndexed(grupoTabela) { index, item ->
-                            val time = times.find { it.id == item.timeId }
-                            val nomeTime = time?.nome ?: "Time ${item.timeId}"
-                            val escudoRes = time?.escudoRes ?: ""
-                            val ehJogador = item.timeId == timeJogadorId
-                            val classificadosPorGrupo = if (divisaoSelecionada == 14) 1 else 8
-                            val zona = if (index < classificadosPorGrupo) Color(0xFF1565C0) else null
-                            TabelaRow(
-                                posicao = index + 1,
-                                nomeTime = nomeTime,
-                                escudoRes = escudoRes,
-                                item = item,
-                                destaque = ehJogador,
-                                zonaColor = zona
-                            )
-                            HorizontalDivider(thickness = 0.5.dp)
-                        }
-                        item { Spacer(Modifier.height(8.dp)) }
-                    }
-                } else {
-                    itemsIndexed(tabela) { index, item ->
+        if (!ehGrupos) {
+            TabelaColunasHeader()
+        }
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            if (ehGrupos) {
+                gruposCompetencia.forEach { (grupo, grupoTabela) ->
+                    item { GrupoHeader("Zona $grupo") }
+                    item { TabelaColunasHeader() }
+                    itemsIndexed(grupoTabela) { index, item ->
                         val time = times.find { it.id == item.timeId }
                         val nomeTime = time?.nome ?: "Time ${item.timeId}"
                         val escudoRes = time?.escudoRes ?: ""
                         val ehJogador = item.timeId == timeJogadorId
-                        val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
-                        val divLabel = null
-                        TabelaRow(
+                        val classificadosPorGrupo = if (divisaoSelecionada == 14) 1 else 8
+                        val zona = if (index < classificadosPorGrupo) LibertadoresBlue else Color.Transparent
+
+                        StandingsRow(
                             posicao = index + 1,
                             nomeTime = nomeTime,
                             escudoRes = escudoRes,
-                            item = item,
-                            destaque = ehJogador,
+                            pontos = item.pontos,
+                            jogos = item.jogos,
+                            vitorias = item.vitorias,
+                            empates = item.empates,
+                            derrotas = item.derrotas,
+                            saldoGols = item.saldoGols,
+                            golsPro = item.golsPro,
+                            golsContra = item.golsContra,
                             zonaColor = zona,
-                            divLabel = divLabel
+                            destaque = ehJogador
                         )
-                        HorizontalDivider(thickness = 0.5.dp)
                     }
+                    item { Spacer(Modifier.height(Spacing.sm)) }
+                }
+            } else {
+                itemsIndexed(tabela) { index, item ->
+                    val time = times.find { it.id == item.timeId }
+                    val nomeTime = time?.nome ?: "Time ${item.timeId}"
+                    val escudoRes = time?.escudoRes ?: ""
+                    val ehJogador = item.timeId == timeJogadorId
+                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
+
+                    StandingsRow(
+                        posicao = index + 1,
+                        nomeTime = nomeTime,
+                        escudoRes = escudoRes,
+                        pontos = item.pontos,
+                        jogos = item.jogos,
+                        vitorias = item.vitorias,
+                        empates = item.empates,
+                        derrotas = item.derrotas,
+                        saldoGols = item.saldoGols,
+                        golsPro = item.golsPro,
+                        golsContra = item.golsContra,
+                        zonaColor = zona ?: Color.Transparent,
+                        destaque = ehJogador
+                    )
                 }
             }
-
-            // Legenda de zonas
-            LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
+            item { Spacer(Modifier.height(Spacing.sm)) }
         }
+
+        LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
     }
 }
 
 @Composable
-private fun TabelaHeader(showDivCol: Boolean = false) {
+private fun TabelaColunasHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(vertical = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("#",  modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Text("Time", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        if (showDivCol) {
-            Text("Div", modifier = Modifier.width(16.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        }
-        listOf("J", "V", "E", "D", "GP", "GC", "SG", "Pts").forEach { col ->
-            Text(col, modifier = Modifier.width(28.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.width(3.dp))
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // pos (24dp) + escudo (24dp) + xs gap
+            Spacer(Modifier.width(24.dp + 24.dp + Spacing.xs))
+            Text(
+                "TIME",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp
+            )
+            listOf("P", "J", "V", "E", "D", "GP", "GC", "SG").forEach { col ->
+                Text(
+                    col,
+                    modifier = Modifier.width(28.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
-// Retorna a cor da zona baseado na posição e divisão
-// copaChampeaoPosSerieA: posição (1-indexed) do campeão da Copa do Brasil na Série A,
-//   -1 se Copa não encerrada ou não aplicável.
 @Composable
+private fun GrupoHeader(nome: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 14.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Radius.sm))
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                text = nome.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 1.sp
+            )
+        }
+    }
+}
+
+/** Cor da zona pela posição na tabela. Cobre todas as competições. */
 private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: Int = -1): Color? = when (divisao) {
     1 -> when {
         // Copa campeão já está no top-6 → 7º também entra para Libertadores
-        copaChampeaoPosSerieA in 1..6 && posicao == 7 -> Color(0xFF1565C0) // Libertadores (vaga Copa)
-        posicao <= 4  -> Color(0xFF1565C0)  // Libertadores
-        posicao <= 6  -> Color(0xFF4CAF50)  // Sul-Americana
+        copaChampeaoPosSerieA in 1..6 && posicao == 7 -> LibertadoresBlue
+        posicao <= 4 -> LibertadoresBlue
+        posicao <= 6 -> SulAmericanaTeal
         // Copa campeão fora do top-6 → sua posição fica azul (vaga Copa)
-        copaChampeaoPosSerieA >= 7 && posicao == copaChampeaoPosSerieA -> Color(0xFF1565C0) // Libertadores (vaga Copa)
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento
-        else          -> null
+        copaChampeaoPosSerieA >= 7 && posicao == copaChampeaoPosSerieA -> LibertadoresBlue
+        posicao >= 17 -> RelegationRed
+        else -> null
     }
     2 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série A
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série C
-        else          -> null
+        posicao <= 4 -> LibertadoresBlue
+        posicao >= 17 -> RelegationRed
+        else -> null
     }
     3 -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série B
-        posicao >= 17 -> Color(0xFFE53935)  // Rebaixamento Série D
-        else          -> null
+        posicao <= 4 -> LibertadoresBlue
+        posicao >= 17 -> RelegationRed
+        else -> null
     }
     5, 7 -> when {
-        posicao <= 8  -> Color(0xFF1565C0)  // Oitavas de Final
-        else          -> null
+        posicao <= 8 -> LibertadoresBlue   // Oitavas de Final
+        else -> null
     }
     8 -> when {
-        posicao == 1  -> Color(0xFFFFD700)  // Campeão Geral
-        else          -> null
+        posicao == 1 -> GoldChampion       // Campeão Geral Argentina
+        else -> null
     }
-    13 -> null  // Geral Uruguai: sem zona (ranking informativo)
+    13 -> null                              // Geral Uruguai: ranking informativo
     10 -> when {
-        posicao <= 2  -> Color(0xFF1565C0)  // Acesso direto à Primera
-        posicao <= 6  -> Color(0xFFFF6F00)  // Playoff de acesso
-        posicao >= 13 -> Color(0xFFE53935)  // Rebaixamento
-        else          -> null
+        posicao <= 2 -> LibertadoresBlue   // Acesso direto à Primera Uruguai
+        posicao <= 6 -> PlayoffOrange      // Playoff de acesso
+        posicao >= 13 -> RelegationRed
+        else -> null
     }
     else -> when {
-        posicao <= 4  -> Color(0xFF1565C0)  // Acesso à Série C
-        else          -> null
+        posicao <= 4 -> LibertadoresBlue
+        else -> null
     }
 }
 
@@ -353,128 +388,86 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
     val itens = when (divisao) {
         1 -> buildList {
             if (copaChampeaoPosSerieA in 1..6) {
-                add(Color(0xFF1565C0) to "1-7: Libertadores (incl. Copa)")
+                add(LibertadoresBlue to "G7 Libertadores (incl. Copa)")
             } else {
-                add(Color(0xFF1565C0) to "1-4: Libertadores")
+                add(LibertadoresBlue to "G4 Libertadores")
             }
-            add(Color(0xFF4CAF50) to "5-6: Sul-Americana")
+            add(SulAmericanaTeal to "G6 Sul-Americana")
             if (copaChampeaoPosSerieA >= 7) {
-                add(Color(0xFF1565C0) to "${copaChampeaoPosSerieA}º: Libertadores (Copa)")
+                add(LibertadoresBlue to "${copaChampeaoPosSerieA}º Libertadores (Copa)")
             }
-            add(Color(0xFFE53935) to "17-20: Rebaixamento")
+            add(RelegationRed to "Z4 Rebaixamento")
         }
         2 -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série A",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
+            LibertadoresBlue to "G4 Acesso à Série A",
+            RelegationRed to "Z4 Rebaixamento"
         )
         3 -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série B",
-            Color(0xFFE53935) to "17-20: Rebaixamento"
+            LibertadoresBlue to "G4 Acesso à Série B",
+            RelegationRed to "Z4 Rebaixamento"
         )
         5, 7 -> listOf(
-            Color(0xFF1565C0) to "1-8: Oitavas de Final"
+            LibertadoresBlue to "G8 Oitavas de Final"
         )
         8 -> listOf(
-            Color(0xFFFFD700) to "1º: Campeão Geral"
+            GoldChampion to "1º Campeão Geral"
         )
-        13 -> emptyList()  // Geral Uruguai: ranking informativo, sem legenda de zonas
+        13 -> emptyList()  // Geral Uruguai: sem legenda
         10 -> listOf(
-            Color(0xFF1565C0) to "1-2: Acesso direto",
-            Color(0xFFFF6F00) to "3-6: Playoff",
-            Color(0xFFE53935) to "13-14: Rebaixamento"
+            LibertadoresBlue to "G2 Acesso direto",
+            PlayoffOrange to "G6 Playoff",
+            RelegationRed to "Z2 Rebaixamento"
         )
         14 -> listOf(
-            Color(0xFF1565C0) to "1º: Classifica para a Final"
+            LibertadoresBlue to "1º Classifica para a Final"
         )
         else -> listOf(
-            Color(0xFF1565C0) to "1-4: Acesso à Série C"
+            LibertadoresBlue to "G4 Acesso"
         )
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    if (itens.isEmpty()) return
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp
     ) {
-        itens.forEach { (cor, label) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.size(10.dp).background(cor))
-                Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            items(itens) { (cor, label) ->
+                ZonaLegendaChip(cor, label)
             }
         }
     }
 }
 
 @Composable
-private fun TabelaRow(
-    posicao: Int,
-    nomeTime: String,
-    escudoRes: String = "",
-    item: ClassificacaoEntity,
-    destaque: Boolean,
-    zonaColor: Color? = null,
-    divLabel: String? = null
-) {
-    val bg = if (destaque) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val textColorPrimary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    val textColorSecondary = if (destaque) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
-
+private fun ZonaLegendaChip(cor: Color, label: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bg)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        // Indicador de zona (barra colorida à esquerda)
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(24.dp)
-                .background(zonaColor ?: Color.Transparent)
+                .size(width = 3.dp, height = 14.dp)
+                .clip(RoundedCornerShape(Radius.sm))
+                .background(cor)
         )
-        Spacer(Modifier.width(4.dp))
         Text(
-            "$posicao",
-            modifier = Modifier.width(24.dp),
-            fontSize = 12.sp,
-            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
-            textAlign = TextAlign.Center,
-            color = textColorPrimary
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TeamBadge(nome = nomeTime, escudoRes = escudoRes, size = 22.dp)
-        Spacer(Modifier.width(4.dp))
-        Text(
-            nomeTime,
-            modifier = Modifier.weight(1f),
-            fontSize = 12.sp,
-            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = textColorPrimary
-        )
-        if (divLabel != null) {
-            Text(
-                divLabel,
-                modifier = Modifier.width(16.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                color = if (divLabel == "A") Color(0xFF1565C0) else Color(0xFFFF6F00)
-            )
-        }
-        listOf(
-            item.jogos, item.vitorias, item.empates, item.derrotas,
-            item.golsPro, item.golsContra, item.saldoGols, item.pontos
-        ).forEachIndexed { idx, value ->
-            val isSaldo = idx == 6  // saldoGols can be negative
-            val isBold = idx == 7   // pontos
-            Text(
-                if (isSaldo && value > 0) "+$value" else "$value",
-                modifier = Modifier.width(28.dp),
-                fontSize = 12.sp,
-                fontWeight = if (isBold || destaque) FontWeight.Bold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                color = if (isBold) textColorPrimary else textColorSecondary
-            )
-        }
     }
+}
+
+private fun bandeiraPais(pais: String): String = when (pais) {
+    "Brasil" -> "🇧🇷"
+    "Argentina" -> "🇦🇷"
+    "Uruguai" -> "🇺🇾"
+    else -> ""
 }
