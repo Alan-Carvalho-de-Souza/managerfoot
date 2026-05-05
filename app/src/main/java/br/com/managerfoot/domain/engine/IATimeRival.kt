@@ -185,6 +185,21 @@ object MotorFinanceiro {
     fun calcularBilheteria(time: Time, adversarioNivel: Int): Long =
         calcularPublico(time, adversarioNivel).second
 
+    /**
+     * Deriva o nível do clube (1..10) a partir da sua reputação (0..100).
+     * Usado em [GameRepository.recalcularNiveisGlobais] ao final de cada
+     * temporada para que clubes que conquistam títulos / sobem de divisão
+     * vejam o `nivel` subir, e times rebaixados / sem títulos vejam cair.
+     *
+     * Mapeamento simples e estável:
+     *  reputação 0–9   → nível 1
+     *  reputação 10–19 → nível 2
+     *  ...
+     *  reputação 90+   → nível 10
+     */
+    fun nivelDerivadoDeReputacao(reputacao: Float): Int =
+        (reputacao / 10f).toInt().coerceIn(1, 10)
+
     // Patrocínio mensal baseado na reputação do clube
     fun calcularPatrocinioMensal(time: Time): Long {
         val base = when {
