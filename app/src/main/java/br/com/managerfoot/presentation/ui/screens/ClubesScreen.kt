@@ -40,6 +40,7 @@ import br.com.managerfoot.presentation.viewmodel.ClubesViewModel
 fun ClubesScreen(
     timeId: Int,
     onVoltar: () -> Unit,
+    onIrParaConquistas: (Int) -> Unit = {},
     vm: ClubesViewModel = hiltViewModel()
 ) {
     val times by vm.times.collectAsState()
@@ -78,7 +79,8 @@ fun ClubesScreen(
             saldo = saldo,
             mensagem = mensagem,
             onVoltar = { vm.limparTimeSelecionado() },
-            onOferta = { jogadorParaOfertar = it }
+            onOferta = { jogadorParaOfertar = it },
+            onIrParaConquistas = { onIrParaConquistas(timeSelecionado!!.id) }
         )
     } else {
         ClubesListaTela(
@@ -199,7 +201,8 @@ private fun ClubeDetalheTela(
     saldo: Long,
     mensagem: String?,
     onVoltar: () -> Unit,
-    onOferta: (Jogador) -> Unit
+    onOferta: (Jogador) -> Unit,
+    onIrParaConquistas: () -> Unit = {}
 ) {
     Column(
         Modifier
@@ -209,7 +212,12 @@ private fun ClubeDetalheTela(
         ScreenTopBar(
             titulo = time.nome,
             subtitulo = "${nomeDivisao(time.divisao)} · ${time.pais}",
-            onVoltar = onVoltar
+            onVoltar = onVoltar,
+            acoes = {
+                TextButton(onClick = onIrParaConquistas) {
+                    Text("🏆 Conquistas", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            }
         )
 
         // Card de saldo (verde elétrico destacado)

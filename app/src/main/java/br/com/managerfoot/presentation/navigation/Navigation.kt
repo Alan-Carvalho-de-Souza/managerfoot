@@ -78,6 +78,12 @@ sealed class Rota(val caminho: String) {
                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) =
             "rodada/$campAId/$campBId/$campCId/$campDId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruApertId/$campUruIntermedId/$campUruClausId/$campUruBId/$campUruBCompetId"
     }
+    object Conquistas       : Rota("conquistas/{timeId}") {
+        fun com(timeId: Int) = "conquistas/$timeId"
+    }
+    object HistoricoJogador : Rota("historico_jogador/{jogadorId}") {
+        fun com(jogadorId: Int) = "historico_jogador/$jogadorId"
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -200,7 +206,8 @@ fun ManagerFootNavGraph() {
                 )) },
                 onIrParaClubes            = { navController.navigate(Rota.Clubes.comTimeId(timeId)) },
                 onIrParaPatrocinadores    = { navController.navigate(Rota.Patrocinadores.caminho) },
-                onIrParaTreinamento       = { navController.navigate(Rota.Treinamento.comTimeId(timeId)) }
+                onIrParaTreinamento       = { navController.navigate(Rota.Treinamento.comTimeId(timeId)) },
+                onIrParaConquistas        = { navController.navigate(Rota.Conquistas.com(timeId)) }
             )
         }
 
@@ -232,10 +239,14 @@ fun ManagerFootNavGraph() {
                     onIniciarPartida = {
                         dashVm?.simularProximaPartida(campeonatoId, rodada)
                         navController.popBackStack()
-                    }
+                    },
+                    onIrParaHistorico = { jogId -> navController.navigate(Rota.HistoricoJogador.com(jogId)) }
                 )
             } else {
-                EscalacaoScreen(timeId = timeId)
+                EscalacaoScreen(
+                    timeId = timeId,
+                    onIrParaHistorico = { jogId -> navController.navigate(Rota.HistoricoJogador.com(jogId)) }
+                )
             }
         }
 
@@ -366,7 +377,8 @@ fun ManagerFootNavGraph() {
             val timeId = backStack.arguments!!.getInt("timeId")
             ClubesScreen(
                 timeId = timeId,
-                onVoltar = { navController.popBackStack() }
+                onVoltar = { navController.popBackStack() },
+                onIrParaConquistas = { clubeId -> navController.navigate(Rota.Conquistas.com(clubeId)) }
             )
         }
 
@@ -455,7 +467,11 @@ fun ManagerFootNavGraph() {
             arguments = listOf(navArgument("timeId") { type = NavType.IntType })
         ) { backStack ->
             val timeId = backStack.arguments!!.getInt("timeId")
-            JogadoresScreen(timeId = timeId, onVoltar = { navController.popBackStack() })
+            JogadoresScreen(
+                timeId = timeId,
+                onVoltar = { navController.popBackStack() },
+                onIrParaHistorico = { jogId -> navController.navigate(Rota.HistoricoJogador.com(jogId)) }
+            )
         }
 
         // Patrocinadores
@@ -516,6 +532,30 @@ fun ManagerFootNavGraph() {
                 campeonatoUruBId        = campUruBId,
                 campeonatoUruBCompetId  = campUruBCompetId,
                 onVoltar                = { navController.popBackStack() }
+            )
+        }
+
+        // Conquistas (sala de troféus do clube)
+        composable(
+            route = Rota.Conquistas.caminho,
+            arguments = listOf(navArgument("timeId") { type = NavType.IntType })
+        ) { backStack ->
+            val timeId = backStack.arguments!!.getInt("timeId")
+            ConquistasScreen(
+                timeId = timeId,
+                onVoltar = { navController.popBackStack() }
+            )
+        }
+
+        // Histórico de carreira do jogador
+        composable(
+            route = Rota.HistoricoJogador.caminho,
+            arguments = listOf(navArgument("jogadorId") { type = NavType.IntType })
+        ) { backStack ->
+            val jogadorId = backStack.arguments!!.getInt("jogadorId")
+            HistoricoJogadorScreen(
+                jogadorId = jogadorId,
+                onVoltar = { navController.popBackStack() }
             )
         }
     }

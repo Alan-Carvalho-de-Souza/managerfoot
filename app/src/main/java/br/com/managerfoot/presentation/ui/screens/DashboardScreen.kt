@@ -95,6 +95,7 @@ fun DashboardScreen(
     onIrParaClubes: () -> Unit = {},
     onIrParaPatrocinadores: () -> Unit = {},
     onIrParaTreinamento: () -> Unit = {},
+    onIrParaConquistas: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
@@ -224,7 +225,8 @@ fun DashboardScreen(
                 onIrParaRodada = onIrParaRodada,
                 onIrParaClubes = onIrParaClubes,
                 onIrParaPatrocinadores = onIrParaPatrocinadores,
-                onIrParaTreinamento = onIrParaTreinamento
+                onIrParaTreinamento = onIrParaTreinamento,
+                onIrParaConquistas = onIrParaConquistas
             )
         }
     }
@@ -689,7 +691,8 @@ private fun MenuAba(
     onIrParaRodada: () -> Unit,
     onIrParaClubes: () -> Unit,
     onIrParaPatrocinadores: () -> Unit,
-    onIrParaTreinamento: () -> Unit
+    onIrParaTreinamento: () -> Unit,
+    onIrParaConquistas: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -727,6 +730,7 @@ private fun MenuAba(
         item { SectionTitle("Estatísticas & Histórico") }
         item {
             MenuTileGrid(listOf(
+                MenuTileItem(Icons.Filled.EmojiEvents, "Conquistas", onIrParaConquistas),
                 MenuTileItem(Icons.Filled.Insights, "Estatísticas", onIrParaEstatisticasTime),
                 MenuTileItem(Icons.Filled.TrackChanges, "Confrontos", onIrParaConfronto),
                 MenuTileItem(Icons.Filled.AutoAwesome, "Hall da Fama", onIrParaHallDaFama),

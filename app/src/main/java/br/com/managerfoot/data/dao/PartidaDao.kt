@@ -559,7 +559,46 @@ interface PartidaDao {
         ORDER BY gols DESC, assistencias DESC
     """)
     suspend fun buscarEstatisticasJogadoresAllTime(timeId: Int): List<EstatisticaJogadorDto>
+
+    /**
+     * Busca todos os eventos (GOL, ASSISTENCIA, PARTICIPOU, etc) de UM jogador.
+     * Usa LEFT JOIN para campeonatos/temporadas para sobreviver a saves antigos
+     * onde o vínculo da partida com a temporada possa estar quebrado — nesse
+     * caso `ano` vem como 0 e o consumidor usa fallback.
+     */
+    @Query("""
+        SELECT
+            ep.partidaId   AS partidaId,
+            ep.tipo        AS tipo,
+            p.timeCasaId   AS timeCasaId,
+            p.timeForaId   AS timeForaId,
+            p.campeonatoId AS campeonatoId,
+            p.ordemGlobal  AS ordemGlobal,
+            COALESCE(c.temporadaId, 0) AS temporadaId,
+            COALESCE(t.ano, 0)         AS ano
+        FROM eventos_partida ep
+        INNER JOIN partidas p     ON p.id = ep.partidaId
+        LEFT JOIN campeonatos c   ON c.id = p.campeonatoId
+        LEFT JOIN temporadas t    ON t.id = c.temporadaId
+        WHERE ep.jogadorId = :jogadorId
+        ORDER BY t.ano ASC, p.ordemGlobal ASC
+    """)
+    suspend fun buscarEventosCarreiraJogador(jogadorId: Int): List<EventoCarreiraDto>
 }
+
+/** DTO retornado por `buscarEventosCarreiraJogador`. Cada evento sabe em qual
+ *  partida ocorreu (com os 2 times) e em qual temporada/ano. O time do jogador
+ *  no momento é derivado depois cruzando com TransferenciaEntity. */
+data class EventoCarreiraDto(
+    val partidaId: Int,
+    val tipo: String,         // valores do enum TipoEvento (GOL, ASSISTENCIA, PARTICIPOU, etc.)
+    val timeCasaId: Int,
+    val timeForaId: Int,
+    val campeonatoId: Int,
+    val ordemGlobal: Int,
+    val temporadaId: Int,
+    val ano: Int
+)
 
 data class ArtilheiroDto(
     val jogadorId: Int,

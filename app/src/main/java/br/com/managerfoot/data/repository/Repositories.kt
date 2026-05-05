@@ -100,7 +100,9 @@ private val NOMES_JUNIOR_SOBRENOME = listOf(
 @Singleton
 class JogadorRepository @Inject constructor(
     private val jogadorDao: JogadorDao,
-    private val financaDao: br.com.managerfoot.data.dao.FinancaDao
+    private val financaDao: br.com.managerfoot.data.dao.FinancaDao,
+    private val timeDao: TimeDao,
+    private val partidaDao: br.com.managerfoot.data.dao.PartidaDao
 ) {
     fun observeElenco(timeId: Int): Flow<List<Jogador>> =
         jogadorDao.observeElenco(timeId).map { lista -> lista.map { it.toDomain() } }
@@ -860,6 +862,171 @@ class JogadorRepository @Inject constructor(
         jogadorDao.transferirJogador(jogadorId, null)
     }
 
+    // ─────────────────────────────────────────────
+    //  Histórico de carreira (derivado, sem nova entity)
+    // ─────────────────────────────────────────────
+    /**
+     * Reconstrói o histórico de carreira de um jogador derivando de
+     * [TransferenciaEntity] + eventos de partida persistidos.
+     *
+     * - Cruza transferências (períodos) com eventos de gol/assistência/participação
+     * - Agrupa por (timeId, ano) e mescla anos consecutivos no mesmo clube
+     * - Não cria nenhuma nova tabela; é tudo derivado em runtime
+     */
+    suspend fun buscarHistoricoCarreira(jogadorId: Int): HistoricoCarreira {
+        val jogador = jogadorDao.buscarPorId(jogadorId)?.toDomain()
+            ?: return HistoricoCarreira(emptyList(), 0, 0, 0, 0, null, null, 0f)
+
+        val transfers = try {
+            financaDao.buscarTransferenciasDoJogador(jogadorId)
+        } catch (e: Exception) { emptyList() }
+        val eventos = try {
+            partidaDao.buscarEventosCarreiraJogador(jogadorId)
+        } catch (e: Exception) { emptyList() }
+
+        // Mapa de timeId → entity para nome/escudo
+        val timeIdsRelevantes = buildSet<Int> {
+            transfers.forEach {
+                it.timeOrigemId?.let { id -> add(id) }
+                it.timeDestinoId?.let { id -> add(id) }
+            }
+            eventos.forEach { add(it.timeCasaId); add(it.timeForaId) }
+            jogador.timeId?.let { add(it) }
+        }
+        val timesPorId: Map<Int, br.com.managerfoot.data.database.entities.TimeEntity> =
+            timeIdsRelevantes
+                .mapNotNull { id -> timeDao.buscarPorId(id)?.let { id to it } }
+                .toMap()
+
+        // ── Construção dos "moves" cronológicos
+        data class Move(val temporadaId: Int, val mes: Int, val novoTime: Int?)
+        val moves: List<Move> = transfers
+            .sortedWith(compareBy({ it.temporadaId }, { it.mes }))
+            .map { t ->
+                val novoTime: Int? = when (t.tipo) {
+                    TipoTransferencia.COMPRA,
+                    TipoTransferencia.EMPRESTIMO_SAIDA,
+                    TipoTransferencia.PROMOVIDO_BASE,
+                    TipoTransferencia.EMPRESTIMO_RETORNO -> t.timeDestinoId
+                    TipoTransferencia.VENDA,
+                    TipoTransferencia.FIM_CONTRATO,
+                    TipoTransferencia.DISPENSADO_BASE -> null
+                }
+                Move(t.temporadaId, t.mes, novoTime)
+            }
+
+        // Time do jogador num momento (temporadaId, ordemGlobal aproximado para mês)
+        fun timeNoMomento(temporadaId: Int, ordemGlobal: Int): Int? {
+            val mesAprox = ordemGlobalParaMesCarreira(ordemGlobal)
+            var atual: Int? = null
+            for (m in moves) {
+                val moveBeforeOrAt = m.temporadaId < temporadaId ||
+                    (m.temporadaId == temporadaId && m.mes <= mesAprox)
+                if (moveBeforeOrAt) atual = m.novoTime else break
+            }
+            return atual
+        }
+
+        // ── Agrupa eventos por (timeId, ano)
+        val porTimeAno = mutableMapOf<Pair<Int, Int>, MutableList<br.com.managerfoot.data.dao.EventoCarreiraDto>>()
+        for (ev in eventos) {
+            val derivado = timeNoMomento(ev.temporadaId, ev.ordemGlobal)
+            // Validação: time derivado deve ser um dos dois da partida
+            val timeId: Int? = when {
+                derivado != null && (derivado == ev.timeCasaId || derivado == ev.timeForaId) -> derivado
+                jogador.timeId == ev.timeCasaId || jogador.timeId == ev.timeForaId -> jogador.timeId
+                else -> ev.timeCasaId  // último fallback (raro)
+            }
+            if (timeId != null) {
+                porTimeAno.getOrPut(timeId to ev.ano) { mutableListOf() }.add(ev)
+            }
+        }
+
+        // ── Constrói passagens-ano e mescla anos consecutivos no mesmo time
+        val passagensAno = porTimeAno.entries
+            .map { (key, evs) ->
+                Triple(
+                    key,
+                    evs.map { it.partidaId }.toSet().size,
+                    evs.count { it.tipo == "GOL" } to evs.count { it.tipo == "ASSISTENCIA" }
+                )
+            }
+            .sortedWith(compareBy({ it.first.first }, { it.first.second }))
+
+        val passagens = mutableListOf<PassagemClube>()
+        var atual: PassagemClube? = null
+        for ((key, partidas, golAss) in passagensAno) {
+            val (timeId, ano) = key
+            val (gols, assists) = golAss
+            val cur = atual
+            if (cur != null && cur.timeId == timeId && ano <= cur.anoFim + 1) {
+                atual = cur.copy(
+                    anoFim = ano,
+                    partidas = cur.partidas + partidas,
+                    gols = cur.gols + gols,
+                    assistencias = cur.assistencias + assists
+                )
+            } else {
+                cur?.let { passagens.add(it) }
+                val time = timesPorId[timeId]
+                atual = PassagemClube(
+                    timeId = timeId,
+                    timeNome = time?.nome ?: "Clube #$timeId",
+                    escudoRes = time?.escudoRes ?: "",
+                    anoInicio = ano,
+                    anoFim = ano,
+                    partidas = partidas,
+                    gols = gols,
+                    assistencias = assists
+                )
+            }
+        }
+        atual?.let { passagens.add(it) }
+
+        // Marca a passagem atual com nota média da temporada
+        val passagensComNota: List<PassagemClube> = if (passagens.isNotEmpty() &&
+            passagens.last().timeId == jogador.timeId
+        ) {
+            passagens.dropLast(1) + passagens.last().copy(notaMedia = jogador.notaMedia)
+        } else {
+            passagens.toList()
+        }
+
+        // Fallback: se não há nenhuma passagem mas o jogador tem time atual,
+        // cria uma "passagem atual" vazia para pelo menos mostrar o clube atual
+        // (saves antigos podem não ter eventos persistidos para os jogadores)
+        val passagensFinais: List<PassagemClube> = if (passagensComNota.isEmpty() && jogador.timeId != null) {
+            val time = timesPorId[jogador.timeId] ?: timeDao.buscarPorId(jogador.timeId)
+            if (time != null) {
+                val anoAtual = eventos.mapNotNull { it.ano.takeIf { y -> y > 0 } }.maxOrNull() ?: 0
+                listOf(
+                    PassagemClube(
+                        timeId = jogador.timeId,
+                        timeNome = time.nome,
+                        escudoRes = time.escudoRes,
+                        anoInicio = if (anoAtual > 0) anoAtual else 0,
+                        anoFim = if (anoAtual > 0) anoAtual else 0,
+                        partidas = jogador.partidasTemporada,
+                        gols = 0,
+                        assistencias = 0,
+                        notaMedia = jogador.notaMedia
+                    )
+                )
+            } else emptyList()
+        } else passagensComNota
+
+        return HistoricoCarreira(
+            passagens = passagensFinais.sortedBy { it.anoInicio },
+            totalPartidas = passagensFinais.sumOf { it.partidas },
+            totalGols = passagensFinais.sumOf { it.gols },
+            totalAssistencias = passagensFinais.sumOf { it.assistencias },
+            clubesDiferentes = passagensFinais.map { it.timeId }.distinct().size,
+            anoEstreia = passagensFinais.minOfOrNull { it.anoInicio }?.takeIf { it > 0 },
+            anoUltimo = passagensFinais.maxOfOrNull { it.anoFim }?.takeIf { it > 0 },
+            notaMediaAtual = jogador.notaMedia
+        )
+    }
+
     // Mapeamento Entity -> Domain
     private fun JogadorEntity.toDomain() = Jogador(
         id = id,
@@ -898,6 +1065,49 @@ class JogadorRepository @Inject constructor(
         anoRetornoEmprestimo = anoRetornoEmprestimo,
         mesRetornoEmprestimo = mesRetornoEmprestimo
     )
+}
+
+// ─────────────────────────────────────────────────
+//  Histórico de carreira de um jogador (DTOs públicos)
+// ─────────────────────────────────────────────────
+data class PassagemClube(
+    val timeId: Int,
+    val timeNome: String,
+    val escudoRes: String,
+    val anoInicio: Int,
+    val anoFim: Int,
+    val partidas: Int,
+    val gols: Int,
+    val assistencias: Int,
+    val notaMedia: Float? = null  // nota da temporada atual (apenas última passagem)
+)
+
+data class HistoricoCarreira(
+    val passagens: List<PassagemClube>,
+    val totalPartidas: Int,
+    val totalGols: Int,
+    val totalAssistencias: Int,
+    val clubesDiferentes: Int,
+    val anoEstreia: Int?,
+    val anoUltimo: Int?,
+    val notaMediaAtual: Float
+)
+
+/**
+ * Converte ordemGlobal (1..580) em mês aproximado (1..12).
+ * Consistente com CalendarioScreen: temporada vai de fev (dia 39) a nov (dia 334).
+ */
+internal fun ordemGlobalParaMesCarreira(ordemGlobal: Int): Int {
+    if (ordemGlobal == 1) return 1   // Supercopa
+    if (ordemGlobal == 620) return 12 // Troféu dos Campeões (mid-Dezembro)
+    val diaDoAno = (39 + (ordemGlobal - 10) * 295 / 380).coerceIn(1, 365)
+    val diasMes = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    var rem = diaDoAno
+    for (m in 1..12) {
+        if (rem <= diasMes[m]) return m
+        rem -= diasMes[m]
+    }
+    return 12
 }
 
 // ─────────────────────────────────────────────────
