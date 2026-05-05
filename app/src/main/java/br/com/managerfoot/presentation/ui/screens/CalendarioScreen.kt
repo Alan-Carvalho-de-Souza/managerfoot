@@ -370,6 +370,8 @@ private fun diaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {
 /** Retorna (mês, dia) para uma partida baseado em ordemGlobal e nome do campeonato. */
 private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> = when {
     ordemGlobal == 1 -> 1 to 25   // Supercopa Rei: 25 de Janeiro
+    // Troféu dos Campeões (ARG): jogo único em mid-Dezembro do mesmo ano
+    ordemGlobal == 620 || (nomeCampeonato.contains("Troféu", ignoreCase = true) && nomeCampeonato.contains("Campe", ignoreCase = true)) -> 12 to 15
     nomeCampeonato.contains("Copa", ignoreCase = true) ->
         COPA_DATAS[ordemGlobal]
             ?: diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))

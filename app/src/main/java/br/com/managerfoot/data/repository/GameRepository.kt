@@ -1149,10 +1149,25 @@ class GameRepository @Inject constructor(
             )
         } else -1
 
+        // Troféu dos Campeões (ARG) — disputado no MESMO ano (após Apertura+Clausura).
+        // Auto-simulado pois ambos os campeões já estão registrados no Hall da Fama.
+        // Se o mesmo time venceu Apertura e Clausura, o troféu não é criado.
+        try {
+            criarESimularTrofeuCampeoes(ano = ano, temporadaId = temporadaId, timeJogadorId = timeJogadorId)
+        } catch (_: Exception) { }
+
         return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()
+
+    /** Conquistas (títulos) de um time específico — usado em ConquistasScreen. */
+    fun observarConquistasDoTime(timeId: Int): Flow<List<HallDaFamaEntity>> =
+        hallDaFamaDao.observeConquistasDoTime(timeId)
+
+    /** Vice-campeonatos de um time — usado opcionalmente em ConquistasScreen. */
+    fun observarVicesDoTime(timeId: Int): Flow<List<HallDaFamaEntity>> =
+        hallDaFamaDao.observeVicesDoTime(timeId)
 
     fun observarCopaPartidas(copaId: Int): Flow<List<CopaPartidaDto>> =
         partidaDao.observeCopaPartidas(copaId)
@@ -2318,6 +2333,139 @@ class GameRepository @Inject constructor(
         return supercopaId
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  Troféu dos Campeões (Argentina)
+    //  Jogo único entre o campeão do Apertura e o campeão do Clausura
+    //  da MESMA temporada. Disputado em campo neutro no fim do ano.
+    //  - Hall da Fama: divisao = 18
+    //  - ordemGlobal = 620 (mapeado para mid-Dezembro no calendário)
+    //  - Auto-simulado dentro de encerrarTemporadaComHallDaFama, pois
+    //    ocorre depois que ambos os torneios já foram decididos.
+    // ─────────────────────────────────────────────────────────────
+    suspend fun criarESimularTrofeuCampeoes(
+        ano: Int,
+        temporadaId: Int,
+        timeJogadorId: Int = -1
+    ): Int {
+        // Busca campeões já registrados no Hall da Fama do ano corrente
+        val champApertura = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, 7)
+        val champClausura = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, 8)
+        if (champApertura == null || champClausura == null) return -1
+
+        // Mesmo time campeão de ambos: troféu sem disputa (não cria nem registra)
+        if (champApertura.campeaoTimeId == champClausura.campeaoTimeId) return -1
+
+        // Evita duplicata se função for chamada novamente no mesmo ano
+        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, 18) != null) return -1
+
+        val nomeCampeonato = "Troféu dos Campeões $ano"
+
+        // Cria o campeonato (jogo único, MATA_MATA_SIMPLES)
+        val trofeuId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = nomeCampeonato,
+                tipo         = TipoCampeonato.TROFEU_CAMPEOES,
+                formato      = FormatoCampeonato.MATA_MATA_SIMPLES,
+                totalRodadas = 1,
+                pais         = "Argentina"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(listOf(
+            CampeonatoTimeEntity(trofeuId, champApertura.campeaoTimeId),
+            CampeonatoTimeEntity(trofeuId, champClausura.campeaoTimeId)
+        ))
+
+        // Cria a única partida (campeão do Apertura como mandante por convenção)
+        val partidaId = partidaDao.inserir(
+            PartidaEntity(
+                campeonatoId = trofeuId,
+                rodada       = 1,
+                timeCasaId   = champApertura.campeaoTimeId,
+                timeForaId   = champClausura.campeaoTimeId,
+                fase         = "Final",
+                ordemGlobal  = 620
+            )
+        ).toInt()
+
+        // Auto-simula a partida (gols no tempo normal)
+        val partidaCriada = partidaDao.buscarPorId(partidaId) ?: return trofeuId
+        try { simularPartidaInterna(partidaCriada) } catch (_: Exception) { }
+
+        // Determina o vencedor (com pênaltis se empate)
+        val partidaJogada = partidaDao.buscarPorId(partidaId) ?: return trofeuId
+        val gCasa = partidaJogada.golsCasa ?: 0
+        val gFora = partidaJogada.golsFora ?: 0
+        val campeaoId = when {
+            gCasa > gFora -> partidaJogada.timeCasaId
+            gFora > gCasa -> partidaJogada.timeForaId
+            else -> {
+                val pCasa = partidaJogada.penaltisCasa
+                val pFora = partidaJogada.penaltisForaId
+                if (pCasa != null && pFora != null) {
+                    if (pCasa > pFora) partidaJogada.timeCasaId else partidaJogada.timeForaId
+                } else {
+                    simularEPersistirPenaltisIA(partidaJogada, partidaJogada)
+                }
+            }
+        }
+        val viceId = if (campeaoId == partidaJogada.timeCasaId)
+            partidaJogada.timeForaId else partidaJogada.timeCasaId
+
+        val campeao = timeRepository.buscarEntityPorId(campeaoId)
+        val vice    = timeRepository.buscarEntityPorId(viceId)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(trofeuId)
+        val assistente = partidaDao.buscarAssisteTop1(trofeuId)
+
+        // Registra Hall da Fama (divisao = 18 = Troféu dos Campeões)
+        hallDaFamaDao.inserir(
+            HallDaFamaEntity(
+                ano                  = ano,
+                nomeCampeonato       = nomeCampeonato,
+                campeaoTimeId        = campeaoId,
+                campeaoNome          = campeao?.nome ?: "",
+                campeaoEscudo        = campeao?.escudoRes ?: "",
+                viceTimeId           = viceId,
+                viceNome             = vice?.nome ?: "",
+                viceEscudo           = vice?.escudoRes ?: "",
+                artilheiroId         = artilheiro?.jogadorId ?: -1,
+                artilheiroNome       = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev  = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols       = artilheiro?.total ?: 0,
+                artilheiroNomeTime   = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo     = artilheiro?.escudoRes ?: "",
+                assistenteId         = assistente?.jogadorId ?: -1,
+                assistenteNome       = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev  = assistente?.nomeAbrev ?: "",
+                assistenciasTotais   = assistente?.total ?: 0,
+                assistenteNomeTime   = assistente?.nomeTime ?: "",
+                assistenteEscudo     = assistente?.escudoRes ?: "",
+                divisao              = 18  // 18 = Troféu dos Campeões (ARG)
+            )
+        )
+
+        // Premiação (R$ 6M campeão, R$ 3M vice) — credita só se for o time do jogador
+        if (timeJogadorId > 0) {
+            val premio = when (timeJogadorId) {
+                campeaoId -> 6_000_000_00L
+                viceId    -> 3_000_000_00L
+                else      -> 0L
+            }
+            if (premio > 0L) timeRepository.creditarSaldo(timeJogadorId, premio)
+        }
+
+        // Marca campeonato como encerrado
+        campeonatoDao.encerrar(trofeuId)
+
+        // Bônus de reputação para o campeão (+2%, similar a Segunda Div.)
+        campeao?.let {
+            val bonus = (it.reputacao * 0.02).toFloat().coerceAtLeast(0.1f)
+            timeRepository.atualizarReputacao(it.id, it.reputacao + bonus)
+        }
+
+        return trofeuId
+    }
+
     // ── Verifica se fase atual foi concluída e avança para próxima ──
     // Retorna true se a Copa foi finalizada (Final concluída).
     // Parâmetros opcionais permitem reutilizar a lógica para Copa Argentina.
@@ -3336,7 +3484,9 @@ class GameRepository @Inject constructor(
     private suspend fun simularPartidaInterna(partida: PartidaEntity) {
         val escalacaoCasa = gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFora = gerarEscalacaoIA(partida.timeForaId)
-        val campoNeutro = campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
+        val tipoCamp = campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo
+        val campoNeutro = tipoCamp == TipoCampeonato.SUPERCOPA
+                       || tipoCamp == TipoCampeonato.TROFEU_CAMPEOES
                        || partida.fase == "Final"
 
         val resultado = simulador.simular(

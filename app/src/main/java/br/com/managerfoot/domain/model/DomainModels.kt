@@ -63,16 +63,43 @@ data class Jogador(
     val anoRetornoEmprestimo: Int? = null,         // Ano do retorno ao clube de origem
     val mesRetornoEmprestimo: Int? = null          // Mês (1–12) do retorno ao clube de origem
 ) {
-    // Força efetiva: penaliza improvisos, considera morale e fadiga
+    /**
+     * Penalidade percentual aplicada à força efetiva quando o jogador atua
+     * em posição diferente da natural, conforme as regras de composição
+     * tática. Retorna 0.0 quando não há improviso, valor multiplicativo > 0
+     * quando há improviso (ex: 0.05 = 5%).
+     *
+     * Regras (Opção B — gradação):
+     *  - 0%   posição natural exata
+     *  - 0%   intercâmbio livre dentro do setor MEIO (VOL/MC/MA)
+     *  - 0%   intercâmbio livre dentro do setor ATAQUE (SA/CA/PD/PE)
+     *  - 2%   posição secundária do jogador
+     *  - 5%   mesmo setor mas linha rígida (DEFESA: ZG ↔ LD/LE)
+     *  - 15%  setor diferente (improviso pesado, ex: zagueiro como atacante)
+     */
+    fun penalidadeImprovisoPct(posicaoUsada: Posicao = posicao): Double = when {
+        // 0% — match exato
+        posicao == posicaoUsada -> 0.0
+        // 0% — meio é totalmente intercambiável
+        posicao.setor == Setor.MEIO && posicaoUsada.setor == Setor.MEIO -> 0.0
+        // 0% — ataque é totalmente intercambiável
+        posicao.setor == Setor.ATAQUE && posicaoUsada.setor == Setor.ATAQUE -> 0.0
+        // 2% — posição secundária do jogador
+        posicaoSecundaria != null && posicaoSecundaria == posicaoUsada -> 0.02
+        // 5% — mesmo setor mas linha rígida (defesa)
+        posicao.setor == posicaoUsada.setor -> 0.05
+        // 15% — setor diferente
+        else -> 0.15
+    }
+
+    /** True se o jogador está atuando fora da posição (penalidade > 0). */
+    fun ehImproviso(posicaoUsada: Posicao = posicao): Boolean =
+        penalidadeImprovisoPct(posicaoUsada) > 0.0
+
+    // Força efetiva: penaliza improvisos (multiplicativo), considera morale e fadiga
     fun forcaEfetiva(posicaoUsada: Posicao = posicao): Int {
-        val linhaDefensiva = setOf(Posicao.ZAGUEIRO, Posicao.LATERAL_DIREITO, Posicao.LATERAL_ESQUERDO)
-        val penaltyImproviso = when {
-            posicao == posicaoUsada -> 0
-            posicaoSecundaria == posicaoUsada -> 5
-            posicao in linhaDefensiva && posicaoUsada in linhaDefensiva -> 0
-            posicao.setor == posicaoUsada.setor -> 10
-            else -> 20
-        }
+        val penaltyImproviso = (forca * penalidadeImprovisoPct(posicaoUsada))
+            .let { kotlin.math.round(it).toInt() }
         val bonusMorale = when (moraleEstado) {
             MoraleEstado.EXCELENTE    ->  5
             MoraleEstado.BOM          ->  2

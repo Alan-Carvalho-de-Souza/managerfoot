@@ -57,6 +57,7 @@ import br.com.managerfoot.presentation.viewmodel.JogadoresViewModel
 fun JogadoresScreen(
     timeId: Int,
     onVoltar: () -> Unit = {},
+    onIrParaHistorico: ((Int) -> Unit)? = null,
     vm: JogadoresViewModel = hiltViewModel()
 ) {
     val elenco            by vm.elenco.collectAsState()
@@ -104,7 +105,10 @@ fun JogadoresScreen(
             saldo = saldo,
             jaNoElenco = elenco.any { it.id == jogador.id },
             onContratar = { vm.fazerOferta(jogador); jogadorParaOfertar = null },
-            onDismiss = { jogadorParaOfertar = null }
+            onDismiss = { jogadorParaOfertar = null },
+            onIrParaHistorico = onIrParaHistorico?.let { cb ->
+                { id -> jogadorParaOfertar = null; cb(id) }
+            }
         )
     }
 
@@ -113,7 +117,10 @@ fun JogadoresScreen(
         VenderDialog(
             jogador = jogador,
             onConfirmar = { vm.venderJogador(jogador); jogadorParaVender = null },
-            onDismiss = { jogadorParaVender = null }
+            onDismiss = { jogadorParaVender = null },
+            onIrParaHistorico = onIrParaHistorico?.let { cb ->
+                { id -> jogadorParaVender = null; cb(id) }
+            }
         )
     }
 
@@ -811,7 +818,8 @@ private fun OfertaDialog(
     saldo: Long,
     jaNoElenco: Boolean,
     onContratar: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onIrParaHistorico: ((Int) -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -910,11 +918,22 @@ private fun OfertaDialog(
                 ) {
                     Text("Contratar", fontWeight = FontWeight.SemiBold)
                 }
+            } else if (onIrParaHistorico != null) {
+                TextButton(onClick = { onIrParaHistorico(jogador.id) }) {
+                    Text("📊 Histórico", fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(if (jaNoElenco) "Fechar" else "Cancelar")
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                if (!jaNoElenco && onIrParaHistorico != null) {
+                    TextButton(onClick = { onIrParaHistorico(jogador.id) }) {
+                        Text("📊 Histórico", fontWeight = FontWeight.Bold)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(if (jaNoElenco) "Fechar" else "Cancelar")
+                }
             }
         }
     )
@@ -924,7 +943,8 @@ private fun OfertaDialog(
 private fun VenderDialog(
     jogador: Jogador,
     onConfirmar: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onIrParaHistorico: ((Int) -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -990,7 +1010,14 @@ private fun VenderDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                if (onIrParaHistorico != null) {
+                    TextButton(onClick = { onIrParaHistorico(jogador.id) }) {
+                        Text("📊 Histórico", fontWeight = FontWeight.Bold)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            }
         }
     )
 }

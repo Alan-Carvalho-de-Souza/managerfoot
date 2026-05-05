@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Placeholder de troféu — vector drawable usado quando o usuário ainda
+  não forneceu PNGs específicos por campeonato. Cor é parametrizada via
+  android:tint no ImageView/Icon, então a mesma forma serve pra Gold/
+  Silver/Bronze/Verde elétrico conforme o tier do campeonato.
+
+  Para substituir por PNG real, basta adicionar o arquivo em res/drawable/
+  com nome correspondente (ex: ic_trophy_serie_a.png) e atualizar o
+  mapeamento em presentation/ui/util/Trofeus.kt para apontar pro novo
+  recurso.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="56dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+
+    <!-- Alças laterais (handles) -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M14,16 L14,24 C14,30 18,32 22,32 L22,28 C19,28 17,26 17,23 L17,19 L20,19 L20,16 Z" />
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M50,16 L50,24 C50,30 46,32 42,32 L42,28 C45,28 47,26 47,23 L47,19 L44,19 L44,16 Z" />
+
+    <!-- Copo principal -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M20,10 L44,10 C45,10 46,11 46,12 L46,28 C46,36 40,42 32,42 C24,42 18,36 18,28 L18,12 C18,11 19,10 20,10 Z" />
+
+    <!-- Sombra interna do copo -->
+    <path
+        android:fillColor="#FFA000"
+        android:pathData="M22,14 L22,28 C22,34 26,38 32,38 C38,38 42,34 42,28 L42,14 L40,14 L40,28 C40,33 36,36 32,36 C28,36 24,33 24,28 L24,14 Z" />
+
+    <!-- Coluna central -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M30,42 L34,42 L34,50 L30,50 Z" />
+
+    <!-- Base superior -->
+    <path
+        android:fillColor="#FFA000"
+        android:pathData="M24,50 L40,50 L40,52 L24,52 Z" />
+
+    <!-- Base inferior (pedestal) -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M22,52 L42,52 C43,52 44,53 44,54 L44,58 L20,58 L20,54 C20,53 21,52 22,52 Z" />
+
+    <!-- Estrela central (decoração) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,18 L34.4,22.8 L39.6,23.6 L36,27.2 L36.8,32.4 L32,30 L27.2,32.4 L28,27.2 L24.4,23.6 L29.6,22.8 Z" />
+</vector>

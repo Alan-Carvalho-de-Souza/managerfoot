@@ -59,6 +59,7 @@ fun EscalacaoScreen(
     modoPreJogo: Boolean = false,
     adversarioId: Int = -1,
     onIniciarPartida: (() -> Unit)? = null,
+    onIrParaHistorico: ((Int) -> Unit)? = null,
     vm: EscalacaoViewModel = hiltViewModel()
 ) {
     val elenco      by vm.elenco.collectAsState()
@@ -145,9 +146,7 @@ fun EscalacaoScreen(
                     ) {
                         items(titularesOrdenados, key = { it.jogador.id }) { jne ->
                             val ehSelecionado = titularParaTroca?.jogador?.id == jne.jogador.id
-                            val ehImproviso = jne.posicaoUsada != jne.jogador.posicao &&
-                                    jne.posicaoUsada != jne.jogador.posicaoSecundaria &&
-                                    jne.posicaoUsada.setor != jne.jogador.posicao.setor
+                            val ehImproviso = jne.jogador.ehImproviso(jne.posicaoUsada)
                             JogadorEscalacaoLinha(
                                 jogador = jne.jogador,
                                 posicaoUsada = jne.posicaoUsada,
@@ -231,7 +230,7 @@ fun EscalacaoScreen(
                             JogadorEscalacaoLinha(
                                 jogador = jne.jogador,
                                 posicaoUsada = jne.posicaoUsada,
-                                improviso = false,
+                                improviso = jne.jogador.ehImproviso(jne.posicaoUsada),
                                 selecionado = false,
                                 onClick = { vm.selecionarJogador(jne.jogador) },
                                 trailing = {
@@ -425,7 +424,8 @@ fun EscalacaoScreen(
         JogadorDetalheDialog(
             jogador    = jogador,
             onDismiss  = { vm.selecionarJogador(null) },
-            onAposentar = { id -> vm.aposentarJogador(id); vm.selecionarJogador(null) }
+            onAposentar = { id -> vm.aposentarJogador(id); vm.selecionarJogador(null) },
+            onIrParaHistorico = onIrParaHistorico
         )
     }
 }
@@ -624,9 +624,18 @@ private fun JogadorEscalacaoLinha(
     onClick: () -> Unit,
     trailing: @Composable () -> Unit
 ) {
+    // Calcula o % de penalidade real (0% / 2% / 5% / 15%)
+    val improvisoPct: Double = if (improviso) jogador.penalidadeImprovisoPct(posicaoUsada) else 0.0
+    val improvisoLabel: String = when {
+        improvisoPct >= 0.15 -> "⚠ Fora de posição (−15%)"
+        improvisoPct >= 0.05 -> "⚠ Fora de posição (−5%)"
+        improvisoPct >= 0.02 -> "⚠ Posição secundária (−2%)"
+        else -> ""
+    }
     val borderColor = when {
         selecionado -> AmberAccent
-        improviso -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+        improvisoPct >= 0.05 -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+        improvisoPct > 0     -> AmberAccent.copy(alpha = 0.5f)
         else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
     }
     val containerColor = if (selecionado)
@@ -683,12 +692,14 @@ private fun JogadorEscalacaoLinha(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         FadigaBadge(jogador.fadiga)
-                        if (improviso) {
+                        if (improvisoLabel.isNotEmpty()) {
                             Text(
-                                "*Improviso",
+                                improvisoLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.SemiBold
+                                color = if (improvisoPct >= 0.05) MaterialTheme.colorScheme.error
+                                        else AmberAccent,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                         }
                     }
@@ -1065,7 +1076,8 @@ internal fun posicaoColor(posicao: Posicao): Color = corSetor(posicao.setor)
 private fun JogadorDetalheDialog(
     jogador: Jogador,
     onDismiss: () -> Unit,
-    onAposentar: ((Int) -> Unit)? = null
+    onAposentar: ((Int) -> Unit)? = null,
+    onIrParaHistorico: ((Int) -> Unit)? = null
 ) {
     var confirmarAposentadoria by remember { mutableStateOf(false) }
 
@@ -1289,7 +1301,17 @@ private fun JogadorDetalheDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        dismissButton = if (onIrParaHistorico != null) {
+            {
+                TextButton(onClick = {
+                    onIrParaHistorico(jogador.id)
+                    onDismiss()
+                }) {
+                    Text("📊 Histórico", fontWeight = FontWeight.Bold)
+                }
+            }
+        } else null
     )
 }
 

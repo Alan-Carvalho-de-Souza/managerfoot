@@ -1363,3 +1363,217 @@ fun formatarSaldo(centavos: Long): String {
         else                 -> "${sign}R$ %.0f".format(abs)
     }
 }
+
+/**
+ * Card de troféu de campeonato — usado em ConquistasScreen.
+ * Exibe o ícone do troféu, nome curto, quantidade de títulos e lista
+ * resumida de anos.
+ *
+ * @param tintable se true (ex: placeholder vetorial mono-cor), aplica
+ *  `ColorFilter.tint(tier)` para colorir o ícone com a cor do tier.
+ *  Se false (ex: PNG/vector customizado com cores próprias), o ícone
+ *  é renderizado com suas cores originais — apenas a borda e o "x N"
+ *  ficam na cor do tier.
+ */
+@Composable
+fun TrofeuCard(
+    iconRes: Int,
+    nomeCampeonato: String,
+    tier: Color,
+    quantidade: Int,
+    anos: List<Int>,
+    modifier: Modifier = Modifier,
+    tintable: Boolean = true,
+    onClick: (() -> Unit)? = null
+) {
+    val anosLabel = when {
+        anos.isEmpty() -> ""
+        anos.size <= 4 -> anos.sortedDescending().joinToString(" · ")
+        else           -> anos.sortedDescending().take(4).joinToString(" · ") + " +${anos.size - 4}"
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, tier.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.md),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(Radius.md))
+                    .background(tier.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = nomeCampeonato,
+                    modifier = Modifier.size(56.dp),
+                    colorFilter = if (tintable) {
+                        androidx.compose.ui.graphics.ColorFilter.tint(tier)
+                    } else null
+                )
+            }
+            Text(
+                "x$quantidade",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = tier
+            )
+            Text(
+                nomeCampeonato,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (anosLabel.isNotEmpty()) {
+                Text(
+                    anosLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Card de passagem por clube — usado em HistoricoJogadorScreen.
+ * Mostra um período de carreira com escudo, anos, gols, assistências,
+ * partidas e nota média.
+ */
+@Composable
+fun PassagemClubeCard(
+    timeNome: String,
+    escudoRes: String,
+    anoInicio: Int,
+    anoFim: Int,
+    gols: Int,
+    assistencias: Int,
+    partidas: Int,
+    notaMedia: Float? = null,
+    destaque: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val faixaCor = if (destaque) br.com.managerfoot.presentation.ui.theme.GoldChampion
+                   else br.com.managerfoot.presentation.ui.theme.GreenElectric
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, faixaCor.copy(alpha = 0.3f))
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(faixaCor)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    TeamBadge(nome = timeNome, escudoRes = escudoRes, size = 36.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            timeNome,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (anoInicio == anoFim) "$anoInicio"
+                            else "$anoInicio – $anoFim",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (notaMedia != null && notaMedia > 0f) {
+                        Surface(
+                            shape = RoundedCornerShape(Radius.sm),
+                            color = corDaNotaCarreira(notaMedia).copy(alpha = 0.18f),
+                            border = BorderStroke(0.5.dp, corDaNotaCarreira(notaMedia).copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                "★ %.1f".format(notaMedia),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = corDaNotaCarreira(notaMedia),
+                                modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatCarreira(label = "PARTIDAS", valor = partidas.toString())
+                    StatCarreira(
+                        label = "GOLS",
+                        valor = gols.toString(),
+                        cor = br.com.managerfoot.presentation.ui.theme.PromotionGreen
+                    )
+                    StatCarreira(
+                        label = "ASSIST.",
+                        valor = assistencias.toString(),
+                        cor = br.com.managerfoot.presentation.ui.theme.LibertadoresBlue
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCarreira(
+    label: String,
+    valor: String,
+    cor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            valor,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = cor
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+private fun corDaNotaCarreira(nota: Float): Color = when {
+    nota >= 8.0f -> br.com.managerfoot.presentation.ui.theme.PromotionGreen
+    nota >= 6.5f -> br.com.managerfoot.presentation.ui.theme.GreenElectric
+    nota >= 5.0f -> br.com.managerfoot.presentation.ui.theme.AmberAccent
+    else         -> br.com.managerfoot.presentation.ui.theme.RelegationRed
+}

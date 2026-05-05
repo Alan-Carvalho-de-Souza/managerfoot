@@ -39,7 +39,8 @@ enum class TipoCampeonato {
     MUNDIAL_CLUBES,
     SELECOES,
     EXTRANGEIRO_DIVISAO1,   // Primera División Argentina (e futuros)
-    EXTRANGEIRO_DIVISAO2    // Segunda División Argentina (Primera Nacional)
+    EXTRANGEIRO_DIVISAO2,   // Segunda División Argentina (Primera Nacional)
+    TROFEU_CAMPEOES         // Troféu dos Campeões — campeão Apertura ARG x campeão Clausura ARG (mesma temporada)
 }
 
 enum class FormatoCampeonato {

@@ -1930,6 +1930,74 @@ class HallDaFamaViewModel @Inject constructor(
 }
 
 // ═══════════════════════════════════════════════════════════
+//  ConquistasViewModel — títulos conquistados por um time
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class ConquistasViewModel @Inject constructor(
+    private val gameRepository: GameRepository,
+    private val timeRepository: TimeRepository
+) : ViewModel() {
+
+    private val _timeId = MutableStateFlow(0)
+
+    private val _time = MutableStateFlow<br.com.managerfoot.domain.model.Time?>(null)
+    val time: StateFlow<br.com.managerfoot.domain.model.Time?> = _time.asStateFlow()
+
+    /**
+     * Lista de conquistas do time, ordenadas por ano DESC.
+     * Cada item é um HallDaFamaEntity onde campeaoTimeId == timeId.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val conquistas: StateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>> =
+        _timeId
+            .filter { it > 0 }
+            .flatMapLatest { id -> gameRepository.observarConquistasDoTime(id) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Vice-campeonatos do time (opcional, exibido em seção secundária). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val vices: StateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>> =
+        _timeId
+            .filter { it > 0 }
+            .flatMapLatest { id -> gameRepository.observarVicesDoTime(id) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun carregar(timeId: Int) {
+        _timeId.value = timeId
+        viewModelScope.launch {
+            _time.value = timeRepository.buscarPorId(timeId)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HistoricoJogadorViewModel — carreira completa de um jogador
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class HistoricoJogadorViewModel @Inject constructor(
+    private val jogadorRepository: JogadorRepository
+) : ViewModel() {
+
+    private val _jogador = MutableStateFlow<br.com.managerfoot.domain.model.Jogador?>(null)
+    val jogador: StateFlow<br.com.managerfoot.domain.model.Jogador?> = _jogador.asStateFlow()
+
+    private val _historico = MutableStateFlow<HistoricoCarreira?>(null)
+    val historico: StateFlow<HistoricoCarreira?> = _historico.asStateFlow()
+
+    private val _carregando = MutableStateFlow(false)
+    val carregando: StateFlow<Boolean> = _carregando.asStateFlow()
+
+    fun carregar(jogadorId: Int) {
+        viewModelScope.launch {
+            _carregando.value = true
+            _jogador.value = jogadorRepository.buscarPorId(jogadorId)
+            _historico.value = jogadorRepository.buscarHistoricoCarreira(jogadorId)
+            _carregando.value = false
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
 //  ConfrontoViewModel
 // ═══════════════════════════════════════════════════════════
 data class ConfrontoStats(
