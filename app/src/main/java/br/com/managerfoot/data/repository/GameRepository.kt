@@ -15,6 +15,7 @@ import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.domain.engine.*
 import br.com.managerfoot.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -357,10 +358,11 @@ class GameRepository @Inject constructor(
         val golsFora1H = eventos1H.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoFora.time.id }
         val todosEventos1H = (eventosParticipacao + eventos1H).sortedBy { it.minuto }
 
-        // Calcula público antes de montar o resultado parcial — exibido desde o início da partida
+        // Calcula público antes de montar o resultado parcial — exibido desde o início da partida.
+        // adversarioNivel = nível real do time visitante (afeta o fator de rivalidade da bilheteria).
         val timeCasaInfo = timeRepository.buscarPorId(escalacaoCasa.time.id)
         val (torcedoresParcial, receitaParcial) = if (timeCasaInfo != null) {
-            MotorFinanceiro.calcularPublico(timeCasaInfo, adversarioNivel = 5)
+            MotorFinanceiro.calcularPublico(timeCasaInfo, adversarioNivel = escalacaoFora.time.nivel)
         } else {
             Pair(0, 0L)
         }
@@ -515,10 +517,15 @@ class GameRepository @Inject constructor(
 
         val notasPartida = persistirResultado(resultadoBase)
 
-        // Calcula público para exibição na tela da partida
+        // Calcula público para exibição na tela da partida.
+        // adversarioNivel = nível real do time visitante para fator de rivalidade.
         val timeCasa = timeRepository.buscarPorId(resultadoBase.timeCasaId)
+        val timeForaInfo = timeRepository.buscarPorId(resultadoBase.timeForaId)
         val (torcedoresCalc, receitaCalc) = if (timeCasa != null) {
-            MotorFinanceiro.calcularPublico(timeCasa, adversarioNivel = 5)
+            MotorFinanceiro.calcularPublico(
+                time = timeCasa,
+                adversarioNivel = timeForaInfo?.nivel ?: 5
+            )
         } else {
             Pair(0, 0L)
         }
@@ -807,6 +814,26 @@ class GameRepository @Inject constructor(
         aplicarBonusTitulo(campeonatoArgBId, 0.02) // Segunda Div. ARG +2%
         aplicarBonusTitulo(campeonatoUruBId, 0.02) // Segunda Div. URU +2%
 
+        // ── Penalidade de rebaixamento (multiplicativa, mínima 0.5pt) ──────
+        // Rebaixamento é o gatilho mais forte de queda de reputação/nivel.
+        suspend fun aplicarPenalidadeRebaixamento(timeIds: List<Int>, dropPercent: Double) {
+            for (id in timeIds) {
+                val t = timeRepository.buscarPorId(id) ?: continue
+                val drop = (t.reputacao * dropPercent).toFloat().coerceAtLeast(0.5f)
+                timeRepository.atualizarReputacao(id, t.reputacao - drop)
+            }
+        }
+
+        // ── Bônus de promoção (acesso à divisão superior) ────────────────
+        // Independente do título: subir de divisão sempre dá ganho de prestígio.
+        suspend fun aplicarBonusPromocao(timeIds: List<Int>, gainPercent: Double) {
+            for (id in timeIds) {
+                val t = timeRepository.buscarPorId(id) ?: continue
+                val gain = (t.reputacao * gainPercent).toFloat().coerceAtLeast(0.5f)
+                timeRepository.atualizarReputacao(id, t.reputacao + gain)
+            }
+        }
+
         // ── Premiações de títulos — para o time do jogador se ele é campeão ou vice ─────────
         // Os valores estão em centavos (1 milhão = 1_000_000_00L no padrão monetário do jogo)
         suspend fun premiarSeJogador(campId: Int, premioCampeao: Long) {
@@ -866,6 +893,14 @@ class GameRepository @Inject constructor(
         setDivisao(rebaixadosA, 2); setDivisao(promovidosB, 1)
         setDivisao(rebaixadosB, 3); setDivisao(promovidosC, 2)
         setDivisao(rebaixadosC, 4); setDivisao(promovidosD, 3)
+
+        // ── Reputação: penalidades de rebaixamento e bônus de promoção (Brasil) ──
+        aplicarPenalidadeRebaixamento(rebaixadosA, 0.06)  // A → B: -6%
+        aplicarPenalidadeRebaixamento(rebaixadosB, 0.05)  // B → C: -5%
+        aplicarPenalidadeRebaixamento(rebaixadosC, 0.04)  // C → D: -4%
+        aplicarBonusPromocao(promovidosB, 0.04)           // B → A: +4%
+        aplicarBonusPromocao(promovidosC, 0.03)           // C → B: +3%
+        aplicarBonusPromocao(promovidosD, 0.02)           // D → C: +2%
 
         // Recalcula participantes
         val partA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
@@ -1050,6 +1085,10 @@ class GameRepository @Inject constructor(
             timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 5)) }
         }
 
+        // ── Reputação: rebaixamento e promoção (Argentina) ──
+        aplicarPenalidadeRebaixamento(rebaixadosArgA, 0.05)  // Primera → Segunda: -5%
+        aplicarBonusPromocao(promovidosArgB, 0.035)          // Segunda → Primera: +3.5%
+
         // Renova Primera División Argentina – Apertura e Clausura (com promoção/rebaixamento)
         val participantesArgA = if (campeonatoArgAId > 0)
             campeonatoDao.buscarIdsParticipantes(campeonatoArgAId) else emptyList()
@@ -1092,6 +1131,10 @@ class GameRepository @Inject constructor(
         } else emptyList()
         rebaixadosUruA.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 10)) } }
         promovidosUruB.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 9)) } }
+
+        // ── Reputação: rebaixamento e promoção (Uruguai) ──
+        aplicarPenalidadeRebaixamento(rebaixadosUruA, 0.04)  // Primera URU → Segunda: -4%
+        aplicarBonusPromocao(promovidosUruB, 0.03)           // Segunda URU → Primera: +3%
 
         // Renova Primera División Uruguaia
         val participantesUruA = if (campeonatoUruAperturaId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruAperturaId) else emptyList()
@@ -1156,7 +1199,67 @@ class GameRepository @Inject constructor(
             criarESimularTrofeuCampeoes(ano = ano, temporadaId = temporadaId, timeJogadorId = timeJogadorId)
         } catch (_: Exception) { }
 
+        // ── Decay anual: times sem nenhum título no ano perdem reputação ──
+        // Times que conquistaram qualquer título no Hall da Fama (divisao 1-18)
+        // do ano que está encerrando ficam imunes ao decay. Os demais perdem 1%.
+        // Aplica decay extra a times no fundo da tabela (mau desempenho consistente).
+        try {
+            aplicarDecayAnualReputacao(ano)
+        } catch (_: Exception) { }
+
+        // ── Recalcula `nivel` de TODOS os times a partir da reputação atualizada ──
+        // Após bônus de título, penalidades de rebaixamento, bônus de promoção e decay.
+        try {
+            recalcularNiveisGlobais()
+        } catch (_: Exception) { }
+
         return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
+    }
+
+    /**
+     * Aplica decay anual de reputação aos times que não conquistaram nenhum
+     * título no ano informado. Times que conquistaram QUALQUER título (divisão
+     * 1-18 do Hall da Fama) ficam imunes — só os "perdedores" perdem prestígio.
+     *
+     * Decay base: -1.5% da reputação atual (mínimo 0.3pt).
+     * Decay extra para times com baixa força de elenco / fora da elite (divisão >= 3): -0.5% extra.
+     */
+    suspend fun aplicarDecayAnualReputacao(ano: Int) {
+        // Coleta IDs dos times campeões em qualquer divisão do Hall da Fama daquele ano
+        val campeoes = mutableSetOf<Int>()
+        // divisão 1..18 abrange Brasil A/B/C/D + Copa BR + Supercopa + ARG + URU + Trofeu Campeoes
+        for (div in 1..18) {
+            val champ = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div)
+            if (champ != null) campeoes.add(champ.campeaoTimeId)
+        }
+
+        val todos = timeRepository.observeTodos().first()
+        for (time in todos) {
+            if (time.id in campeoes) continue  // imune por ter conquistado algo
+            val basePct = 0.015  // 1.5%
+            // Penalidade extra para times de divisão menor (mau desempenho persistente)
+            val extraPct = if (time.divisao >= 3) 0.005 else 0.0
+            val total = basePct + extraPct
+            val drop = (time.reputacao * total).toFloat().coerceAtLeast(0.3f)
+            timeRepository.atualizarReputacao(time.id, time.reputacao - drop)
+        }
+    }
+
+    /**
+     * Recalcula o `nivel` (1..10) de todos os times a partir da reputação atual.
+     * Chamado ao final de [encerrarTemporadaComHallDaFama] depois de todos os
+     * ajustes de reputação (títulos, promoções, rebaixamentos, decay) terem
+     * sido aplicados — assim o nível reflete o estado consolidado da temporada.
+     */
+    suspend fun recalcularNiveisGlobais() {
+        val todos = timeRepository.observeTodos().first()
+        for (time in todos) {
+            val novoNivel = MotorFinanceiro.nivelDerivadoDeReputacao(time.reputacao)
+            if (time.nivel != novoNivel) {
+                val entity = timeRepository.buscarEntityPorId(time.id) ?: continue
+                timeRepository.atualizar(entity.copy(nivel = novoNivel))
+            }
+        }
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()
@@ -3807,10 +3910,16 @@ class GameRepository @Inject constructor(
     }
 
     private suspend fun persistirResultado(resultado: ResultadoPartida): Map<Int, Float> {
-        // Calcula público e receita para partidas em casa
+        // Calcula público e receita para partidas em casa.
+        // adversarioNivel = nível real do time visitante (clássico contra time grande
+        // = +25% receita; partida fraca contra time pequeno = -15%).
         val timeCasa = timeRepository.buscarPorId(resultado.timeCasaId)
+        val timeFora = timeRepository.buscarPorId(resultado.timeForaId)
         val (torcedores, receita) = if (timeCasa != null) {
-            MotorFinanceiro.calcularPublico(timeCasa, adversarioNivel = 5)
+            MotorFinanceiro.calcularPublico(
+                time = timeCasa,
+                adversarioNivel = timeFora?.nivel ?: 5
+            )
         } else {
             Pair(0, 0L)
         }
@@ -3859,7 +3968,6 @@ class GameRepository @Inject constructor(
         }
 
         // Atualiza reputação: +1 para o vencedor, -1 para o perdedor (sem alteração em empate)
-        val timeFora = timeRepository.buscarPorId(resultado.timeForaId)
         if (timeCasa != null && timeFora != null) {
             when {
                 resultado.golsCasa > resultado.golsFora -> {
