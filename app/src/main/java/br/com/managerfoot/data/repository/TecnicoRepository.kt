@@ -199,6 +199,48 @@ class TecnicoRepository @Inject constructor(
     suspend fun resetarStatsTemporada() = tecnicoDao.resetarStatsTemporada()
 
     // ─────────────────────────────────────────────────────────
+    //  Demissão automática por mau desempenho
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * Demite técnicos de times que tiveram desempenho ruim na temporada.
+     * O técnico do time controlado pelo jogador NUNCA é demitido por esta
+     * regra (o usuário decide).
+     *
+     * Critérios:
+     *  - **Rebaixados** (passados como [timesRebaixados]): probabilidade alta
+     *    de demitir (≈80%). Quase sempre o clube troca de comando.
+     *  - **Demais times com aproveitamento da temporada < 0.30 (30%)**:
+     *    probabilidade média (≈40%) de demitir.
+     *
+     * @param timesRebaixados IDs de times que foram rebaixados nesta temporada
+     * @param anoFim Ano que está encerrando (para gravar fim da passagem)
+     */
+    suspend fun demitirPorDesempenho(timesRebaixados: Set<Int>, anoFim: Int) {
+        val todos = tecnicoDao.buscarTodos()
+        for (tecnico in todos) {
+            if (tecnico.timeId == null) continue           // já está livre
+            if (tecnico.controladoPorJogador) continue     // usuário decide
+
+            val foiRebaixado = tecnico.timeId in timesRebaixados
+            val aproveitamentoTemp = if (tecnico.jogosTemporada > 0)
+                (tecnico.vitoriasTemporada * 3 + tecnico.empatesTemporada).toFloat() /
+                    (tecnico.jogosTemporada * 3)
+            else 1.0f  // se não jogou, não demite
+
+            val prob = when {
+                foiRebaixado                  -> 0.80f
+                aproveitamentoTemp < 0.30f    -> 0.40f
+                else                          -> 0.0f
+            }
+            if (prob == 0.0f) continue
+            if (kotlin.random.Random.nextFloat() > prob) continue
+
+            liberarDoTime(tecnico.id, anoFim)
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────
     //  IA: contrata técnicos livres para times sem técnico
     // ─────────────────────────────────────────────────────────
 

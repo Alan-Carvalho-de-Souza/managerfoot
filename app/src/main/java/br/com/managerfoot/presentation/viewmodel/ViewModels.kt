@@ -449,7 +449,7 @@ class DashboardViewModel @Inject constructor(
 
     fun aceitarPropostaClube(propostaId: Int, novoTimeId: Int) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
-        gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId)
+        gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId, save.anoAtual)
         val novaDiv = gameRepository.buscarInfoPropostaClube(novoTimeId, save.temporadaId)?.divisao ?: 1
         val novoCampId = when (novaDiv) {
             1 -> save.campeonatoAId; 2 -> save.campeonatoBId
