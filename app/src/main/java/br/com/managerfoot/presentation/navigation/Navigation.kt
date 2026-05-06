@@ -84,6 +84,10 @@ sealed class Rota(val caminho: String) {
     object HistoricoJogador : Rota("historico_jogador/{jogadorId}") {
         fun com(jogadorId: Int) = "historico_jogador/$jogadorId"
     }
+    object RankingTecnicos  : Rota("ranking_tecnicos")
+    object HistoricoTecnico : Rota("historico_tecnico/{tecnicoId}") {
+        fun com(tecnicoId: Int) = "historico_tecnico/$tecnicoId"
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -207,7 +211,8 @@ fun ManagerFootNavGraph() {
                 onIrParaClubes            = { navController.navigate(Rota.Clubes.comTimeId(timeId)) },
                 onIrParaPatrocinadores    = { navController.navigate(Rota.Patrocinadores.caminho) },
                 onIrParaTreinamento       = { navController.navigate(Rota.Treinamento.comTimeId(timeId)) },
-                onIrParaConquistas        = { navController.navigate(Rota.Conquistas.com(timeId)) }
+                onIrParaConquistas        = { navController.navigate(Rota.Conquistas.com(timeId)) },
+                onIrParaRankingTecnicos   = { navController.navigate(Rota.RankingTecnicos.caminho) }
             )
         }
 
@@ -555,6 +560,28 @@ fun ManagerFootNavGraph() {
             val jogadorId = backStack.arguments!!.getInt("jogadorId")
             HistoricoJogadorScreen(
                 jogadorId = jogadorId,
+                onVoltar = { navController.popBackStack() }
+            )
+        }
+
+        // Ranking de Técnicos
+        composable(route = Rota.RankingTecnicos.caminho) {
+            RankingTecnicosScreen(
+                onVoltar = { navController.popBackStack() },
+                onAbrirHistorico = { tecnicoId ->
+                    navController.navigate(Rota.HistoricoTecnico.com(tecnicoId))
+                }
+            )
+        }
+
+        // Histórico de carreira do técnico
+        composable(
+            route = Rota.HistoricoTecnico.caminho,
+            arguments = listOf(navArgument("tecnicoId") { type = NavType.IntType })
+        ) { backStack ->
+            val tecnicoId = backStack.arguments!!.getInt("tecnicoId")
+            HistoricoTecnicoScreen(
+                tecnicoId = tecnicoId,
                 onVoltar = { navController.popBackStack() }
             )
         }

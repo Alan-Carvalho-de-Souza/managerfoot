@@ -96,9 +96,11 @@ fun DashboardScreen(
     onIrParaPatrocinadores: () -> Unit = {},
     onIrParaTreinamento: () -> Unit = {},
     onIrParaConquistas: () -> Unit = {},
+    onIrParaRankingTecnicos: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
+    val tecnico by vm.tecnicoJogador.collectAsStateWithLifecycle()
     val todosOsTimes by vm.todosOsTimes.collectAsStateWithLifecycle()
     val ultimosResultados by vm.ultimosResultados.collectAsStateWithLifecycle()
     val proximaPartida by vm.proximaPartida.collectAsStateWithLifecycle()
@@ -172,6 +174,7 @@ fun DashboardScreen(
             0 -> AbaInicio(
                 contentPaddingBottom = ip.calculateBottomPadding(),
                 time = time,
+                tecnico = tecnico,
                 todosOsTimes = todosOsTimes,
                 proximaPartida = proximaPartida,
                 ultimosResultados = ultimosResultados,
@@ -226,7 +229,8 @@ fun DashboardScreen(
                 onIrParaClubes = onIrParaClubes,
                 onIrParaPatrocinadores = onIrParaPatrocinadores,
                 onIrParaTreinamento = onIrParaTreinamento,
-                onIrParaConquistas = onIrParaConquistas
+                onIrParaConquistas = onIrParaConquistas,
+                onIrParaRankingTecnicos = onIrParaRankingTecnicos
             )
         }
     }
@@ -255,6 +259,7 @@ fun DashboardScreen(
 private fun AbaInicio(
     contentPaddingBottom: androidx.compose.ui.unit.Dp,
     time: br.com.managerfoot.domain.model.Time?,
+    tecnico: br.com.managerfoot.data.database.entities.TecnicoEntity?,
     todosOsTimes: List<br.com.managerfoot.domain.model.Time>,
     proximaPartida: br.com.managerfoot.data.database.entities.PartidaEntity?,
     ultimosResultados: List<br.com.managerfoot.data.database.entities.PartidaEntity>,
@@ -309,6 +314,56 @@ private fun AbaInicio(
                     ano = saveState?.anoAtual ?: 0,
                     forma = forma
                 )
+                // Linha do técnico abaixo do header
+                tecnico?.let { t ->
+                    val repCor = when {
+                        t.reputacao >= 80f -> br.com.managerfoot.presentation.ui.theme.GoldChampion
+                        t.reputacao >= 60f -> br.com.managerfoot.presentation.ui.theme.PromotionGreen
+                        t.reputacao >= 40f -> br.com.managerfoot.presentation.ui.theme.GreenElectric
+                        t.reputacao >= 20f -> br.com.managerfoot.presentation.ui.theme.AmberAccent
+                        else               -> br.com.managerfoot.presentation.ui.theme.RelegationRed
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        Text(
+                            "👔",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = if (t.controladoPorJogador) "DT: ${t.nome} (Você)"
+                                   else "DT: ${t.nome}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (t.controladoPorJogador) br.com.managerfoot.presentation.ui.theme.GreenElectric
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "Rep ${t.reputacao.toInt()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = repCor
+                        )
+                        Text(
+                            text = "·",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "${t.pontos} pts",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = br.com.managerfoot.presentation.ui.theme.GreenElectric
+                        )
+                    }
+                }
             }
         }
 
@@ -692,7 +747,8 @@ private fun MenuAba(
     onIrParaClubes: () -> Unit,
     onIrParaPatrocinadores: () -> Unit,
     onIrParaTreinamento: () -> Unit,
-    onIrParaConquistas: () -> Unit = {}
+    onIrParaConquistas: () -> Unit = {},
+    onIrParaRankingTecnicos: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -736,6 +792,7 @@ private fun MenuAba(
                 MenuTileItem(Icons.Filled.AutoAwesome, "Hall da Fama", onIrParaHallDaFama),
                 MenuTileItem(Icons.AutoMirrored.Filled.MenuBook, "Clubes", onIrParaClubes),
                 MenuTileItem(Icons.Filled.Timeline, "Tabela Geral", onIrParaTabela),
+                MenuTileItem(Icons.Filled.Leaderboard, "Ranking Técnicos", onIrParaRankingTecnicos),
             ))
         }
     }

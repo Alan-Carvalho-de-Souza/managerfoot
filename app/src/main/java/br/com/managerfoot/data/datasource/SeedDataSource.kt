@@ -21,7 +21,8 @@ class SeedDataSource @Inject constructor(
 ) {
     data class SeedData(
         val times: List<TimeEntity>,
-        val jogadores: List<JogadorEntity>
+        val jogadores: List<JogadorEntity>,
+        val tecnicos: List<TecnicoEntity> = emptyList()
     )
 
     suspend fun carregar(): SeedData = withContext(Dispatchers.IO) {
@@ -29,7 +30,8 @@ class SeedDataSource @Inject constructor(
         val root = JSONObject(json)
         SeedData(
             times     = parseTimes(root.getJSONArray("times")),
-            jogadores = parseJogadores(root.getJSONArray("jogadores"))
+            jogadores = parseJogadores(root.getJSONArray("jogadores")),
+            tecnicos  = if (root.has("tecnicos")) parseTecnicos(root.getJSONArray("tecnicos")) else emptyList()
         )
     }
 
@@ -86,6 +88,23 @@ class SeedDataSource @Inject constructor(
                 salario         = o.getLong("salario"),
                 contratoAnos    = if (o.has("contrato")) o.getInt("contrato") else o.optInt("contrato_restante", 2),
                 valorMercado    = o.getLong("valor_mercado")
+            )
+        }
+
+    private fun parseTecnicos(arr: JSONArray): List<TecnicoEntity> =
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            TecnicoEntity(
+                id             = o.getInt("id"),
+                nome           = o.getString("nome"),
+                nomeAbreviado  = o.optString("nome_abrev", o.getString("nome")),
+                idade          = o.getInt("idade"),
+                nacionalidade  = o.optString("nacionalidade", "Brasil"),
+                timeId         = if (o.isNull("time_id")) null else o.getInt("time_id"),
+                salario        = o.optLong("salario", 200_000L),
+                contratoAnos   = o.optInt("contrato_anos", 2),
+                reputacao      = o.optDouble("reputacao", 50.0).toFloat(),
+                controladoPorJogador = o.optBoolean("controlado_por_jogador", false)
             )
         }
 }

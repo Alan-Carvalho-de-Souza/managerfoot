@@ -65,7 +65,21 @@ fun InicioScreen(
 
     if (uiState is InicioUiState.SelecionandoTime) {
         SelecionarTimeScreen(
-            onTimeSelecionado = { timeId -> vm.iniciarNovoJogo(timeId) }
+            onTimeSelecionado = { timeId -> vm.timeEscolhido(timeId) }
+        )
+        return
+    }
+
+    if (uiState is InicioUiState.PerguntandoNomeTecnico) {
+        val timeId = (uiState as InicioUiState.PerguntandoNomeTecnico).timeId
+        val times by vm.timesDisponiveis.collectAsState()
+        val time = times.find { it.id == timeId }
+        FormularioTecnicoUsuario(
+            time = time,
+            onConfirmar = { nome, nacionalidade ->
+                vm.iniciarNovoJogo(timeId, nome, nacionalidade)
+            },
+            onVoltar = { vm.voltarParaSelecionarTime() }
         )
         return
     }
@@ -662,4 +676,125 @@ private fun corDivisao(divisao: Int): Color = when (divisao) {
     in 11..12 -> Color(0xFF26A69A) // verde-azulado — Uruguai A
     in 13..16 -> Color(0xFF00897B) // teal — Uruguai B
     else -> Color(0xFF7B8394)
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Formulário do Técnico (após seleção do time)
+// ═══════════════════════════════════════════════════════════
+@Composable
+private fun FormularioTecnicoUsuario(
+    time: Time?,
+    onConfirmar: (nome: String, nacionalidade: String) -> Unit,
+    onVoltar: () -> Unit
+) {
+    var nome by remember { mutableStateOf("") }
+    val nacionalidades = listOf("Brasil", "Argentina", "Uruguai", "Outro")
+    val defaultNac = when (time?.pais) {
+        "Argentina" -> "Argentina"
+        "Uruguay", "Uruguai" -> "Uruguai"
+        else -> "Brasil"
+    }
+    var nacionalidade by remember { mutableStateOf(defaultNac) }
+
+    val nomeValido = nome.trim().length in 2..30
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(colors = listOf(BgPrimary, SurfaceCard, BgPrimary))
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = Spacing.xl, vertical = Spacing.xxl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // Header com escudo do time + nome
+            time?.let {
+                TeamBadge(nome = it.nome, escudoRes = it.escudoRes, size = 80.dp)
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "Bem-vindo ao ${it.nome}!",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Text(
+                "Antes de começarmos, qual é o seu nome, técnico?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = Spacing.sm)
+            )
+
+            // Input do nome (max 30 chars)
+            OutlinedTextField(
+                value = nome,
+                onValueChange = { if (it.length <= 30) nome = it },
+                label = { Text("Nome do técnico") },
+                placeholder = { Text("Ex: João Silva") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.md),
+                supportingText = {
+                    Text(
+                        "${nome.length}/30 — mínimo 2 caracteres",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                isError = nome.isNotBlank() && !nomeValido
+            )
+
+            Spacer(Modifier.height(Spacing.sm))
+
+            Text(
+                "Nacionalidade",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth().padding(start = Spacing.xs)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                nacionalidades.forEach { nac ->
+                    FilterChipPill(
+                        label = nac,
+                        selected = nacionalidade == nac,
+                        onClick = { nacionalidade = nac },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            // Botões de ação
+            Button(
+                onClick = { if (nomeValido) onConfirmar(nome.trim(), nacionalidade) },
+                enabled = nomeValido,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.md),
+                contentPadding = PaddingValues(vertical = Spacing.md)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    "Iniciar carreira como técnico",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            TextButton(onClick = onVoltar, modifier = Modifier.fillMaxWidth()) {
+                Text("Voltar e escolher outro time")
+            }
+        }
+    }
 }

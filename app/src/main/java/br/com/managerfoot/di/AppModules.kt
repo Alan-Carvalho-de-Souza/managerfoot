@@ -36,6 +36,7 @@ object DatabaseModule {
     @Provides fun provideEstadioDao(db: AppDatabase): EstadioDao = db.estadioDao()
     @Provides fun providePropostaIADao(db: AppDatabase): PropostaIADao = db.propostaIADao()
     @Provides fun providePropostaClubeDao(db: AppDatabase): PropostaClubeDao = db.propostaClubeDao()
+    @Provides fun provideTecnicoDao(db: AppDatabase): TecnicoDao = db.tecnicoDao()
 }
 
 // ─────────────────────────────────────────────
