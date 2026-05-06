@@ -37,6 +37,10 @@ data class HallDaFamaEntity(
     val assistenteNomeTime: String = "",
     val assistenteEscudo: String = "",  // drawable resource do escudo do time
 
+    // Técnico do time campeão no momento do título
+    val tecnicoId: Int = -1,
+    val tecnicoNome: String = "",
+
     // Divisão do campeonato (1 = Série A, 2 = Série B)
     val divisao: Int = 1
 )

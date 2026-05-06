@@ -45,6 +45,7 @@ class InicioViewModel @Inject constructor(
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository,
     private val gameRepository: GameRepository,
+    private val tecnicoRepository: TecnicoRepository,
     private val seedDataSource: SeedDataSource,
     private val timeDao: br.com.managerfoot.data.dao.TimeDao,
     private val jogadorDao: br.com.managerfoot.data.dao.JogadorDao
@@ -85,7 +86,21 @@ class InicioViewModel @Inject constructor(
         }
     }
 
-    fun iniciarNovoJogo(timeId: Int) = viewModelScope.launch {
+    /** Após o usuário escolher o time, transita para o estado de prompt
+     *  de nome do técnico (sem rodar a inicialização completa ainda). */
+    fun timeEscolhido(timeId: Int) {
+        _uiState.value = InicioUiState.PerguntandoNomeTecnico(timeId)
+    }
+
+    fun voltarParaSelecionarTime() {
+        _uiState.value = InicioUiState.SelecionandoTime
+    }
+
+    fun iniciarNovoJogo(
+        timeId: Int,
+        nomeTecnico: String = "Técnico",
+        nacionalidadeTecnico: String = "Brasil"
+    ) = viewModelScope.launch {
         _uiState.value = InicioUiState.Carregando
         try {
             // Limpa TODOS os dados do jogo atual (campeonatos, partidas, times, jogadores, etc.)
@@ -94,9 +109,9 @@ class InicioViewModel @Inject constructor(
             timeDao.deleteAll()
             jogadorDao.deleteAll()
 
-            // Insere dados frescos do seed em uma única transação atômica
+            // Insere dados frescos do seed em uma única transação atômica (times+jogadores+técnicos)
             val seed = seedDataSource.carregar()
-            gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
+            gameRepository.inserirSeedTransacional(seed.times, seed.jogadores, seed.tecnicos)
 
             // Marca apenas o time escolhido como controlado pelo jogador
             val timeEntity = timeDao.buscarPorId(timeId) ?: run {
@@ -104,6 +119,15 @@ class InicioViewModel @Inject constructor(
                 return@launch
             }
             timeDao.atualizar(timeEntity.copy(controladoPorJogador = true))
+
+            // Cadastra o técnico do usuário no clube escolhido. O técnico que
+            // estava nesse clube no seed é demitido (vira free agent).
+            tecnicoRepository.cadastrarTecnicoUsuario(
+                nome = nomeTecnico,
+                nacionalidade = nacionalidadeTecnico,
+                timeId = timeId,
+                anoInicial = 2026
+            )
 
             val temporadaId = 1
             // Usa o campo divisao do seed — não assume IDs fixos por divisão
@@ -293,6 +317,8 @@ sealed class InicioUiState {
     object SemSave          : InicioUiState()
     object TemSave          : InicioUiState()
     object SelecionandoTime : InicioUiState()
+    /** Após o usuário escolher o time, perguntar nome + nacionalidade do técnico. */
+    data class PerguntandoNomeTecnico(val timeId: Int) : InicioUiState()
     data class JogoIniciado(val timeId: Int) : InicioUiState()
     data class Erro(val mensagem: String) : InicioUiState()
 }
@@ -305,7 +331,8 @@ class DashboardViewModel @Inject constructor(
     private val gameDataStore: GameDataStore,
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository,
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
+    private val tecnicoRepository: TecnicoRepository
 ) : ViewModel() {
 
     val saveState = gameDataStore.saveState
@@ -318,6 +345,14 @@ class DashboardViewModel @Inject constructor(
 
     private val _timeJogador = MutableStateFlow<Time?>(null)
     val timeJogador: StateFlow<Time?> = _timeJogador.asStateFlow()
+
+    /** Técnico do clube do jogador (controlado pelo jogador). Atualiza quando o time muda. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val tecnicoJogador: StateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?> =
+        gameDataStore.saveState
+            .filter { it.timeIdJogador > 0 }
+            .flatMapLatest { save -> tecnicoRepository.observePorTime(save.timeIdJogador) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // Todos os times para resolver nomes nas telas
     private val _todosOsTimes = MutableStateFlow<List<Time>>(emptyList())
@@ -1966,6 +2001,57 @@ class ConquistasViewModel @Inject constructor(
         _timeId.value = timeId
         viewModelScope.launch {
             _time.value = timeRepository.buscarPorId(timeId)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RankingTecnicosViewModel — ranking de técnicos por pontos
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class RankingTecnicosViewModel @Inject constructor(
+    private val tecnicoRepository: TecnicoRepository,
+    private val timeRepository: TimeRepository
+) : ViewModel() {
+
+    val ranking: StateFlow<List<br.com.managerfoot.data.database.entities.TecnicoEntity>> =
+        tecnicoRepository.observeRanking()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val livres: StateFlow<List<br.com.managerfoot.data.database.entities.TecnicoEntity>> =
+        tecnicoRepository.observeLivres()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Mapa timeId → Time (escudo + nome) para enriquecer a lista. */
+    val timesPorId: StateFlow<Map<Int, br.com.managerfoot.domain.model.Time>> =
+        timeRepository.observeTodos()
+            .map { lista -> lista.associateBy { it.id } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HistoricoTecnicoViewModel — carreira completa de um técnico
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class HistoricoTecnicoViewModel @Inject constructor(
+    private val tecnicoRepository: TecnicoRepository
+) : ViewModel() {
+
+    private val _tecnico = MutableStateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?>(null)
+    val tecnico: StateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?> = _tecnico.asStateFlow()
+
+    private val _passagens = MutableStateFlow<List<br.com.managerfoot.data.database.entities.PassagemTecnicoEntity>>(emptyList())
+    val passagens: StateFlow<List<br.com.managerfoot.data.database.entities.PassagemTecnicoEntity>> = _passagens.asStateFlow()
+
+    private val _carregando = MutableStateFlow(false)
+    val carregando: StateFlow<Boolean> = _carregando.asStateFlow()
+
+    fun carregar(tecnicoId: Int) {
+        viewModelScope.launch {
+            _carregando.value = true
+            _tecnico.value = tecnicoRepository.buscarPorId(tecnicoId)
+            _passagens.value = tecnicoRepository.buscarPassagens(tecnicoId)
+            _carregando.value = false
         }
     }
 }

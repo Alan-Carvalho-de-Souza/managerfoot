@@ -28,6 +28,7 @@ class GameRepository @Inject constructor(
     private val classificacaoDao: ClassificacaoDao,
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository,
+    private val tecnicoRepository: TecnicoRepository,
     private val financaDao: br.com.managerfoot.data.dao.FinancaDao,
     private val hallDaFamaDao: HallDaFamaDao,
     private val rankingGeralDao: RankingGeralDao,
@@ -44,11 +45,15 @@ class GameRepository @Inject constructor(
      */
     suspend fun inserirSeedTransacional(
         times: List<TimeEntity>,
-        jogadores: List<JogadorEntity>
+        jogadores: List<JogadorEntity>,
+        tecnicos: List<TecnicoEntity> = emptyList()
     ) {
         db.withTransaction {
             db.timeDao().inserirTodos(times)
             db.jogadorDao().inserirTodos(jogadores)
+            if (tecnicos.isNotEmpty()) {
+                db.tecnicoDao().inserirTodos(tecnicos)
+            }
         }
     }
 
@@ -90,6 +95,8 @@ class GameRepository @Inject constructor(
         estadioDao.deleteAll()
         propostaIADao.limparTodas()
         propostaClubeDao.limparTodas()
+        db.tecnicoDao().deleteAllPassagens()
+        db.tecnicoDao().deleteAll()
     }
 
     suspend fun criarCampeonato(
@@ -735,7 +742,7 @@ class GameRepository @Inject constructor(
             val assistente = partidaDao.buscarAssisteTop1(campId)
             val campEntity = campeonatoDao.buscarPorId(campId)
             val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Copa"; 6 -> "Supercopa"; 7 -> "Apertura"; 8 -> "Clausura"; 10 -> "Segunda Div. Argentina"; 11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"; 15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"; 17 -> "Campeonato Argentino"; else -> "D" }
-            hallDaFamaDao.inserir(HallDaFamaEntity(
+            inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
                 ano = ano,
                 nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
                 campeaoTimeId      = campeao.timeId,
@@ -1008,7 +1015,7 @@ class GameRepository @Inject constructor(
                 )
                 val artilheiro = if (idsArg.isNotEmpty()) partidaDao.buscarArtilheiroTop1Multi(idsArg) else null
                 val assistente = if (idsArg.isNotEmpty()) partidaDao.buscarAssisteTop1Multi(idsArg) else null
-                hallDaFamaDao.inserir(HallDaFamaEntity(
+                inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
                     ano                 = ano,
                     nomeCampeonato      = "Campeonato Argentino $ano",
                     campeaoTimeId       = campGeral,
@@ -1213,6 +1220,19 @@ class GameRepository @Inject constructor(
             recalcularNiveisGlobais()
         } catch (_: Exception) { }
 
+        // ── Resetar stats da temporada dos técnicos ──
+        try {
+            tecnicoRepository.resetarStatsTemporada()
+        } catch (_: Exception) { }
+
+        // ── IA: preencher times sem técnico (vagos) com técnicos livres ──
+        // Garante que após o usuário ter "sequestrado" o cargo do técnico
+        // anterior do seu time, e qualquer outro time que tenha ficado sem
+        // comando, recebe um técnico livre baseado em reputação.
+        try {
+            tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
+        } catch (_: Exception) { }
+
         return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
     }
 
@@ -1263,6 +1283,30 @@ class GameRepository @Inject constructor(
     }
 
     fun observarHallDaFama(): Flow<List<HallDaFamaEntity>> = hallDaFamaDao.observeTodos()
+
+    /**
+     * Insere uma entrada no Hall da Fama, automaticamente:
+     *  - Buscando o técnico atual do time campeão
+     *  - Preenchendo tecnicoId/tecnicoNome no HallDaFamaEntity
+     *  - Registrando o título nas estatísticas do técnico (acrescenta +1 título
+     *    e bônus de reputação) — para que o ranking e histórico de técnicos
+     *    fique automaticamente sincronizado
+     */
+    private suspend fun inserirNoHallDaFamaComTecnico(entity: HallDaFamaEntity) {
+        val tecnico = try {
+            tecnicoRepository.buscarPorTime(entity.campeaoTimeId)
+        } catch (_: Exception) { null }
+        val enriched = entity.copy(
+            tecnicoId = tecnico?.id ?: -1,
+            tecnicoNome = tecnico?.nome ?: ""
+        )
+        hallDaFamaDao.inserir(enriched)
+        if (tecnico != null) {
+            try {
+                tecnicoRepository.registrarTitulo(entity.campeaoTimeId)
+            } catch (_: Exception) { }
+        }
+    }
 
     /** Conquistas (títulos) de um time específico — usado em ConquistasScreen. */
     fun observarConquistasDoTime(timeId: Int): Flow<List<HallDaFamaEntity>> =
@@ -1416,7 +1460,7 @@ class GameRepository @Inject constructor(
                 val artilheiro = partidaDao.buscarArtilheiroTop1(campeonatoId)
                 val assistente = partidaDao.buscarAssisteTop1(campeonatoId)
 
-                hallDaFamaDao.inserir(HallDaFamaEntity(
+                inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
                     ano                  = anoAtual,
                     nomeCampeonato       = camp.nome,
                     campeaoTimeId        = campeaoId,
@@ -1886,7 +1930,7 @@ class GameRepository @Inject constructor(
             val viceEnt    = timeRepository.buscarEntityPorId(viceId)
             val artilheiro = partidaDao.buscarArtilheiroTop1(intermedidId)
             val assistente = partidaDao.buscarAssisteTop1(intermedidId)
-            hallDaFamaDao.inserir(HallDaFamaEntity(
+            inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
                 ano = anoAtual, nomeCampeonato = camp.nome,
                 campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
                 viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
@@ -2025,7 +2069,7 @@ class GameRepository @Inject constructor(
             val viceEnt    = timeRepository.buscarEntityPorId(viceId)
             val artilheiro = partidaDao.buscarArtilheiroTop1(competId)
             val assistente = partidaDao.buscarAssisteTop1(competId)
-            hallDaFamaDao.inserir(HallDaFamaEntity(
+            inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
                 ano = anoAtual, nomeCampeonato = camp.nome,
                 campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
                 viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
@@ -2210,7 +2254,7 @@ class GameRepository @Inject constructor(
         val viceEnt    = if (viceId > 0) timeRepository.buscarEntityPorId(viceId) else null
         val artilheiro = partidaDao.buscarArtilheiroTop1(clausuraId)
         val assistente = partidaDao.buscarAssisteTop1(clausuraId)
-        hallDaFamaDao.inserir(HallDaFamaEntity(
+        inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
             ano = anoAtual, nomeCampeonato = "Campeonato Uruguaio $anoAtual",
             campeaoTimeId = campeaoId, campeaoNome = campeaoEnt?.nome ?: "", campeaoEscudo = campeaoEnt?.escudoRes ?: "",
             viceTimeId = viceId, viceNome = viceEnt?.nome ?: "", viceEscudo = viceEnt?.escudoRes ?: "",
@@ -2521,7 +2565,7 @@ class GameRepository @Inject constructor(
         val assistente = partidaDao.buscarAssisteTop1(trofeuId)
 
         // Registra Hall da Fama (divisao = 18 = Troféu dos Campeões)
-        hallDaFamaDao.inserir(
+        inserirNoHallDaFamaComTecnico(
             HallDaFamaEntity(
                 ano                  = ano,
                 nomeCampeonato       = nomeCampeonato,
@@ -2647,7 +2691,7 @@ class GameRepository @Inject constructor(
                 val assistente = partidaDao.buscarAssisteTop1(copaId)
                 val nomePadrao = if (divisaoHallDaFama == 9) "Copa Argentina $anoAtual" else "Copa do Brasil $anoAtual"
 
-                hallDaFamaDao.inserir(
+                inserirNoHallDaFamaComTecnico(
                     HallDaFamaEntity(
                         ano                 = anoAtual,
                         nomeCampeonato      = copaEnt?.nome ?: nomePadrao,
@@ -2817,7 +2861,7 @@ class GameRepository @Inject constructor(
         val assistente = partidaDao.buscarAssisteTop1(supercopaId)
 
         // Registra no Hall da Fama (divisao = 6 → Supercopa)
-        hallDaFamaDao.inserir(
+        inserirNoHallDaFamaComTecnico(
             HallDaFamaEntity(
                 ano                  = anoAtual,
                 nomeCampeonato       = supercopa.nome,
@@ -3936,6 +3980,16 @@ class GameRepository @Inject constructor(
         if (receita > 0) {
             timeRepository.creditarSaldo(resultado.timeCasaId, receita)
         }
+
+        // Registra V/E/D para os técnicos dos dois times — ranking de técnicos
+        try {
+            tecnicoRepository.registrarResultadoPartida(
+                timeCasaId = resultado.timeCasaId,
+                timeForaId = resultado.timeForaId,
+                golsCasa   = resultado.golsCasa,
+                golsFora   = resultado.golsFora
+            )
+        } catch (_: Exception) { }
 
         partidaDao.inserirEventos(resultado.eventos
             .filter { ev -> ev.jogadorId > 0 }

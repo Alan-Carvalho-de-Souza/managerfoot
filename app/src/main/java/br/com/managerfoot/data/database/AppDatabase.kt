@@ -27,8 +27,10 @@ import br.com.managerfoot.data.database.entities.*
         EstadioEntity::class,
         PropostaIAEntity::class,
         PropostaClubeEntity::class,
+        TecnicoEntity::class,
+        PassagemTecnicoEntity::class,
     ],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -45,6 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun estadioDao(): EstadioDao
     abstract fun propostaIADao(): PropostaIADao
     abstract fun propostaClubeDao(): PropostaClubeDao
+    abstract fun tecnicoDao(): TecnicoDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
