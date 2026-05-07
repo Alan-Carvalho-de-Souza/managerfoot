@@ -1220,6 +1220,21 @@ class GameRepository @Inject constructor(
             recalcularNiveisGlobais()
         } catch (_: Exception) { }
 
+        // ── Demissão automática por mau desempenho ──────────────
+        // Antes de resetar os stats da temporada, usa o aproveitamento
+        // do ano que encerrou para demitir técnicos: rebaixados (≈80%)
+        // e times com aproveitamento <30% (≈40%). O técnico do usuário
+        // está protegido. Acontece ANTES de preencherVagas para que os
+        // recém-demitidos entrem no pool de livres.
+        try {
+            val rebaixadosTotais = buildSet<Int> {
+                addAll(rebaixadosA); addAll(rebaixadosB); addAll(rebaixadosC)
+                if (campeonatoArgAId > 0) addAll(rebaixadosArgA)
+                if (campeonatoUruAperturaId > 0) addAll(rebaixadosUruA)
+            }
+            tecnicoRepository.demitirPorDesempenho(rebaixadosTotais, ano)
+        } catch (_: Exception) { }
+
         // ── Resetar stats da temporada dos técnicos ──
         try {
             tecnicoRepository.resetarStatsTemporada()
@@ -3086,17 +3101,23 @@ class GameRepository @Inject constructor(
         if (anoAtual > 0) {
             jogadorRepository.processarRetornosEmprestimo(anoAtual, mes, temporadaId)
         }
+        // ── Set global de jogadores já negociados neste mês ──
+        // Compartilhado entre TODAS as sub-rotinas de IA do mercado para impedir
+        // que o mesmo jogador seja transferido várias vezes na mesma janela
+        // (bug onde Time A vendia → mercado livre → Time B comprava de novo).
+        val jogadoresNegociadosNoMes = mutableSetOf<Int>()
+
         // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
-        executarContratacoesLivresIA(timeId, temporadaId, mes)
+        executarContratacoesLivresIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
         // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
-        executarReforcoMensalIA(timeId, temporadaId, mes)
+        executarReforcoMensalIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
         // IA faz reforços emergenciais quando o time está com desempenho ruim nos campeonatos
-        executarReforcoDesempenhoIA(timeId, temporadaId, mes)
+        executarReforcoDesempenhoIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
         // Nos meses de início (1-2) e final (10-12) da temporada, gera propostas de
         // times da IA para jogadores do time do usuário
         if (mes in setOf(1, 2, 10, 11, 12)) {
-            gerarPropostasIAParaTimeJogador(timeId, temporadaId, mes)
-            executarTransferenciasIAParaIA(timeId, temporadaId, mes)
+            gerarPropostasIAParaTimeJogador(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
+            executarTransferenciasIAParaIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
         }
     }
 
@@ -3143,7 +3164,12 @@ class GameRepository @Inject constructor(
      *  2. Jogadores listados para venda pelo usuário: IA oferece 85%–100% do valor de mercado.
      *  3. Jogadores listados para empréstimo pelo usuário: IA gera proposta de empréstimo (sem custo de compra).
      */
-    suspend fun gerarPropostasIAParaTimeJogador(playerTimeId: Int, temporadaId: Int, mes: Int) {
+    suspend fun gerarPropostasIAParaTimeJogador(
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        jogadoresMovidos: MutableSet<Int> = mutableSetOf()
+    ) {
         val elenco = jogadorRepository.buscarDisponiveis(playerTimeId)
         if (elenco.isEmpty()) return
         val todos = timeRepository.buscarTodosOrdenadosPorReputacao().filter { it.id != playerTimeId }
@@ -3152,6 +3178,7 @@ class GameRepository @Inject constructor(
         // ── Caso 1: proposta espontânea para os melhores jogadores ──────────────
         val candidatos = elenco
             .filter { !it.lesionado && !it.categoriaBase }
+            .filter { it.id !in jogadoresMovidos }
             .sortedByDescending { it.forca }
             .take(8)
 
@@ -3176,6 +3203,8 @@ class GameRepository @Inject constructor(
                     tipoProposta    = TipoProposta.VENDA
                 )
             )
+            // Bloqueia outras IA-to-IA do mesmo ciclo de tentar mover este jogador
+            jogadoresMovidos.add(jogador.id)
         }
 
         // ── Caso 2 & 3: jogadores listados explicitamente pelo usuário ──────────
@@ -3432,14 +3461,15 @@ class GameRepository @Inject constructor(
      * Para cada time da IA (exceto o do jogador), verifica se há jogadores livres
      * disponíveis para contratar e executa até 2 contratações por mês.
      */
-    private suspend fun executarContratacoesLivresIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+    private suspend fun executarContratacoesLivresIA(
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        jogadoresMovidos: MutableSet<Int>
+    ) {
         val todos = timeRepository.buscarTodosOrdenadosPorReputacao()
         val mercadoLivre = jogadorRepository.buscarMercado(limite = 40)
         if (mercadoLivre.isEmpty()) return
-
-        // Rastreia jogadores já movimentados nesta execução para não negociar o mesmo
-        // jogador duas vezes dentro do mesmo fechamento mensal.
-        val jogadoresMovidos = mutableSetOf<Int>()
 
         for (time in todos) {
             if (time.id == playerTimeId) continue
@@ -3467,12 +3497,15 @@ class GameRepository @Inject constructor(
      * no titular, busca um jogador livre melhor naquela posição e, se o valor de
      * mercado caber em até 30% do saldo, realiza a contratação pagando pelo passe.
      */
-    private suspend fun executarReforcoMensalIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+    private suspend fun executarReforcoMensalIA(
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        jogadoresMovidos: MutableSet<Int>
+    ) {
         val todos  = timeRepository.buscarTodosOrdenadosPorReputacao()
         val livres = jogadorRepository.buscarMercado(limite = 60).filter { it.timeId == null }
         if (livres.isEmpty()) return
-
-        val jogadoresMovidos = mutableSetOf<Int>()
 
         for (time in todos) {
             if (time.id == playerTimeId) continue
@@ -3523,7 +3556,12 @@ class GameRepository @Inject constructor(
      * As contratações são registradas via [realizarTransferencia] e aparecem
      * automaticamente na aba "Transferências" do Mercado de Transferências.
      */
-    private suspend fun executarReforcoDesempenhoIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+    private suspend fun executarReforcoDesempenhoIA(
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        jogadoresMovidos: MutableSet<Int>
+    ) {
         val tiposCopa = setOf(
             TipoCampeonato.COPA_NACIONAL,
             TipoCampeonato.CONTINENTAL
@@ -3531,7 +3569,8 @@ class GameRepository @Inject constructor(
         val ligas = campeonatoDao.buscarAtivos().filter { it.tipo !in tiposCopa }
         if (ligas.isEmpty()) return
 
-        val livres = jogadorRepository.buscarMercado(limite = 80).filter { it.timeId == null }
+        val livres = jogadorRepository.buscarMercado(limite = 80)
+            .filter { it.timeId == null && it.id !in jogadoresMovidos }
         if (livres.isEmpty()) return
         val livresDisponiveis = livres.toMutableList()
 
@@ -3573,6 +3612,7 @@ class GameRepository @Inject constructor(
                             contratoAnos    = 2
                         ), temporadaId, mes
                     )
+                    jogadoresMovidos.add(candidato.id)
                     contratados++
                 }
 
@@ -3591,6 +3631,7 @@ class GameRepository @Inject constructor(
                                 contratoAnos    = 2
                             ), temporadaId, mes
                         )
+                        jogadoresMovidos.add(candidato.id)
                         contratados++
                     }
                 }
@@ -4205,16 +4246,17 @@ class GameRepository @Inject constructor(
      *  - O time vendedor recebe o valor e o jogador é transferido
      *  - Cada time da IA executa no máximo 1 compra de outro time da IA por ciclo
      */
-    private suspend fun executarTransferenciasIAParaIA(playerTimeId: Int, temporadaId: Int, mes: Int) {
+    private suspend fun executarTransferenciasIAParaIA(
+        playerTimeId: Int,
+        temporadaId: Int,
+        mes: Int,
+        jogadoresMovidos: MutableSet<Int>
+    ) {
         val todos = timeRepository.buscarTodosOrdenadosPorReputacao()
         val timesIA = todos.filter { it.id != playerTimeId }
         if (timesIA.size < 2) return
 
         val probabilidade = if (mes <= 2) 0.30f else 0.15f
-
-        // Jogadores já transferidos nesta rodada — impede que o mesmo jogador
-        // seja negociado por mais de um time dentro do mesmo fechamento mensal.
-        val jogadoresMovidos = mutableSetOf<Int>()
 
         for (comprador in timesIA) {
             if (kotlin.random.Random.nextFloat() >= probabilidade) continue
@@ -4292,9 +4334,17 @@ class GameRepository @Inject constructor(
 
     /**
      * Aceita a proposta de clube: o jogador passa a controlar [novoTimeId].
-     * Atualiza os flags controladoPorJogador em ambos os times.
+     * Atualiza os flags controladoPorJogador em ambos os times **e** migra
+     * a `TecnicoEntity` do usuário para o novo clube — encerrando sua
+     * passagem ativa no clube anterior, demitindo o técnico que estava no
+     * novo clube (vira agente livre) e abrindo nova passagem.
+     *
+     * Em seguida, preenche a vaga deixada no clube anterior com um técnico
+     * livre do mercado (mesmo critério da troca de temporada).
+     *
+     * @param anoAtual ano em vigor — usado para registrar fim/início de passagens.
      */
-    suspend fun aceitarPropostaClube(id: Int, timeAtualId: Int, novoTimeId: Int) {
+    suspend fun aceitarPropostaClube(id: Int, timeAtualId: Int, novoTimeId: Int, anoAtual: Int) {
         propostaClubeDao.atualizarStatus(id, StatusPropostaClube.ACEITA)
         // Recusa todas as outras propostas pendentes
         propostaClubeDao.buscarPendentes().forEach { p ->
@@ -4308,6 +4358,26 @@ class GameRepository @Inject constructor(
         if (novoTime != null) {
             db.timeDao().atualizar(novoTime.copy(controladoPorJogador = true))
         }
+
+        // ── Migra TecnicoEntity do usuário ────────────────────
+        try {
+            val tecnicoUsuario = tecnicoRepository.buscarTecnicoDoJogador()
+            if (tecnicoUsuario != null) {
+                // Encerra passagem ativa do usuário no clube anterior
+                tecnicoRepository.liberarDoTime(tecnicoUsuario.id, anoAtual)
+                // Contrata no novo clube — isso demite o técnico que estava
+                // lá (vira agente livre) e abre nova passagem ativa.
+                tecnicoRepository.contratar(
+                    tecnicoId = tecnicoUsuario.id,
+                    timeId    = novoTimeId,
+                    salario   = tecnicoUsuario.salario,
+                    anos      = tecnicoUsuario.contratoAnos.coerceAtLeast(3),
+                    anoAtual  = anoAtual
+                )
+            }
+            // Preenche a vaga deixada no clube anterior com um técnico livre
+            tecnicoRepository.preencherVagasComTecnicosLivres(anoAtual)
+        } catch (_: Exception) { }
     }
 
     /**
