@@ -730,42 +730,9 @@ class GameRepository @Inject constructor(
     ): NovaTemporadaInfo {
         // ── Série A ──────────────────────────────────────────────
         val participantesA = campeonatoDao.buscarIdsParticipantes(campeonatoAId)
-        // ── Helper: registra Hall da Fama para uma divisão ────────
-        suspend fun registrarHallDaFama(campId: Int, div: Int) {
-            if (campId <= 0) return
-            // Evita duplicatas: pula se já existe entrada para este ano + divisão
-            if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div) != null) return
-            val tabTop2    = classificacaoDao.buscarTop2(campId)
-            val campeao    = tabTop2.getOrNull(0) ?: return
-            val vice       = tabTop2.getOrNull(1)
-            val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
-            val assistente = partidaDao.buscarAssisteTop1(campId)
-            val campEntity = campeonatoDao.buscarPorId(campId)
-            val nomeSerie  = when (div) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; 5 -> "Copa"; 6 -> "Supercopa"; 7 -> "Apertura"; 8 -> "Clausura"; 10 -> "Segunda Div. Argentina"; 11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"; 15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"; 17 -> "Campeonato Argentino"; else -> "D" }
-            inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
-                ano = ano,
-                nomeCampeonato     = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
-                campeaoTimeId      = campeao.timeId,
-                campeaoNome        = timeRepository.buscarPorId(campeao.timeId)?.nome ?: "",
-                campeaoEscudo      = timeRepository.buscarPorId(campeao.timeId)?.escudoRes ?: "",
-                viceTimeId         = vice?.timeId ?: -1,
-                viceNome           = vice?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "",
-                viceEscudo         = vice?.let { timeRepository.buscarPorId(it.timeId)?.escudoRes } ?: "",
-                artilheiroId       = artilheiro?.jogadorId ?: -1,
-                artilheiroNome     = artilheiro?.nomeJogador ?: "",
-                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
-                artilheiroGols     = artilheiro?.total ?: 0,
-                artilheiroNomeTime = artilheiro?.nomeTime ?: "",
-                artilheiroEscudo   = artilheiro?.escudoRes ?: "",
-                assistenteId       = assistente?.jogadorId ?: -1,
-                assistenteNome     = assistente?.nomeJogador ?: "",
-                assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
-                assistenciasTotais = assistente?.total ?: 0,
-                assistenteNomeTime = assistente?.nomeTime ?: "",
-                assistenteEscudo   = assistente?.escudoRes ?: "",
-                divisao = div
-            ))
-        }
+        // ── Helper local: encurtamento que fixa o ano da temporada ───
+        suspend fun registrarHallDaFama(campId: Int, div: Int) =
+            registrarHallDaFamaPontosCorridos(campId, div, ano)
 
         registrarHallDaFama(campeonatoAId, 1)
         registrarHallDaFama(campeonatoBId, 2)
@@ -1321,6 +1288,57 @@ class GameRepository @Inject constructor(
                 tecnicoRepository.registrarTitulo(entity.campeaoTimeId)
             } catch (_: Exception) { }
         }
+    }
+
+    /**
+     * Registra Hall da Fama para campeonatos de pontos corridos (líder da
+     * tabela é o campeão). Idempotente — pula se já existe entrada para o
+     * mesmo `ano + divisao`. Compartilhado entre o fim de temporada (Série
+     * A/B/C/D, Apertura, Segunda Div., etc.) e o registro do Clausura
+     * uruguaio assim que sua fase regular termina (antes do playoff).
+     */
+    private suspend fun registrarHallDaFamaPontosCorridos(campId: Int, div: Int, ano: Int) {
+        if (campId <= 0) return
+        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div) != null) return
+        val tabTop2    = classificacaoDao.buscarTop2(campId)
+        val campeao    = tabTop2.getOrNull(0) ?: return
+        val vice       = tabTop2.getOrNull(1)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(campId)
+        val assistente = partidaDao.buscarAssisteTop1(campId)
+        val campEntity = campeonatoDao.buscarPorId(campId)
+        val nomeSerie  = when (div) {
+            1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"
+            5 -> "Copa"; 6 -> "Supercopa"
+            7 -> "Apertura"; 8 -> "Clausura"
+            10 -> "Segunda Div. Argentina"
+            11 -> "Apertura Uruguaio"; 13 -> "Clausura Uruguaio"
+            15 -> "Segunda Div. Uruguaia"; 16 -> "Competencia URU B"
+            17 -> "Campeonato Argentino"
+            else -> "D"
+        }
+        inserirNoHallDaFamaComTecnico(HallDaFamaEntity(
+            ano                  = ano,
+            nomeCampeonato       = campEntity?.nome ?: "Brasileiro Série $nomeSerie $ano",
+            campeaoTimeId        = campeao.timeId,
+            campeaoNome          = timeRepository.buscarPorId(campeao.timeId)?.nome ?: "",
+            campeaoEscudo        = timeRepository.buscarPorId(campeao.timeId)?.escudoRes ?: "",
+            viceTimeId           = vice?.timeId ?: -1,
+            viceNome             = vice?.let { timeRepository.buscarPorId(it.timeId)?.nome } ?: "",
+            viceEscudo           = vice?.let { timeRepository.buscarPorId(it.timeId)?.escudoRes } ?: "",
+            artilheiroId         = artilheiro?.jogadorId ?: -1,
+            artilheiroNome       = artilheiro?.nomeJogador ?: "",
+            artilheiroNomeAbrev  = artilheiro?.nomeAbrev ?: "",
+            artilheiroGols       = artilheiro?.total ?: 0,
+            artilheiroNomeTime   = artilheiro?.nomeTime ?: "",
+            artilheiroEscudo     = artilheiro?.escudoRes ?: "",
+            assistenteId         = assistente?.jogadorId ?: -1,
+            assistenteNome       = assistente?.nomeJogador ?: "",
+            assistenteNomeAbrev  = assistente?.nomeAbrev ?: "",
+            assistenciasTotais   = assistente?.total ?: 0,
+            assistenteNomeTime   = assistente?.nomeTime ?: "",
+            assistenteEscudo     = assistente?.escudoRes ?: "",
+            divisao              = div
+        ))
     }
 
     /** Conquistas (títulos) de um time específico — usado em ConquistasScreen. */
@@ -2173,6 +2191,14 @@ class GameRepository @Inject constructor(
         // ── Todas as rodadas regulares devem estar completas ─────────────────
         if (rodadasReg.isEmpty() || !rodadasReg.all { it.jogada }) return false
 
+        // ── Hall da Fama: Campeão do Torneio Clausura (líder da fase regular) ──
+        // Registramos ANTES de gerar partidas de playoff, para que a tabela ainda
+        // reflita apenas a fase regular. O playoff define o Campeão Uruguaio
+        // (divisão 14, registrado em registrarCampeaoUruguai).
+        try {
+            registrarHallDaFamaPontosCorridos(clausuraId, 13, anoAtual)
+        } catch (_: Exception) { }
+
         // ── Gera playoff (Semi ou Final, ou arrastão) ────────────────────────
         if (semiPartidas.isEmpty() && finalPartidas.isEmpty()) {
             val aperturaChampId = liderTabela(aperturaId).takeIf { it > 0 } ?: return false
@@ -2370,6 +2396,10 @@ class GameRepository @Inject constructor(
         }
 
         // ── Clausura + Playoff (começa após Intermediário encerrado) ──────────
+        // Cadência espelhando o Argentino Clausura: avança UMA rodada por chamada.
+        // Quando a fase regular termina, apenas geramos a próxima fase (Semi ou
+        // Final) via verificarEAvancarPlayoffUruguai e RETORNAMOS — a próxima
+        // partida do jogador dispara a simulação dessa fase recém-criada.
         if (clausuraId > 0 && campeonatoDao.buscarPorId(clausuraId)?.encerrado == false) {
             val pendentes = partidaDao.buscarTodasPorCampeonato(clausuraId).filter { !it.jogada }
             if (pendentes.isNotEmpty()) {
@@ -2381,18 +2411,9 @@ class GameRepository @Inject constructor(
                 avançarCompetenciaB(competBId, anoAtual, timeJogadorId, temporadaId)
                 return
             }
-            // Sem partidas pendentes mas não encerrado → gera fase seguinte do Playoff
-            val encerrou = verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
-            if (!encerrou) {
-                val novas = partidaDao.buscarTodasPorCampeonato(clausuraId).filter { !it.jogada }
-                if (novas.isNotEmpty()) {
-                    val proxRodada = novas.minByOrNull { it.rodada }?.rodada ?: 0
-                    novas.filter { it.rodada == proxRodada }
-                        .forEach { try { simularPartidaInterna(it) } catch (_: Exception) {} }
-                    campeonatoDao.avancarRodada(clausuraId)
-                    verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
-                }
-            }
+            // Sem partidas pendentes: tenta gerar a próxima fase do playoff.
+            // Não simula imediatamente — deixamos para a próxima chamada (cadenciado).
+            verificarEAvancarPlayoffUruguai(clausuraId, aperturaId, intermedidId, anoAtual, timeJogadorId, temporadaId)
         }
 
         // Competencia B em paralelo (mesmo que cadeia Principal não tenha avançado)
