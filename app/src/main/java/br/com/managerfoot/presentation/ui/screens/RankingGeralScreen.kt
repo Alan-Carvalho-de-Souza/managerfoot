@@ -90,6 +90,7 @@ private fun RankingGeralHeader() {
                 "#",
                 modifier = Modifier.width(26.dp),
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 textAlign = TextAlign.Center,
@@ -100,6 +101,7 @@ private fun RankingGeralHeader() {
                 "CLUBE",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -107,6 +109,7 @@ private fun RankingGeralHeader() {
             Text(
                 "PTS",
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -122,7 +125,7 @@ private fun RankingGeralHeader() {
                 Text(
                     col,
                     modifier = Modifier.weight(1f),
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -193,6 +196,7 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity, isOdd: Bool
                     "$posicao",
                     modifier = Modifier.width(26.dp),
                     style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     fontWeight = if (posicao <= 3) FontWeight.Bold else FontWeight.Normal,
                     textAlign = TextAlign.Center,
                     color = posTextColor
@@ -203,6 +207,7 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity, isOdd: Bool
                     entry.nomeTime,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -215,6 +220,7 @@ private fun RankingGeralRow(posicao: Int, entry: RankingGeralEntity, isOdd: Bool
                     Text(
                         "${entry.pontosAcumulados}",
                         style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (posicao <= 3) posTextColor else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
@@ -265,6 +271,7 @@ private fun RowScope.StatNumero(
         valor,
         modifier = Modifier.weight(1f),
         style = MaterialTheme.typography.labelSmall,
+        fontSize = 10.sp,
         textAlign = TextAlign.Center,
         color = cor,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal

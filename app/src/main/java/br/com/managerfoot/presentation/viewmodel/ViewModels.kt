@@ -65,6 +65,15 @@ class InicioViewModel @Inject constructor(
 
     private fun verificarSave() = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
+        // Backfill de escudos para bancos populados por uma versão do seed
+        // anterior aos escudos de uma liga (ex.: Premier). Idempotente e barato:
+        // só preenche escudos vazios de times já existentes, sem tocar no jogo.
+        try {
+            val seed = seedDataSource.carregar()
+            gameRepository.sincronizarEscudosDoSeed(seed.times)
+        } catch (e: Exception) {
+            Log.e("InicioViewModel", "backfill de escudos falhou", e)
+        }
         _uiState.value = if (save.jogoInicializado) InicioUiState.TemSave
         else InicioUiState.SemSave
     }
@@ -75,10 +84,17 @@ class InicioViewModel @Inject constructor(
         try {
             // Verifica se o seed já está íntegro (times E jogadores presentes).
             // Isso detecta o estado corrompido de crash entre as duas inserções.
+            val seed = seedDataSource.carregar()
             if (!gameRepository.seedEstaIntegro()) {
-                val seed = seedDataSource.carregar()
                 gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
+            } else {
+                // Banco já íntegro, mas pode ter sido populado por uma versão do seed
+                // anterior a uma liga nova (ex.: Premier). Adiciona de forma aditiva
+                // os times/jogadores que faltam, sem tocar em jogos em andamento.
+                gameRepository.inserirSeedFaltante(seed.times, seed.jogadores)
             }
+            // Preenche escudos que passaram a existir no seed para times já no banco.
+            gameRepository.sincronizarEscudosDoSeed(seed.times)
             _uiState.value = InicioUiState.SelecionandoTime
         } catch (e: Exception) {
             Log.e("InicioViewModel", "iniciarSelecionarTime falhou", e)
@@ -264,6 +280,20 @@ class InicioViewModel @Inject constructor(
             val campeonatoUruBCompetId = if (participantesUruB.size >= 2)
                 gameRepository.criarUruguaiSegundaDivCompetencia(participantesUruB, temporadaId, 2026) else -1
 
+            // ── Premier League (Inglaterra, divisao 11) — pontos corridos ────────
+            val participantesPremier = timeDao.observePorDivisao(11).first().map { it.id }
+            val campeonatoPremierId = if (participantesPremier.isNotEmpty()) gameRepository.criarCampeonato(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Premier League 2026/27",
+                    tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
+                    formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                    totalRodadas = (participantesPremier.size - 1) * 2,
+                    pais         = "Inglaterra"
+                ),
+                participantesPremier
+            ) else -1
+
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)
             val divJogador = timeEntity2?.divisao ?: 1
@@ -273,6 +303,7 @@ class InicioViewModel @Inject constructor(
                 6 -> campeonatoArgBId
                 9 -> campeonatoUruAperturaId
                 10 -> campeonatoUruBId
+                11 -> campeonatoPremierId
                 else -> campeonatoArgAId
             }
 
@@ -292,6 +323,7 @@ class InicioViewModel @Inject constructor(
                 campeonatoUruIntermedId = campeonatoUruIntermedId,
                 campeonatoUruBId = campeonatoUruBId,
                 campeonatoUruBCompetId = campeonatoUruBCompetId,
+                campeonatoPremierId = campeonatoPremierId,
                 copaId = copaId,
                 copaArgId = copaArgId,
                 supercopaId = supercopaId,
@@ -366,6 +398,11 @@ class DashboardViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Carregando)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    // Mensagens transitórias (erros/avisos) para exibição em Snackbar na Dashboard.
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+    fun limparMensagem() { _mensagem.value = null }
 
     // Resultado da última simulação — quando não nulo, abre a tela de simulação
     private val _resultadoSimulado = MutableStateFlow<ResultadoPartida?>(null)
@@ -512,7 +549,8 @@ class DashboardViewModel @Inject constructor(
             _escalacaoAdversarioSimulacao.value = contexto.escalacaoAdversario
             _resultadoSimulado.value = resultadoParcial
         } catch (e: Exception) {
-            // Ignora erro e volta para o estado normal
+            Log.e("DashboardViewModel", "simularProximaPartida falhou", e)
+            _mensagem.value = "Não foi possível simular a partida. Tente novamente."
         }
 
         _uiState.value = DashboardUiState.Pronto
@@ -566,7 +604,8 @@ class DashboardViewModel @Inject constructor(
                     save.campeonatoDId,
                     // campeonatoArgAId excluído: gerenciado via verificarEAvancarFaseArgentina
                     save.campeonatoArgBId,
-                    save.campeonatoUruBId
+                    save.campeonatoUruBId,
+                    save.campeonatoPremierId
                 ).filter { it > 0 && it != ctx.campeonatoId }
             } else {
                 emptyList()
@@ -983,6 +1022,7 @@ class DashboardViewModel @Inject constructor(
                 campeonatoUruIntermedId  = save.campeonatoUruIntermedId,
                 campeonatoUruBId         = save.campeonatoUruBId,
                 campeonatoUruBCompetId    = save.campeonatoUruBCompetId,
+                campeonatoPremierId       = save.campeonatoPremierId,
                 temporadaId              = save.temporadaId,
                 ano                      = anoTemporada,
                 timeJogadorId            = save.timeIdJogador
@@ -996,6 +1036,7 @@ class DashboardViewModel @Inject constructor(
                 6 -> novaInfo.campeonatoArgBId
                 9 -> novaInfo.campeonatoUruAperturaId
                 10 -> novaInfo.campeonatoUruBId
+                11 -> novaInfo.campeonatoPremierId
                 else -> novaInfo.campeonatoArgAId
             }
             gameDataStore.salvarNovaTemporada(
@@ -1012,6 +1053,7 @@ class DashboardViewModel @Inject constructor(
                 campeonatoUruIntermedId  = novaInfo.campeonatoUruIntermedId,
                 campeonatoUruBId         = novaInfo.campeonatoUruBId,
                 campeonatoUruBCompetId    = novaInfo.campeonatoUruBCompetId,
+                campeonatoPremierId       = novaInfo.campeonatoPremierId,
                 copaId        = novaInfo.copaId,
                 copaArgId     = novaInfo.copaArgId,
                 supercopaId   = novaInfo.supercopaId,
@@ -1614,6 +1656,7 @@ class TabelaViewModel @Inject constructor(
     private var campeonatoUruClausuraId: Int = -1
     private var campeonatoUruIntermedId: Int = -1
     private var campeonatoUruBCompetId: Int = -1
+    private var campeonatoPremierId: Int = -1
     private var copaId: Int = -1
 
     // timeId do campeão da Copa do Brasil corrente (-1 enquanto não encerrada)
@@ -1627,7 +1670,7 @@ class TabelaViewModel @Inject constructor(
     // Job do collector ativo — cancelado sempre que a divisão muda
     private var coletaJob: kotlinx.coroutines.Job? = null
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -1640,18 +1683,22 @@ class TabelaViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausuraId
         campeonatoUruIntermedId = campUruIntermedId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
         copaId = copaIdBrasil
         // Busca o campeão da Copa do Brasil se já encerrada
         _copaChampeaoTimeId.value = gameRepository.buscarCampeaoCopaSeEncerrada(copaIdBrasil)
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais
         listOf(campAId, campBId, campCId, campDId, campArgAId, campArgBId, campArgClausuraId,
-               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId).filter { it > 0 }.forEach { id ->
+               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId).filter { it > 0 }.forEach { id ->
             gameRepository.recalcularClassificacao(id)
         }
-        // Determina a divisão inicial pelo time do jogador; usa Série A como fallback
+        // Determina a divisão inicial pelo time do jogador; usa Série A como fallback.
+        // Times ingleses têm divisao=11 (Premier); traduz para o código de aba 20 desta
+        // tela (11 já é usado pelo Intermédio Uruguaio no esquema de abas).
         val allTimes = timeRepository.observeTodos().first { it.isNotEmpty() }
-        val divisaoJogador = if (timeJogadorId > 0) allTimes.find { it.id == timeJogadorId }?.divisao ?: 1 else 1
+        val divTime = if (timeJogadorId > 0) allTimes.find { it.id == timeJogadorId }?.divisao ?: 1 else 1
+        val divisaoJogador = if (divTime == 11) 20 else divTime
         _divisaoSelecionada.value = divisaoJogador
         when (divisaoJogador) {
             8 -> coletarTabelaGeral()
@@ -1676,6 +1723,7 @@ class TabelaViewModel @Inject constructor(
         9 -> campeonatoUruAperturaId; 10 -> campeonatoUruBId
         11 -> campeonatoUruIntermedId; 12 -> campeonatoUruClausuraId
         14 -> campeonatoUruBCompetId
+        20 -> campeonatoPremierId
         else -> campeonatoArgAId
     }
 
@@ -1817,6 +1865,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoUruClausuraId: Int = -1
     private var campeonatoUruBId: Int = -1
     private var campeonatoUruBCompetId: Int = -1
+    private var campeonatoPremierId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -1824,7 +1873,7 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -1839,6 +1888,7 @@ class ArtilheirosViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausId
         campeonatoUruBId = campUruBId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
         _divisaoSelecionada.value = divisaoInicial
         coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
@@ -1862,6 +1912,7 @@ class ArtilheirosViewModel @Inject constructor(
         5 -> copaId; 10 -> copaArgId; 7 -> campeonatoArgBId; 8 -> campeonatoArgAId; 9 -> campeonatoArgClausuraId
         20 -> campeonatoUruAperturaId; 21 -> campeonatoUruIntermedId; 22 -> campeonatoUruClausuraId
         23 -> campeonatoUruBId; 24 -> campeonatoUruBCompetId
+        30 -> campeonatoPremierId
         else -> -1 // div=6,25,26 (combinados) e div=0,100,200,300 (todos) tratados em coletarArtilheiros
     }
 
@@ -1876,6 +1927,7 @@ class ArtilheirosViewModel @Inject constructor(
         7, 23, 26   -> listOf("EXTRANGEIRO_DIVISAO2") // Argentina/Uruguai Segunda
         20, 21, 22  -> listOf("EXTRANGEIRO_DIVISAO1") // Uruguai Apertura/Intermed/Clausura
         24          -> listOf("EXTRANGEIRO_DIVISAO2") // Uruguai Competencia
+        30          -> listOf("NACIONAL_DIVISAO1")    // Premier League (mesmo tipo da Série A)
         else -> emptyList()
     }
 
@@ -1886,7 +1938,7 @@ class ArtilheirosViewModel @Inject constructor(
             0    -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
                            campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
                            campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
-                           campeonatoUruBId, campeonatoUruBCompetId).filter { it > 0 }
+                           campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId).filter { it > 0 }
             // Combinados por país
             100  -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId).filter { it > 0 }
             200  -> listOf(campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, copaArgId).filter { it > 0 }
@@ -2767,11 +2819,12 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoUruClausuraId = -1
     private var campeonatoUruBId = -1
     private var campeonatoUruBCompetId = -1
+    private var campeonatoPremierId = -1
 
     private var coletarJob: Job? = null
 
     fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1,
-                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) = viewModelScope.launch {
+                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2784,6 +2837,7 @@ class RodadaViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausId
         campeonatoUruBId = campUruBId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
         atualizarMaxEColetar()
     }
 
@@ -2842,6 +2896,7 @@ class RodadaViewModel @Inject constructor(
         12 -> campeonatoUruClausuraId
         13 -> campeonatoUruBId
         14 -> campeonatoUruBCompetId
+        20 -> campeonatoPremierId
         else -> campeonatoArgAId
     }
 
@@ -3080,8 +3135,8 @@ class TreinamentoViewModel @Inject constructor(
         val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
         if (jogador.treinouNestaCiclo) return@launch
         jogadorRepository.treinarJogador(jogadorId)
-        val novaFadiga = ((jogador.fadiga - 0.05f).coerceIn(0f, 1f) * 100).toInt()
-        _mensagem.value = "${jogador.nomeAbreviado} treinou. Fadiga: $novaFadiga%"
+        val novaEnergia = ((jogador.fadiga - 0.05f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} treinou. Energia: $novaEnergia%"
     }
 
     fun treinarTudo(timeId: Int) = viewModelScope.launch {
@@ -3098,8 +3153,8 @@ class TreinamentoViewModel @Inject constructor(
         val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
         if (jogador.treinouNestaCiclo) return@launch
         jogadorRepository.descansarJogador(jogadorId)
-        val novaFadiga = ((jogador.fadiga + 0.10f).coerceIn(0f, 1f) * 100).toInt()
-        _mensagem.value = "${jogador.nomeAbreviado} descansou. Fadiga: $novaFadiga%"
+        val novaEnergia = ((jogador.fadiga + 0.10f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} descansou. Energia: $novaEnergia%"
     }
 
     fun limparMensagem() { _mensagem.value = null }

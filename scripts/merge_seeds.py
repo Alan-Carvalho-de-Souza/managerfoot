@@ -1,38 +1,106 @@
 """
 merge_seeds.py
-Merge all seed JSON files into a single seed_data.json.
-Usage: python scripts/merge_seeds.py
+Sincroniza os seeds auxiliares por liga dentro do seed_data.json.
+
+Contexto: o seed_data.json e a base autoritativa carregada pelo app
+(SeedDataSource le SOMENTE esse arquivo). Ligas como brasileirao/argentina
+vivem apenas dentro dele (nao ha mais arquivo-fonte separado). Outras ligas
+mantem um arquivo-fonte editavel (seed_premier.json, seed_uruguay.json) que
+serve como fonte da verdade daquela liga.
+
+Este script pega o seed_data.json como base e, para cada arquivo auxiliar
+existente, faz UPSERT (casando por id) de times e jogadores:
+  - id ja presente  -> substitui o registro pelo do arquivo auxiliar
+  - id novo         -> adiciona ao final
+Ids que nao aparecem em nenhum auxiliar (ex.: brasileirao) sao preservados.
+
+A chave 'tecnicos' do seed_data.json e PRESERVADA (e sofre upsert a partir dos
+auxiliares, caso algum passe a trazer tecnicos). Nunca a descarte: os tecnicos
+sao gerados por scripts/gen_tecnicos.py e alimentam o Ranking de Tecnicos.
+Fluxo recomendado ao adicionar/alterar uma liga:
+    python scripts/merge_seeds.py     # sincroniza times/jogadores/escudos
+    python scripts/gen_tecnicos.py    # (re)gera 1 tecnico por time (inclui novos)
+
+Ou seja: edite seed_premier.json / seed_uruguay.json e rode
+    python scripts/merge_seeds.py
+para propagar as mudancas (escudo_res, nome, saldo, etc.) ao seed_data.json.
 """
 import json
 import os
 
 ASSETS = os.path.join("app", "src", "main", "assets")
-FILES = [
-    "seed_brasileirao.json",
-    "seed_argentina.json",
-    "seed_argentina2.json",
+BASE = os.path.join(ASSETS, "seed_data.json")
+
+# Arquivos-fonte por liga que ainda existem separados. Sao a fonte da verdade
+# dos ids que contem. Ligas sem arquivo aqui vivem apenas no seed_data.json.
+AUX_FILES = [
+    "seed_premier.json",
     "seed_uruguay.json",
 ]
-OUT = os.path.join(ASSETS, "seed_data.json")
 
-all_times: list = []
-all_jogadores: list = []
 
-for fname in FILES:
+def upsert(base_list, aux_list, key="id"):
+    """Substitui itens de base_list cujo id aparece em aux_list (preservando a
+    ordem original) e adiciona ao final os ids novos que so existem no auxiliar."""
+    aux_by_id = {item[key]: item for item in aux_list}
+    used = set()
+    result = []
+    for item in base_list:
+        i = item.get(key)
+        if i in aux_by_id:
+            result.append(aux_by_id[i])
+            used.add(i)
+        else:
+            result.append(item)
+    added = 0
+    for item in aux_list:
+        if item[key] not in used:
+            result.append(item)
+            added += 1
+    return result, len(used), added
+
+
+with open(BASE, encoding="utf-8") as f:
+    data = json.load(f)
+
+times = data.get("times", [])
+jogadores = data.get("jogadores", [])
+tecnicos = data.get("tecnicos", [])
+print(
+    f"Base seed_data.json: {len(times)} times, {len(jogadores)} jogadores, "
+    f"{len(tecnicos)} tecnicos"
+)
+
+for fname in AUX_FILES:
     path = os.path.join(ASSETS, fname)
+    if not os.path.exists(path):
+        print(f"  (pulando {fname}: nao encontrado)")
+        continue
     with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    times = data.get("times", [])
-    jogadores = data.get("jogadores", [])
-    all_times.extend(times)
-    all_jogadores.extend(jogadores)
-    print(f"  {fname}: {len(times)} times, {len(jogadores)} jogadores")
+        aux = json.load(f)
+    times, ut, at = upsert(times, aux.get("times", []))
+    jogadores, uj, aj = upsert(jogadores, aux.get("jogadores", []))
+    tecnicos, uc, ac = upsert(tecnicos, aux.get("tecnicos", []))
+    print(
+        f"  {fname}: times {ut} atualizados / {at} novos"
+        f" | jogadores {uj} atualizados / {aj} novos"
+        f" | tecnicos {uc} atualizados / {ac} novos"
+    )
 
-merged = {"times": all_times, "jogadores": all_jogadores}
+# Preserva a chave 'tecnicos' apenas se houver algum — evita gravar [] e mascarar
+# a necessidade de rodar gen_tecnicos.py.
+merged = {"times": times, "jogadores": jogadores}
+if tecnicos:
+    merged["tecnicos"] = tecnicos
 
-with open(OUT, "w", encoding="utf-8") as f:
+with open(BASE, "w", encoding="utf-8") as f:
     json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
-size_kb = os.path.getsize(OUT) / 1024
-print(f"\n✓ {OUT}")
-print(f"  Times: {len(all_times)} | Jogadores: {len(all_jogadores)} | Tamanho: {size_kb:.1f} KB")
+size_kb = os.path.getsize(BASE) / 1024
+print(f"\n[OK] {BASE}")
+print(
+    f"  Times: {len(times)} | Jogadores: {len(jogadores)}"
+    f" | Tecnicos: {len(tecnicos)} | Tamanho: {size_kb:.1f} KB"
+)
+if not tecnicos:
+    print("  [ATENCAO] Nenhum tecnico no seed! Rode: python scripts/gen_tecnicos.py")

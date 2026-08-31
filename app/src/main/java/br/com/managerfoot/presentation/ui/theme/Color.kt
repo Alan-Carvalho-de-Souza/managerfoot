@@ -9,7 +9,7 @@ val GreenMid       = Color(0x4000E676)    // bordas sutis
 val AmberAccent    = Color(0xFFFFB300)    // empates / avisos
 val RedAccent      = Color(0xFFFF4444)    // derrotas / erros
 
-val BgPrimary      = Color(0xFF0D0F14)   // fundo profundo
+val BgPrimary      = Color(0xFF12161F)   // fundo (Tactical Dark, levemente menos profundo)
 val SurfaceCard    = Color(0xFF161922)   // cards e headers
 val SurfaceVariant = Color(0xFF1E2330)   // variante de surface
 val TextPrimary    = Color(0xFFF0F2F5)   // texto principal

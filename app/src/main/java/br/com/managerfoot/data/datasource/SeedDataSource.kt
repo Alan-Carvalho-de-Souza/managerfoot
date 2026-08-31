@@ -78,6 +78,7 @@ class SeedDataSource @Inject constructor(
                 posicao         = Posicao.valueOf(o.getString("posicao")),
                 posicaoSecundaria = o.optString("posicao_sec", "")
                     .takeIf { it.isNotBlank() }?.let { Posicao.valueOf(it) },
+                nacionalidade   = o.optString("nacionalidade", "Brasileiro"),
                 forca           = o.getInt("forca"),
                 tecnica         = o.getInt("tecnica"),
                 passe           = o.getInt("passe"),

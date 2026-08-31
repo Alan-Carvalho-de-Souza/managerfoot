@@ -329,9 +329,7 @@ private fun ClubeContinuarCard(
     periodo: String,
     modifier: Modifier = Modifier
 ) {
-    val serieLabel = when (time.divisao) {
-        1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"; 5 -> "Primera Div."; else -> "Série"
-    }
+    val serieLabel = serieLabelDe(time.divisao)
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(Radius.lg),
@@ -661,8 +659,9 @@ private fun serieLabelDe(divisao: Int): String = when (divisao) {
     4 -> "Série D"
     5 -> "Primera Div."        // Argentina A
     6 -> "Segunda Div."        // Argentina B
-    in 11..12 -> "Primera Div." // Uruguai A (uma das duas)
-    in 13..16 -> "Segunda Div." // Uruguai B (uma das duas)
+    9 -> "Primera Div."        // Uruguai A
+    10 -> "Segunda Div."       // Uruguai B
+    11 -> "Premier League"     // Inglaterra
     else -> "Série $divisao"
 }
 
@@ -673,8 +672,9 @@ private fun corDivisao(divisao: Int): Color = when (divisao) {
     4 -> Color(0xFFFF7043)   // laranja — Série D
     5 -> Color(0xFFAB47BC)   // roxo — Argentina A
     6 -> Color(0xFF8E24AA)   // roxo escuro — Argentina B
-    in 11..12 -> Color(0xFF26A69A) // verde-azulado — Uruguai A
-    in 13..16 -> Color(0xFF00897B) // teal — Uruguai B
+    9 -> Color(0xFF26A69A)   // verde-azulado — Uruguai A
+    10 -> Color(0xFF00897B)  // teal — Uruguai B
+    11 -> Color(0xFF7C3AED)  // roxo Premier — Inglaterra
     else -> Color(0xFF7B8394)
 }
 

@@ -29,13 +29,13 @@ sealed class Rota(val caminho: String) {
         fun preJogo(timeId: Int, campeonatoId: Int, rodada: Int, adversarioId: Int) =
             "escalacao/$timeId?campeonatoId=$campeonatoId&rodada=$rodada&adversarioId=$adversarioId"
     }
-    object Tabela          : Rota("tabela/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruAperturaId}/{campUruBId}/{campUruClausuraId}/{campUruIntermedId}/{campUruBCompetId}/{copaId}/{timeJogadorId}") {
-        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int, campArgBId: Int, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaId: Int = -1, timeId: Int) =
-            "tabela/$campAId/$campBId/$campCId/$campDId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruAperturaId/$campUruBId/$campUruClausuraId/$campUruIntermedId/$campUruBCompetId/$copaId/$timeId"
+    object Tabela          : Rota("tabela/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruAperturaId}/{campUruBId}/{campUruClausuraId}/{campUruIntermedId}/{campUruBCompetId}/{copaId}/{timeJogadorId}/{campPremierId}") {
+        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int, campArgBId: Int, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaId: Int = -1, timeId: Int, campPremierId: Int = -1) =
+            "tabela/$campAId/$campBId/$campCId/$campDId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruAperturaId/$campUruBId/$campUruClausuraId/$campUruIntermedId/$campUruBCompetId/$copaId/$timeId/$campPremierId"
     }
-    object Artilheiros     : Rota("artilheiros/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{copaId}/{copaArgId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruApertId}/{campUruInterId}/{campUruClausId}/{campUruBId}/{campUruBCompetId}") {
-        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, copaId: Int, copaArgId: Int, campArgAId: Int, campArgBId: Int, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) =
-            "artilheiros/$campAId/$campBId/$campCId/$campDId/$copaId/$copaArgId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruApertId/$campUruInterId/$campUruClausId/$campUruBId/$campUruBCompetId"
+    object Artilheiros     : Rota("artilheiros/{campeonatoId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{copaId}/{copaArgId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruApertId}/{campUruInterId}/{campUruClausId}/{campUruBId}/{campUruBCompetId}/{campPremierId}") {
+        fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, copaId: Int, copaArgId: Int, campArgAId: Int, campArgBId: Int, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1) =
+            "artilheiros/$campAId/$campBId/$campCId/$campDId/$copaId/$copaArgId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruApertId/$campUruInterId/$campUruClausId/$campUruBId/$campUruBCompetId/$campPremierId"
     }
     object Mercado         : Rota("mercado/{timeId}") {
         fun comTimeId(id: Int) = "mercado/$id"
@@ -73,10 +73,10 @@ sealed class Rota(val caminho: String) {
     object Treinamento      : Rota("treinamento/{timeId}") {
         fun comTimeId(id: Int) = "treinamento/$id"
     }
-    object Rodada           : Rota("rodada/{campeonatoAId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruApertId}/{campUruIntermedId}/{campUruClausId}/{campUruBId}/{campUruBCompetId}") {
+    object Rodada           : Rota("rodada/{campeonatoAId}/{campeonatoBId}/{campeonatoCId}/{campeonatoDId}/{campArgAId}/{campArgBId}/{campArgClausuraId}/{campUruApertId}/{campUruIntermedId}/{campUruClausId}/{campUruBId}/{campUruBCompetId}/{campPremierId}") {
         fun com(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int, campArgBId: Int, campArgClausuraId: Int = -1,
-                campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) =
-            "rodada/$campAId/$campBId/$campCId/$campDId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruApertId/$campUruIntermedId/$campUruClausId/$campUruBId/$campUruBCompetId"
+                campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1) =
+            "rodada/$campAId/$campBId/$campCId/$campDId/$campArgAId/$campArgBId/$campArgClausuraId/$campUruApertId/$campUruIntermedId/$campUruClausId/$campUruBId/$campUruBCompetId/$campPremierId"
     }
     object Conquistas       : Rota("conquistas/{timeId}") {
         fun com(timeId: Int) = "conquistas/$timeId"
@@ -162,7 +162,8 @@ fun ManagerFootNavGraph() {
                     campUruIntermedId  = saveState?.campeonatoUruIntermedId ?: -1,
                     campUruBCompetId   = saveState?.campeonatoUruBCompetId ?: -1,
                     copaId             = saveState?.copaId ?: -1,
-                    timeId             = timeId
+                    timeId             = timeId,
+                    campPremierId      = saveState?.campeonatoPremierId ?: -1
                 )) },
                 onIrParaArtilheiros = { navController.navigate(Rota.Artilheiros.com(
                     campAId           = saveState?.campeonatoAId ?: -1,
@@ -178,7 +179,8 @@ fun ManagerFootNavGraph() {
                     campUruInterId    = saveState?.campeonatoUruIntermedId ?: -1,
                     campUruClausId    = saveState?.campeonatoUruClausuraId ?: -1,
                     campUruBId        = saveState?.campeonatoUruBId ?: -1,
-                    campUruBCompetId  = saveState?.campeonatoUruBCompetId ?: -1
+                    campUruBCompetId  = saveState?.campeonatoUruBCompetId ?: -1,
+                    campPremierId     = saveState?.campeonatoPremierId ?: -1
                 )) },
                 onIrParaFinancas    = { navController.navigate(Rota.Financas.comTimeId(timeId)) },
                 onIrParaHallDaFama  = { navController.navigate(Rota.HallDaFama.caminho) },
@@ -206,7 +208,8 @@ fun ManagerFootNavGraph() {
                     campUruIntermedId = saveState?.campeonatoUruIntermedId ?: -1,
                     campUruClausId    = saveState?.campeonatoUruClausuraId ?: -1,
                     campUruBId        = saveState?.campeonatoUruBId ?: -1,
-                    campUruBCompetId  = saveState?.campeonatoUruBCompetId ?: -1
+                    campUruBCompetId  = saveState?.campeonatoUruBCompetId ?: -1,
+                    campPremierId     = saveState?.campeonatoPremierId ?: -1
                 )) },
                 onIrParaClubes            = { navController.navigate(Rota.Clubes.comTimeId(timeId)) },
                 onIrParaPatrocinadores    = { navController.navigate(Rota.Patrocinadores.caminho) },
@@ -272,7 +275,8 @@ fun ManagerFootNavGraph() {
                 navArgument("campUruIntermedId") { type = NavType.IntType },
                 navArgument("campUruBCompetId")  { type = NavType.IntType },
                 navArgument("copaId")            { type = NavType.IntType; defaultValue = -1 },
-                navArgument("timeJogadorId")    { type = NavType.IntType }
+                navArgument("timeJogadorId")    { type = NavType.IntType },
+                navArgument("campPremierId")     { type = NavType.IntType; defaultValue = -1 }
             )
         ) { backStack ->
             val campeonatoId       = backStack.arguments!!.getInt("campeonatoId")
@@ -289,6 +293,7 @@ fun ManagerFootNavGraph() {
             val campUruBCompetId   = backStack.arguments!!.getInt("campUruBCompetId")
             val copaId             = backStack.arguments!!.getInt("copaId")
             val timeJogadorId      = backStack.arguments!!.getInt("timeJogadorId")
+            val campPremierId      = backStack.arguments!!.getInt("campPremierId")
             TabelaScreen(
                 campeonatoAId           = campeonatoId,
                 campeonatoBId           = campeonatoBId,
@@ -304,6 +309,7 @@ fun ManagerFootNavGraph() {
                 campeonatoUruBCompetId  = campUruBCompetId,
                 copaId                  = copaId,
                 timeJogadorId           = timeJogadorId,
+                campeonatoPremierId     = campPremierId,
                 onVoltar                = { navController.popBackStack() }
             )
         }
@@ -325,7 +331,8 @@ fun ManagerFootNavGraph() {
                 navArgument("campUruInterId")    { type = NavType.IntType; defaultValue = -1 },
                 navArgument("campUruClausId")    { type = NavType.IntType; defaultValue = -1 },
                 navArgument("campUruBId")        { type = NavType.IntType; defaultValue = -1 },
-                navArgument("campUruBCompetId")  { type = NavType.IntType; defaultValue = -1 }
+                navArgument("campUruBCompetId")  { type = NavType.IntType; defaultValue = -1 },
+                navArgument("campPremierId")     { type = NavType.IntType; defaultValue = -1 }
             )
         ) { backStack ->
             val campeonatoId      = backStack.arguments!!.getInt("campeonatoId")
@@ -342,6 +349,7 @@ fun ManagerFootNavGraph() {
             val campUruClausId    = backStack.arguments!!.getInt("campUruClausId")
             val campUruBId        = backStack.arguments!!.getInt("campUruBId")
             val campUruBCompetId  = backStack.arguments!!.getInt("campUruBCompetId")
+            val campPremierId     = backStack.arguments!!.getInt("campPremierId")
             ArtilheirosScreen(
                 campeonatoAId           = campeonatoId,
                 campeonatoBId           = campeonatoBId,
@@ -357,6 +365,7 @@ fun ManagerFootNavGraph() {
                 campeonatoUruClausuraId = campUruClausId,
                 campeonatoUruBId        = campUruBId,
                 campeonatoUruBCompetId  = campUruBCompetId,
+                campeonatoPremierId     = campPremierId,
                 onVoltar                = { navController.popBackStack() }
             )
         }
@@ -508,7 +517,8 @@ fun ManagerFootNavGraph() {
                 navArgument("campUruIntermedId") { type = NavType.IntType },
                 navArgument("campUruClausId")    { type = NavType.IntType },
                 navArgument("campUruBId")        { type = NavType.IntType },
-                navArgument("campUruBCompetId")  { type = NavType.IntType }
+                navArgument("campUruBCompetId")  { type = NavType.IntType },
+                navArgument("campPremierId")     { type = NavType.IntType; defaultValue = -1 }
             )
         ) { backStack ->
             val campAId           = backStack.arguments!!.getInt("campeonatoAId")
@@ -523,6 +533,7 @@ fun ManagerFootNavGraph() {
             val campUruClausId    = backStack.arguments!!.getInt("campUruClausId")
             val campUruBId        = backStack.arguments!!.getInt("campUruBId")
             val campUruBCompetId  = backStack.arguments!!.getInt("campUruBCompetId")
+            val campPremierId     = backStack.arguments!!.getInt("campPremierId")
             RodadaScreen(
                 campeonatoAId           = campAId,
                 campeonatoBId           = campBId,
@@ -536,6 +547,7 @@ fun ManagerFootNavGraph() {
                 campeonatoUruClausuraId = campUruClausId,
                 campeonatoUruBId        = campUruBId,
                 campeonatoUruBCompetId  = campUruBCompetId,
+                campeonatoPremierId     = campPremierId,
                 onVoltar                = { navController.popBackStack() }
             )
         }

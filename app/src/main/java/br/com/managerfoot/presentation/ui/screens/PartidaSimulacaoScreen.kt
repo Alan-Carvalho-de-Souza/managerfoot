@@ -452,7 +452,7 @@ fun PartidaSimulacaoScreen(
             onFormacaoChange = { formacaoAtual = it },
             onEstiloChange = { estiloAtual = it },
             onSubstituicao = { sai, entra ->
-                if (substituicoes.size < 6) {
+                if (substituicoes.size < 5) {
                     substituicoes.add(SubstituicaoIntervalo(minuto = minutoAtual, sai = sai, entra = entra, timeId = timeJogadorId))
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
@@ -506,7 +506,7 @@ fun PartidaSimulacaoScreen(
             onFormacaoChange = { formacaoAtual = it },
             onEstiloChange = { estiloAtual = it },
             onSubstituicao = { sai, entra ->
-                if (substituicoes.size < 6) {
+                if (substituicoes.size < 5) {
                     substituicoes.add(SubstituicaoIntervalo(sai = sai, entra = entra, timeId = jogadorTimeId))
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
@@ -1908,7 +1908,7 @@ private fun IntervaloPainel(
                         .padding(horizontal = Spacing.sm, vertical = 4.dp)
                 ) {
                     Text(
-                        "${substituicoes.size}/6 subs",
+                        "${substituicoes.size}/5 subs",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = cor
@@ -2041,7 +2041,7 @@ private fun SubstituicoesTab(
     onSelecionarTitular: (JogadorNaEscalacao?) -> Unit,
     onSubstituicao: (sai: JogadorNaEscalacao, entra: JogadorNaEscalacao) -> Unit
 ) {
-    val podeFazerMais = substituicoes.size < 6
+    val podeFazerMais = substituicoes.size < 5
 
     val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
     val titularesOrdenados = remember(titulares) {
@@ -2467,12 +2467,13 @@ private fun TaticaIntervaloPainel(
     onFormacaoChange: (String) -> Unit,
     onEstiloChange: (EstiloJogo) -> Unit
 ) {
+    // Apenas formações realistas e efetivamente distinguíveis pela engine
+    // (que normaliza para [DEF/MEIO/ATA] — variantes como 4-2-3-1 vs 4-5-1
+    // produziriam o mesmo resultado).
     val formacoes = listOf(
-        "4-4-2", "4-5-1", "4-3-3",
-        "4-3-2-1", "5-4-1", "4-1-2-1-2",
-        "3-5-2", "5-3-2", "4-2-3-1",
-        "3-2-4-1", "2-3-5", "2-3-2-3", "4-2-4",
-        "3-4-3", "4-2-2-2"
+        "4-4-2", "4-3-3", "4-5-1",
+        "3-5-2", "3-4-3",
+        "5-3-2", "5-4-1"
     )
 
     Column(

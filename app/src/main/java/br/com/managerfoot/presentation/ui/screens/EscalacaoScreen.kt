@@ -306,6 +306,13 @@ fun EscalacaoScreen(
                                         texto = "Lesão",
                                         cor = MaterialTheme.colorScheme.error
                                     )
+                                    jogador.suspenso -> StatusChip(
+                                        texto = if (jogador.partidasSuspensao > 1)
+                                            "Suspenso ${jogador.partidasSuspensao}j"
+                                        else
+                                            "Suspenso",
+                                        cor = Color(0xFFD32F2F)
+                                    )
                                     naEscalacao -> StatusChip(
                                         texto = "Titular",
                                         cor = MaterialTheme.colorScheme.primary
@@ -834,12 +841,13 @@ private fun TaticaTab(
     vm: EscalacaoViewModel,
     modoPreJogo: Boolean = false
 ) {
+    // Apenas formações realistas e efetivamente distinguíveis pela engine
+    // (que normaliza para [DEF/MEIO/ATA] — variantes como 4-2-3-1 vs 4-5-1
+    // produziriam o mesmo resultado).
     val formacoes = listOf(
-        "4-4-2", "4-5-1", "4-3-3",
-        "4-3-2-1", "5-4-1", "4-1-2-1-2",
-        "3-5-2", "5-3-2", "4-2-3-1",
-        "3-2-4-1", "2-3-5", "2-3-2-3", "4-2-4",
-        "3-4-3", "4-2-2-2"
+        "4-4-2", "4-3-3", "4-5-1",
+        "3-5-2", "3-4-3",
+        "5-3-2", "5-4-1"
     )
     val estilos = EstiloJogo.entries
 
@@ -1375,14 +1383,15 @@ fun MercadoScreen(
         )
     }
 
-    mensagem?.let {
-        LaunchedEffect(it) {
-            kotlinx.coroutines.delay(3000)
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(mensagem) {
+        mensagem?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
             vm.limparMensagem()
         }
-        Snackbar(modifier = Modifier.padding(Spacing.lg)) { Text(it) }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -1620,6 +1629,11 @@ fun MercadoScreen(
                 )
             }
         }
+    }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

@@ -58,6 +58,65 @@ class GameRepository @Inject constructor(
     }
 
     /**
+     * Inserção ADITIVA e idempotente: adiciona apenas os times do seed que ainda
+     * não existem no banco (e seus jogadores), SEM apagar nem sobrescrever dados
+     * de um jogo em andamento. Serve para expor ligas novas (ex.: Premier League)
+     * na tela de seleção quando o banco já foi populado por uma versão anterior
+     * do seed — caso em que [seedEstaIntegro] retorna true e o seed não seria
+     * recarregado. Retorna a quantidade de times novos inseridos.
+     */
+    suspend fun inserirSeedFaltante(
+        times: List<TimeEntity>,
+        jogadores: List<JogadorEntity>
+    ): Int {
+        val existentes = db.timeDao().buscarTodos().map { it.id }.toSet()
+        val novosTimes = times.filter { it.id !in existentes }
+        if (novosTimes.isEmpty()) return 0
+        val novosIds = novosTimes.map { it.id }.toSet()
+        val novosJogadores = jogadores.filter { it.timeId != null && it.timeId in novosIds }
+        db.withTransaction {
+            db.timeDao().inserirTodos(novosTimes)
+            db.jogadorDao().inserirTodos(novosJogadores)
+        }
+        return novosTimes.size
+    }
+
+    /**
+     * Backfill idempotente dos escudos. Para times JÁ existentes cujo escudoRes
+     * está vazio no banco mas o seed passou a ter um valor, preenche apenas o
+     * escudoRes — sem tocar em saldo, elenco ou qualquer estado de jogo. Cobre o
+     * caso de um banco populado por uma versão do seed anterior aos escudos de
+     * uma liga (ex.: Premier), em que [inserirSeedFaltante] ignora o time por já
+     * existir e o escudo nunca seria atualizado. Retorna quantos foram preenchidos.
+     */
+    suspend fun sincronizarEscudosDoSeed(times: List<TimeEntity>): Int {
+        val atuais = db.timeDao().buscarTodos().associateBy { it.id }
+        var alterados = 0
+        db.withTransaction {
+            times.forEach { seed ->
+                val atual = atuais[seed.id] ?: return@forEach
+                // Backfill de escudo quando vazio (nunca sobrescreve um já definido).
+                if (seed.escudoRes.isNotBlank() && atual.escudoRes.isBlank()) {
+                    db.timeDao().preencherEscudoSeVazio(seed.id, seed.escudoRes)
+                    alterados++
+                }
+                // Concilia a divisão APENAS de clubes ingleses (Premier), cuja
+                // divisão é invariante (não há 2ª divisão inglesa nem promoção/
+                // rebaixamento mexendo nela). Conserta bancos semeados por uma
+                // versão anterior em que a Premier colidia com a numeração do
+                // Uruguai (divisão 9 → rótulo "Primeira Div. Uruguai"). Demais
+                // países têm promoção/rebaixamento alterando a divisão, então
+                // NÃO são tocados aqui.
+                if (seed.pais == "Inglaterra" && atual.divisao != seed.divisao) {
+                    db.timeDao().atualizarDivisao(seed.id, seed.divisao)
+                    alterados++
+                }
+            }
+        }
+        return alterados
+    }
+
+    /**
      * Retorna true se o seed está íntegro: há times E cada time possui pelo menos
      * [ELENCO_MINIMO_SEED] jogadores associados.
      *
@@ -704,6 +763,7 @@ class GameRepository @Inject constructor(
         val campeonatoUruClausuraId: Int, // Clausura Uruguaio
         val campeonatoUruIntermedId: Int, // Intermediário Uruguaio
         val campeonatoUruBCompetId: Int,  // Torneo Competencia – Segunda División
+        val campeonatoPremierId: Int,     // Premier League inglesa (divisao 11)
         val copaId: Int,
         val copaArgId: Int,               // Copa Argentina
         val supercopaId: Int,
@@ -724,6 +784,7 @@ class GameRepository @Inject constructor(
         campeonatoUruIntermedId: Int = -1,  // Intermediário Uruguaio
         campeonatoUruBId: Int = -1,         // Segunda División Uruguaia
         campeonatoUruBCompetId: Int = -1,   // Torneo Competencia – Segunda División
+        campeonatoPremierId: Int = -1,      // Premier League inglesa (divisao 11)
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -771,6 +832,7 @@ class GameRepository @Inject constructor(
         registrarHallDaFama(campeonatoUruAperturaId, 11)  // 11 = Apertura Uruguaio (PONTOS_CORRIDOS)
         registrarHallDaFama(campeonatoUruBId, 15)         // 15 = Segunda Div. Uruguaia
         registrarHallDaFama(campeonatoUruBCompetId, 16)   // 16 = Competencia URU B
+        registrarHallDaFama(campeonatoPremierId, 20)      // 20 = Premier League (PONTOS_CORRIDOS)
 
         // ── Bônus de reputação por título de divisão ──────────────
         suspend fun aplicarBonusTitulo(campId: Int, bonusPercent: Double) {
@@ -787,6 +849,7 @@ class GameRepository @Inject constructor(
         // Apertura/Clausura: bônus já aplicado ao encerrar cada torneio
         aplicarBonusTitulo(campeonatoArgBId, 0.02) // Segunda Div. ARG +2%
         aplicarBonusTitulo(campeonatoUruBId, 0.02) // Segunda Div. URU +2%
+        aplicarBonusTitulo(campeonatoPremierId, 0.05) // Premier League +5%
 
         // ── Penalidade de rebaixamento (multiplicativa, mínima 0.5pt) ──────
         // Rebaixamento é o gatilho mais forte de queda de reputação/nivel.
@@ -839,6 +902,7 @@ class GameRepository @Inject constructor(
         premiarSeJogador(campeonatoDId,  2_000_000_00L)  // Cam: R$  2M, Vice: R$  1M
         // Apertura/Clausura: premiação já feita ao encerrar cada torneio
         premiarSeJogador(campeonatoArgBId,  6_000_000_00L) // Cam: R$  6M, Vice: R$  3M
+        premiarSeJogador(campeonatoPremierId, 20_000_000_00L) // Premier: Cam R$ 20M, Vice R$ 10M
 
         // ── Desfechos (promoções / rebaixamentos) ─────────────────
         suspend fun desfecho(campId: Int): MotorCampeonato.DesfechoCampeonato? {
@@ -890,7 +954,8 @@ class GameRepository @Inject constructor(
         // Encerra todos os campeonatos
         listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
                campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
-               campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId, campeonatoUruBId)
+               campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId, campeonatoUruBId,
+               campeonatoPremierId)
             .filter { it > 0 }.forEach { campeonatoDao.encerrar(it) }
 
         jogadorRepository.processarDesenvolvimentoAnual()
@@ -923,6 +988,7 @@ class GameRepository @Inject constructor(
         atualizarRankingGeral(campeonatoDId)
         atualizarRankingGeral(campeonatoArgBId)
         atualizarRankingGeral(campeonatoUruBId)
+        atualizarRankingGeral(campeonatoPremierId)
 
         // ── Títulos dos campeões do Apertura e Clausura ────────────
         // Centralizado aqui para garantir que ambos campeões sejam contabilizados,
@@ -1126,6 +1192,14 @@ class GameRepository @Inject constructor(
                 totalRodadas = (novosUruB.size - 1) * 2, pais = "Uruguay"), novosUruB) else -1
         val novoUruBCompetId = if (novosUruB.size >= 2) criarUruguaiSegundaDivCompetencia(novosUruB, novoTemporadaId, novoAno) else -1
 
+        // ── Renova Premier League (mesmos 20 clubes — sem 2ª divisão inglesa) ──
+        val participantesPremier = if (campeonatoPremierId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoPremierId) else emptyList()
+        val novoPremierId = if (participantesPremier.isNotEmpty()) criarCampeonato(
+            CampeonatoEntity(temporadaId = novoTemporadaId,
+                nome = "Premier League $novoAno/${(novoAno + 1) % 100}",
+                tipo = TipoCampeonato.NACIONAL_DIVISAO1, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (participantesPremier.size - 1) * 2, pais = "Inglaterra"), participantesPremier) else -1
+
         // Cria Copa do Brasil para a próxima temporada
         val participantesCopa = determinarParticipantesCopa(novoTemporadaId, novosA)
         val novoCopaId = criarCopa(
@@ -1215,7 +1289,7 @@ class GameRepository @Inject constructor(
             tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
         } catch (_: Exception) { }
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoCopaId, novoCopaArgId, novoSupercopaId, novoTemporadaId, novoAno)
     }
 
     /**
@@ -4007,9 +4081,27 @@ class GameRepository @Inject constructor(
         val titularesSalvos = jogadorRepository.buscarTitularesSalvos(timeId)
         if (titularesSalvos.isNotEmpty()) {
             val reservasSalvas = jogadorRepository.buscarReservasSalvas(timeId)
-            val titulares = titularesSalvos.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
-            val reservas  = reservasSalvas.map  { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
-            return Escalacao(time = time, titulares = titulares, reservas = reservas)
+            // Filtra jogadores indisponíveis (lesionados ou suspensos) da escalação salva.
+            val titularesDisp = titularesSalvos.filter { !it.lesionado && !it.suspenso }
+            val reservasDisp  = reservasSalvas.filter  { !it.lesionado && !it.suspenso }
+            val idsUsados = (titularesDisp + reservasDisp).map { it.id }.toSet()
+
+            // Se sobrar menos de 11 titulares, completa automaticamente com jogadores
+            // disponíveis do elenco (mesmo critério da IA: melhores primeiro por setor).
+            val titularesFinais = if (titularesDisp.size < 11) {
+                val complementoPool = jogadorRepository.buscarDisponiveis(timeId)
+                    .filter { it.id !in idsUsados }
+                val complemento = IATimeRival.gerarEscalacao(time, complementoPool)
+                    .titulares
+                    .filter { it.jogador.id !in idsUsados }
+                    .take(11 - titularesDisp.size)
+                titularesDisp.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) } +
+                    complemento
+            } else {
+                titularesDisp.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
+            }
+            val reservas = reservasDisp.map { j -> JogadorNaEscalacao(j, j.posicaoEscalado ?: j.posicao) }
+            return Escalacao(time = time, titulares = titularesFinais, reservas = reservas)
         }
         val elenco = jogadorRepository.buscarDisponiveis(timeId)
         return IATimeRival.gerarEscalacao(time, elenco)
@@ -4110,10 +4202,34 @@ class GameRepository @Inject constructor(
         val participantesIds = resultado.eventos
             .filter { it.tipo == TipoEvento.PARTICIPOU || it.tipo == TipoEvento.SUBSTITUICAO_ENTRA }
             .map { it.jogadorId }.toSet()
+        val timesEnvolvidos = setOf(resultado.timeCasaId, resultado.timeForaId)
         jogadorRepository.atualizarFadigaAposPartida(
             participantes = participantesIds,
-            timeIds       = setOf(resultado.timeCasaId, resultado.timeForaId)
+            timeIds       = timesEnvolvidos
         )
+
+        // Processa cartões e suspensões:
+        //  - acumula amarelos (3 no ciclo → 1 partida) e vermelhos (1 partida imediata);
+        //  - decrementa suspensões pendentes dos jogadores que ficaram fora desta partida.
+        val amarelosPorJogador = resultado.eventos
+            .filter { it.tipo == TipoEvento.CARTAO_AMARELO && it.jogadorId > 0 }
+            .groupingBy { it.jogadorId }.eachCount()
+        val vermelhosPorJogador = resultado.eventos
+            .filter { it.tipo == TipoEvento.CARTAO_VERMELHO && it.jogadorId > 0 }
+            .groupingBy { it.jogadorId }.eachCount()
+        jogadorRepository.processarCartoesESuspensoes(
+            amarelosPorJogador = amarelosPorJogador,
+            vermelhosPorJogador = vermelhosPorJogador,
+            participantes = participantesIds,
+            timeIds = timesEnvolvidos
+        )
+
+        // Atualiza moral do elenco com base nas últimas 5 partidas de cada time.
+        // 4+ vitórias → EXCELENTE | 3 vitórias → BOM | 3 derrotas → INSATISFEITO |
+        // 4+ derrotas → REVOLTADO | caso contrário → NORMAL. Impacta força efetiva.
+        timesEnvolvidos.forEach { timeId ->
+            jogadorRepository.atualizarMoraleTime(timeId)
+        }
 
         // Aplica lesões ocorridas nesta partida (após o decremento, para não consumir imediatamente).
         // Grau 1 (leve) = 2–3 jogos | Grau 2 (moderada) = 4–5 | Grau 3 (grave) = 6–8

@@ -44,7 +44,14 @@ data class JogadorEntity(
 
     // Estado
     val lesionado: Boolean = false,
-    val suspensoCicloAmarelos: Boolean = false,
+    // Partidas restantes de suspensão a cumprir (0 = disponível).
+    // Alimentado por 3 amarelos acumulados no ciclo ou por cartão vermelho.
+    val partidasSuspensao: Int = 0,
+    // Acumulador de cartões amarelos desde a última suspensão (3 → suspende + reset).
+    val cartoesAmarelosCiclo: Int = 0,
+    // Estatísticas cumulativas da temporada (exibição/histórico).
+    val cartoesAmarelosTemporada: Int = 0,
+    val cartoesVermelhosTemporada: Int = 0,
     val moraleEstado: MoraleEstado = MoraleEstado.NORMAL,
     val categoriaBase: Boolean = false,  // true = sub-21
 

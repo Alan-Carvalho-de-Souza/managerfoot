@@ -44,6 +44,7 @@ fun RodadaScreen(
     campeonatoUruClausuraId: Int = -1,
     campeonatoUruBId: Int = -1,
     campeonatoUruBCompetId: Int = -1,
+    campeonatoPremierId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -57,13 +58,13 @@ fun RodadaScreen(
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
-        campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId
+        campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
             campArgClausuraId = campeonatoArgClausuraId,
             campUruApertId = campeonatoUruAperturaId, campUruIntermedId = campeonatoUruIntermedId, campUruClausId = campeonatoUruClausuraId,
-            campUruBId = campeonatoUruBId, campUruBCompetId = campeonatoUruBCompetId
+            campUruBId = campeonatoUruBId, campUruBCompetId = campeonatoUruBCompetId, campPremierId = campeonatoPremierId
         )
     }
 
@@ -100,15 +101,20 @@ fun RodadaScreen(
         if (campeonatoUruBId > 0) add(13 to "Segunda Div.")
         if (campeonatoUruBCompetId > 0) add(14 to "Competência")
     }
+    val opcoesInglaterra = buildList {
+        if (campeonatoPremierId > 0) add(20 to "Premier League")
+    }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
-    val temOutrosPaises = temArgentina || temUruguai
+    val temInglaterra = opcoesInglaterra.isNotEmpty()
+    val temOutrosPaises = temArgentina || temUruguai || temInglaterra
 
     var paisSelecionado by remember {
         mutableStateOf(
             when {
                 divisaoSelecionada in 5..9   -> "Argentina"
                 divisaoSelecionada in 10..14 -> "Uruguai"
+                divisaoSelecionada == 20     -> "Inglaterra"
                 else -> "Brasil"
             }
         )
@@ -117,6 +123,7 @@ fun RodadaScreen(
         paisSelecionado = when {
             divisaoSelecionada in 5..9   -> "Argentina"
             divisaoSelecionada in 10..14 -> "Uruguai"
+            divisaoSelecionada == 20     -> "Inglaterra"
             else -> "Brasil"
         }
     }
@@ -124,6 +131,7 @@ fun RodadaScreen(
     val opcoesDivisaoAtual = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
         "Uruguai"   -> opcoesUruguai
+        "Inglaterra" -> opcoesInglaterra
         else        -> opcoesBrasil
     }
 
@@ -163,14 +171,16 @@ fun RodadaScreen(
                         add("Brasil")
                         if (temArgentina) add("Argentina")
                         if (temUruguai)   add("Uruguai")
+                        if (temInglaterra) add("Inglaterra")
                     },
                     onSelect = { pais ->
                         paisSelecionado = pais
                         expandidoPais = false
                         val primeiraOpcao = when (pais) {
-                            "Argentina" -> opcoesArgentina
-                            "Uruguai"   -> opcoesUruguai
-                            else        -> opcoesBrasil
+                            "Argentina"  -> opcoesArgentina
+                            "Uruguai"    -> opcoesUruguai
+                            "Inglaterra" -> opcoesInglaterra
+                            else         -> opcoesBrasil
                         }
                         primeiraOpcao.firstOrNull()?.let { vm.selecionarDivisao(it.first) }
                     }

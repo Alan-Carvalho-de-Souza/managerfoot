@@ -32,7 +32,7 @@ interface JogadorDao {
         WHERE timeId = :timeId
           AND categoriaBase = 0
           AND lesionado = 0
-          AND suspensoCicloAmarelos = 0
+          AND partidasSuspensao = 0
         ORDER BY forca DESC
     """)
     suspend fun buscarDisponiveisPorTime(timeId: Int): List<JogadorEntity>

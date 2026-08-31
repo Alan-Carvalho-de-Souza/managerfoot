@@ -30,7 +30,7 @@ import br.com.managerfoot.data.database.entities.*
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

@@ -404,13 +404,48 @@ class JogadorRepository @Inject constructor(
                 }
             }
         }
+        // Reset de cartões/suspensão ao virar a temporada:
+        //  - cartões amarelos do ciclo, estatísticas cumulativas e suspensões pendentes zeram.
+        //  - aposentados também zeram (não competem mais).
+        val comResetCartoes = atualizados.map { j ->
+            j.copy(
+                cartoesAmarelosCiclo = 0,
+                cartoesAmarelosTemporada = 0,
+                cartoesVermelhosTemporada = 0,
+                partidasSuspensao = 0
+            )
+        }
+        // Aposentadoria automática — evita jogadores decaídos ficarem para sempre no elenco.
+        // Regras aplicadas sobre a NOVA idade (já incrementada acima):
+        //  - 40+                          → compulsória
+        //  - 38+ com força ≤ 65           → declínio evidente
+        //  - 35+ com força ≤ 55           → carreira encerra
+        // Categoriabase e já aposentados não passam pelo filtro.
+        val comAposentadoria = comResetCartoes.map { j ->
+            val elegivel = !j.aposentado && !j.categoriaBase
+            val deveAposentar = elegivel && when {
+                j.idade >= 40                    -> true
+                j.idade >= 38 && j.forca <= 65   -> true
+                j.idade >= 35 && j.forca <= 55   -> true
+                else                             -> false
+            }
+            if (deveAposentar) j.copy(aposentado = true, timeId = null) else j
+        }
+        // Para cada aposentado deste ano que tinha clube, gera um junior de reposição
+        // (mesmo tratamento do fluxo manual aposentarJogador).
+        val juniores = comResetCartoes.zip(comAposentadoria).mapNotNull { (antes, depois) ->
+            if (!antes.aposentado && depois.aposentado && antes.timeId != null)
+                gerarJuniorDeAposentado(antes, antes.timeId)
+            else null
+        }
         // Recalcula o valor de mercado de cada jogador com base na força e idade atualizadas.
         // Feito em passe separado para usar os atributos já computados acima.
-        val comValoresMercado = atualizados.map { j ->
+        val comValoresMercado = comAposentadoria.map { j ->
             if (j.aposentado) j
             else j.copy(valorMercado = calcularValorMercado(j.forca, j.idade))
         }
         jogadorDao.atualizarTodos(comValoresMercado)
+        if (juniores.isNotEmpty()) jogadorDao.inserirTodos(juniores)
     }
 
     /**
@@ -699,6 +734,99 @@ class JogadorRepository @Inject constructor(
     }
 
     /**
+     * Processa os cartões emitidos em uma partida:
+     *  - Cartão vermelho → 1 partida de suspensão (não sobrescreve suspensão maior já pendente).
+     *  - 3 cartões amarelos acumulados no ciclo → 1 partida de suspensão + reset dos amarelos.
+     *  - Acumula também estatísticas da temporada (amarelos/vermelhos).
+     *
+     * E, em seguida, decrementa em 1 o [partidasSuspensao] dos jogadores dos times envolvidos
+     * que NÃO participaram desta partida (cumprem a suspensão ficando de fora).
+     */
+    suspend fun processarCartoesESuspensoes(
+        amarelosPorJogador: Map<Int, Int>,
+        vermelhosPorJogador: Map<Int, Int>,
+        participantes: Set<Int>,
+        timeIds: Set<Int>
+    ) {
+        // 1) Aplica cartões da partida atual em cada jogador afetado
+        val afetadosIds = (amarelosPorJogador.keys + vermelhosPorJogador.keys).filter { it > 0 }
+        val atualizadosCartao = afetadosIds.mapNotNull { id ->
+            val j = jogadorDao.buscarPorId(id) ?: return@mapNotNull null
+            val amarelos = amarelosPorJogador[id] ?: 0
+            val vermelhos = vermelhosPorJogador[id] ?: 0
+
+            var novoCicloAmarelos = j.cartoesAmarelosCiclo + amarelos
+            var novaSuspensao = j.partidasSuspensao
+
+            // 3 amarelos no ciclo → 1 partida + zera contador
+            if (novoCicloAmarelos >= 3) {
+                novaSuspensao = maxOf(novaSuspensao, 1)
+                novoCicloAmarelos = 0
+            }
+            // Vermelho → 1 partida (independente dos amarelos)
+            if (vermelhos > 0) {
+                novaSuspensao = maxOf(novaSuspensao, 1)
+            }
+
+            j.copy(
+                cartoesAmarelosCiclo = novoCicloAmarelos,
+                cartoesAmarelosTemporada = j.cartoesAmarelosTemporada + amarelos,
+                cartoesVermelhosTemporada = j.cartoesVermelhosTemporada + vermelhos,
+                partidasSuspensao = novaSuspensao
+            )
+        }
+        if (atualizadosCartao.isNotEmpty()) {
+            jogadorDao.atualizarTodos(atualizadosCartao)
+        }
+
+        // 2) Decrementa suspensão dos jogadores ausentes desta partida
+        //    (cumprem 1 partida ficando de fora). Não afeta quem entrou em campo,
+        //    inclusive quem foi expulso agora (já teve partidasSuspensao setado).
+        for (timeId in timeIds) {
+            val seniores = jogadorDao.buscarSenioresDoTime(timeId)
+            val decrementados = seniores.mapNotNull { j ->
+                if (j.partidasSuspensao <= 0) return@mapNotNull null
+                if (j.id in participantes) return@mapNotNull null
+                // Recém-suspenso nesta mesma partida? Não decrementar (a suspensão vale para a PRÓXIMA).
+                if (j.id in afetadosIds) return@mapNotNull null
+                j.copy(partidasSuspensao = (j.partidasSuspensao - 1).coerceAtLeast(0))
+            }
+            if (decrementados.isNotEmpty()) {
+                jogadorDao.atualizarTodos(decrementados)
+            }
+        }
+    }
+
+    /**
+     * Atualiza o [MoraleEstado] de todos os jogadores do elenco de um time com base
+     * nos resultados das últimas 5 partidas em qualquer competição.
+     * Delega a regra V/D → morale para [MotorFinanceiro.calcularMorale].
+     */
+    suspend fun atualizarMoraleTime(timeId: Int) {
+        val ultimas = partidaDao.buscarUltimasPartidasDoTime(timeId, limite = 5)
+        if (ultimas.isEmpty()) return
+        var vitorias = 0
+        var derrotas = 0
+        ultimas.forEach { p ->
+            val golsCasa = p.golsCasa ?: return@forEach
+            val golsFora = p.golsFora ?: return@forEach
+            val ehCasa = p.timeCasaId == timeId
+            val golsPro = if (ehCasa) golsCasa else golsFora
+            val golsContra = if (ehCasa) golsFora else golsCasa
+            when {
+                golsPro > golsContra -> vitorias++
+                golsPro < golsContra -> derrotas++
+            }
+        }
+        val novaMorale = br.com.managerfoot.domain.engine.MotorFinanceiro.calcularMorale(vitorias, derrotas)
+        val seniores = jogadorDao.buscarSenioresDoTime(timeId)
+        val atualizados = seniores
+            .filter { it.moraleEstado != novaMorale }
+            .map { it.copy(moraleEstado = novaMorale) }
+        if (atualizados.isNotEmpty()) jogadorDao.atualizarTodos(atualizados)
+    }
+
+    /**
      * Executa uma sessão de treinamento para o jogador.
      * - Reduz fadiga em 5%
      * - Adiciona progresso de evolução nos atributos principais:
@@ -762,7 +890,8 @@ class JogadorRepository @Inject constructor(
      * Aplica treino ou descanso automático para todos os jogadores de um time da IA.
      * - Fadiga < 65%  → descansa (+10% fadiga, sem progressoEvolucao)
      * - Fadiga ≥ 65%  → treina (-5% fadiga, acumula progressoEvolucao;
-     *                   ao cruzar 1.0: TODOS os seis atributos ganham +1)
+     *                   ao cruzar 1.0: apenas os atributos PRINCIPAIS da posição ganham +1,
+     *                   mesma regra aplicada ao jogador humano em treinarJogador).
      * Respeita treinouNestaCiclo para não processar o mesmo jogador duas vezes por ciclo.
      */
     suspend fun treinarOuDescansarTimeIA(timeId: Int) {
@@ -780,6 +909,7 @@ class JogadorRepository @Inject constructor(
                     j.idade in 25..32 -> 0.06f
                     else              -> 0.02f
                 }
+                val principais = atributosPrincipais(j.posicao)
                 var prog        = j.progressoEvolucao + deltaProgress
                 var tecnica     = j.tecnica
                 var passe       = j.passe
@@ -787,14 +917,15 @@ class JogadorRepository @Inject constructor(
                 var finalizacao = j.finalizacao
                 var defesa      = j.defesa
                 var fisico      = j.fisico
-                // Ao cruzar 1.0: todos os atributos ganham +1 (não só os principais)
+                // Ao cruzar 1.0: apenas os atributos principais da posição ganham +1
+                // (paridade com treinarJogador — evita a IA evoluir 2× mais rápido que o jogador).
                 while (prog >= 1.0f) {
-                    tecnica     = (tecnica     + 1).coerceIn(1, 99)
-                    passe       = (passe       + 1).coerceIn(1, 99)
-                    velocidade  = (velocidade  + 1).coerceIn(1, 99)
-                    finalizacao = (finalizacao + 1).coerceIn(1, 99)
-                    defesa      = (defesa      + 1).coerceIn(1, 99)
-                    fisico      = (fisico      + 1).coerceIn(1, 99)
+                    if ("tecnica"     in principais) tecnica     = (tecnica     + 1).coerceIn(1, 99)
+                    if ("passe"       in principais) passe       = (passe       + 1).coerceIn(1, 99)
+                    if ("velocidade"  in principais) velocidade  = (velocidade  + 1).coerceIn(1, 99)
+                    if ("finalizacao" in principais) finalizacao = (finalizacao + 1).coerceIn(1, 99)
+                    if ("defesa"      in principais) defesa      = (defesa      + 1).coerceIn(1, 99)
+                    if ("fisico"      in principais) fisico      = (fisico      + 1).coerceIn(1, 99)
                     prog -= 1.0f
                 }
                 val novaForca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
@@ -1047,7 +1178,10 @@ class JogadorRepository @Inject constructor(
         contratoAnos = contratoAnos,
         valorMercado = valorMercado,
         lesionado = lesionado,
-        suspenso = suspensoCicloAmarelos,
+        partidasSuspensao = partidasSuspensao,
+        cartoesAmarelosCiclo = cartoesAmarelosCiclo,
+        cartoesAmarelosTemporada = cartoesAmarelosTemporada,
+        cartoesVermelhosTemporada = cartoesVermelhosTemporada,
         moraleEstado = moraleEstado,
         escalarStatus = escalarStatus,
         posicaoEscalado = posicaoEscalado,

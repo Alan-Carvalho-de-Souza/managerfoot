@@ -47,6 +47,7 @@ fun ArtilheirosScreen(
     campeonatoUruClausuraId: Int = -1,
     campeonatoUruBId: Int = -1,
     campeonatoUruBCompetId: Int = -1,
+    campeonatoPremierId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -61,12 +62,13 @@ fun ArtilheirosScreen(
 
     val temArgentina = campeonatoArgAId > 0 || campeonatoArgBId > 0 || campeonatoArgClausuraId > 0
     val temUruguai   = campeonatoUruAperturaId > 0 || campeonatoUruBId > 0
+    val temInglaterra = campeonatoPremierId > 0
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
         campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
-        campeonatoUruBId, campeonatoUruBCompetId
+        campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId
     ) {
         vm.carregar(
             campAId           = campeonatoAId,
@@ -83,6 +85,7 @@ fun ArtilheirosScreen(
             campUruClausId    = campeonatoUruClausuraId,
             campUruBId        = campeonatoUruBId,
             campUruBCompetId  = campeonatoUruBCompetId,
+            campPremierId     = campeonatoPremierId,
             divisaoInicial    = 0
         )
     }
@@ -118,11 +121,15 @@ fun ArtilheirosScreen(
         if (campeonatoUruBId > 0) add(23 to "Segunda Div.")
         if (campeonatoUruBCompetId > 0) add(24 to "Competência")
     }
+    val opcoesInglaterra = buildList<Pair<Int, String>> {
+        if (campeonatoPremierId > 0) add(30 to "Premier League")
+    }
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
             in 6..10, 200 -> "Argentina"
             in 20..26, 300 -> "Uruguai"
+            30 -> "Inglaterra"
             else -> "Brasil"
         }
     }
@@ -131,11 +138,12 @@ fun ArtilheirosScreen(
     val opcoesDaDiv = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
         "Uruguai"   -> opcoesUruguai
+        "Inglaterra" -> opcoesInglaterra
         else        -> opcoesBrasil
     }
 
     fun divisaoDoFiltroPais(pais: String) = when (pais) {
-        "Argentina" -> 200; "Uruguai" -> 300; else -> 100
+        "Argentina" -> 200; "Uruguai" -> 300; "Inglaterra" -> 30; else -> 100
     }
 
     Column(
@@ -173,6 +181,7 @@ fun ArtilheirosScreen(
             add("Todos"); add("Brasil")
             if (temArgentina) add("Argentina")
             if (temUruguai) add("Uruguai")
+            if (temInglaterra) add("Inglaterra")
         }
         if (paises.size > 1) {
             Row(

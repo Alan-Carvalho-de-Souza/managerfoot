@@ -1177,6 +1177,7 @@ fun StandingsRow(
                 text = posicao.toString(),
                 modifier = Modifier.width(24.dp),
                 style = MaterialTheme.typography.labelMedium,
+                fontSize = 11.sp,
                 fontWeight = if (destaque) FontWeight.Bold else FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1186,6 +1187,7 @@ fun StandingsRow(
                 text = nomeTime,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
+                fontSize = 11.sp,
                 fontWeight = if (destaque) FontWeight.Bold else FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -1224,6 +1226,7 @@ private fun StandingsCell(
         text = text,
         modifier = Modifier.width(28.dp),
         style = MaterialTheme.typography.labelSmall,
+        fontSize = 10.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
         color = color,
         textAlign = TextAlign.Center,

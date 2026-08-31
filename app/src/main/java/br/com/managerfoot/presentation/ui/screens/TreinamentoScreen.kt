@@ -178,7 +178,7 @@ private fun TreinarTodosCard(
                 )
             }
             Text(
-                "Cada sessão reduz a fadiga em 5% e acumula progresso de evolução. " +
+                "Cada sessão consome 5% da energia e acumula progresso de evolução. " +
                 "Permitido apenas uma sessão por ciclo (entre dois jogos).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -376,7 +376,7 @@ private fun FadigaLegenda() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "FADIGA",
+                "ENERGIA",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,

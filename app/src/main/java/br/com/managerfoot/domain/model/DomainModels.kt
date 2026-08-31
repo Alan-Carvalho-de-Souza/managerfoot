@@ -45,7 +45,10 @@ data class Jogador(
     val contratoAnos: Int,
     val valorMercado: Long,
     val lesionado: Boolean,
-    val suspenso: Boolean,
+    val partidasSuspensao: Int = 0,
+    val cartoesAmarelosCiclo: Int = 0,
+    val cartoesAmarelosTemporada: Int = 0,
+    val cartoesVermelhosTemporada: Int = 0,
     val moraleEstado: MoraleEstado,
     val escalarStatus: Int = 0,          // 0=não escalado, 1=titular, 2=reserva
     val posicaoEscalado: Posicao? = null, // posição salva na escalação manual
@@ -63,6 +66,9 @@ data class Jogador(
     val anoRetornoEmprestimo: Int? = null,         // Ano do retorno ao clube de origem
     val mesRetornoEmprestimo: Int? = null          // Mês (1–12) do retorno ao clube de origem
 ) {
+    /** Derivado de [partidasSuspensao] — true enquanto o jogador tiver suspensão a cumprir. */
+    val suspenso: Boolean get() = partidasSuspensao > 0
+
     /**
      * Penalidade percentual aplicada à força efetiva quando o jogador atua
      * em posição diferente da natural, conforme as regras de composição

@@ -87,6 +87,15 @@ interface PartidaDao {
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
 
+    /** Últimas partidas jogadas por um time em qualquer competição (para cálculo de moral). */
+    @Query("""
+        SELECT * FROM partidas
+        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
+        ORDER BY ordemGlobal DESC
+        LIMIT :limite
+    """)
+    suspend fun buscarUltimasPartidasDoTime(timeId: Int, limite: Int = 5): List<PartidaEntity>
+
     @Query("SELECT * FROM partidas WHERE id = :id")
     suspend fun buscarPorId(id: Int): PartidaEntity?
 

@@ -118,13 +118,25 @@ fun DashboardScreen(
     val notificacoes by vm.notificacoes.collectAsStateWithLifecycle()
     val propostasClube by vm.propostasClube.collectAsStateWithLifecycle()
     val infoPropostaClubeSelecionada by vm.infoPropostaClubeSelecionada.collectAsStateWithLifecycle()
+    val mensagem by vm.mensagem.collectAsStateWithLifecycle()
 
     var abaAtual by rememberSaveable { mutableIntStateOf(0) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
     LaunchedEffect(precisaEscolherPatrocinador) {
         if (precisaEscolherPatrocinador) onIrParaPatrocinadores()
+    }
+
+    // Snackbar centralizado — mensagens transitórias do VM aparecem ancoradas no rodapé
+    // sem empurrar conteúdo. Consumidas uma única vez.
+    LaunchedEffect(mensagem) {
+        mensagem?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            vm.limparMensagem()
+        }
     }
 
     // Quando há resultado simulado, abre a tela de simulação em tempo real
@@ -160,12 +172,11 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             DashboardBottomBar(
                 abaAtual = abaAtual,
                 onAbaChanged = { abaAtual = it },
-                onIrParaEscalacao = onIrParaEscalacao,
-                onIrParaTabela = onIrParaTabela,
                 notificacoesContador = notificacoesContador
             )
         }
@@ -678,28 +689,17 @@ private fun EncerrarTemporadaCard(
 private fun DashboardBottomBar(
     abaAtual: Int,
     onAbaChanged: (Int) -> Unit,
-    onIrParaEscalacao: () -> Unit,
-    onIrParaTabela: () -> Unit,
     notificacoesContador: Int = 0
 ) {
+    // Apenas abas reais do Dashboard entram aqui. Atalhos para Elenco/Tabela
+    // ficam no próprio Início e na aba "Mais" — assim o estado `selected`
+    // reflete sempre a tela que o usuário está vendo.
     NavigationBar(tonalElevation = 0.dp) {
         NavigationBarItem(
             selected = abaAtual == 0,
             onClick = { onAbaChanged(0) },
             icon = { Icon(Icons.Filled.Home, contentDescription = "Início") },
             label = { Text("Início") }
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = onIrParaEscalacao,
-            icon = { Icon(Icons.Filled.People, contentDescription = "Elenco") },
-            label = { Text("Elenco") }
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = onIrParaTabela,
-            icon = { Icon(Icons.Filled.Leaderboard, contentDescription = "Tabela") },
-            label = { Text("Tabela") }
         )
         NavigationBarItem(
             selected = abaAtual == 1,
@@ -791,7 +791,6 @@ private fun MenuAba(
                 MenuTileItem(Icons.Filled.TrackChanges, "Confrontos", onIrParaConfronto),
                 MenuTileItem(Icons.Filled.AutoAwesome, "Hall da Fama", onIrParaHallDaFama),
                 MenuTileItem(Icons.AutoMirrored.Filled.MenuBook, "Clubes", onIrParaClubes),
-                MenuTileItem(Icons.Filled.Timeline, "Tabela Geral", onIrParaTabela),
                 MenuTileItem(Icons.Filled.Leaderboard, "Ranking Técnicos", onIrParaRankingTecnicos),
             ))
         }
@@ -1284,6 +1283,7 @@ private fun nomeDivisaoClube(divisao: Int): String = when (divisao) {
     1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"
     5 -> "Primeira Div. Argentina (Apertura)"; 6 -> "Segunda Div. Argentina"
     9 -> "Primeira Div. Uruguai"; 10 -> "Segunda Div. Uruguai"
+    11 -> "Premier League"
     else -> "Div. $divisao"
 }
 

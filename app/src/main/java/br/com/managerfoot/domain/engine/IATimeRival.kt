@@ -48,7 +48,22 @@ object IATimeRival {
             }
         }
 
-        // Completar com qualquer jogador disponível se faltar titular
+        // Se ainda faltar titular (elenco pequeno / desbalanceado / muitas ausências),
+        // completar com qualquer jogador disponível ainda restante, escalando-o na
+        // posição natural. Isso gera penalidade de improviso naturalmente na força
+        // efetiva, mas evita que o time entre em campo com menos de 11 jogadores.
+        if (titulares.size < 11) {
+            val faltam = 11 - titulares.size
+            val complemento = disponiveis
+                .filter { it.id !in usados }
+                .take(faltam)
+            complemento.forEach { j ->
+                titulares.add(JogadorNaEscalacao(j, j.posicao))
+                usados.add(j.id)
+            }
+        }
+
+        // Completar com qualquer jogador disponível como reserva (até 11)
         val restantes = disponiveis.filter { it.id !in usados }
         val reservas = restantes.take(11).map {
             JogadorNaEscalacao(it, it.posicao)

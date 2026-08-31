@@ -105,9 +105,12 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     companion object {
         private const val MEDIA_GOLS_JOGO = 2.7   // média histórica do futebol brasileiro
         private const val PROB_CARTAO_AMARELO = 0.12
-        // Probabilidade base de lesão (fisico=50 ≈ risco neutro)
-        // fisico=99 → ~1.5%  |  fisico=50 → ~3.0%  |  fisico=1 → ~4.5%
-        private const val PROB_LESAO_BASE = 0.03
+        // Probabilidade base de lesão (fisico=50 ≈ risco neutro).
+        // fisico=99 → ~1.25% | fisico=50 → ~2.5% | fisico=1 → ~3.75%
+        // Calibrada em conjunto com multiplicadorFadiga para que o ciclo típico
+        // (treino→partida→treino) tenha ~20-25% de chance de ≥1 lesão por time,
+        // subindo para ~50% quando o gestor negligencia energia (fadiga < 60%).
+        private const val PROB_LESAO_BASE = 0.025
     }
 
     fun simular(
@@ -254,8 +257,12 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
         val domCasa = dominance.coerceAtLeast(0.0)
         val domFora = (-dominance).coerceAtLeast(0.0)
-        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
-        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
+        // Curva convexa (expoente > 1): quase nada acontece em domínios baixos, mas
+        // a resposta cresce rápido nos extremos. Ex.: dom=0.22 → 1.05 (jogos parelhos
+        // seguem parelhos), dom=0.75 → 2.07 (goleada 4×0/4×1), dom=0.83 → 2.36
+        // (goleada 5×0/5×1 em confrontos absurdamente desiguais).
+        val chancesMultCasa = 1.0 + domCasa.pow(2.5) * 2.2
+        val chancesMultFora = 1.0 + domFora.pow(2.5) * 2.2
 
         // Média de gols esperados — total esperado é MEDIA_GOLS_JOGO (sem multiplicador extra)
         // Com times iguais: probCasa=probFora=0.5 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
@@ -413,10 +420,13 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     }
 
     // ── Substituições táticas por time ──────────────────────────
-    // Até 3 trocas por time, espalhadas no intervalo 46–88 min.
-    // O jogador que sai é removido de titsAtivos e tem seu exitMinutes
-    // definido, garantindo que não apareça em nenhum evento de gol/assist
-    // gerado depois desta fase.
+    // Até 3 trocas por time, distribuídas em janelas típicas (55-65 | 68-77 | 80-88).
+    // Escolhas priorizam:
+    //   • Quem levou amarelo (evitar segundo cartão) — peso alto
+    //   • Quem está mais desgastado (fadiga baixa)   — peso médio
+    //   • Jogadores fortes tendem a ficar em campo    — peso negativo
+    // Nunca substitui o goleiro. O reserva que entra é escolhido pelo MESMO setor
+    // do que saiu (fallback: reserva mais forte).
     private fun aplicarSubstituicoesTaticas(
         titsAtivos: MutableList<JogadorNaEscalacao>,
         reservas:   MutableList<JogadorNaEscalacao>,
@@ -425,44 +435,92 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         exitMinutes:  MutableMap<Int, Int>,
         eventos:    MutableList<EventoSimulado>
     ) {
-        val maxSubs = 3
         if (reservas.isEmpty()) return
-
-        // Escolhe até 3 minutos aleatórios na segunda metade, sem repetição
-        val minutosSub = (46..88).toList().shuffled(rng).take(maxSubs).sorted()
-        var subsFeitas = 0
-
+        val minutosSub = escolherMinutosSubs(46, 88)
         for (minuto in minutosSub) {
-            if (subsFeitas >= maxSubs || reservas.isEmpty()) break
-
-            // Prefere não substituir o goleiro
-            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
-            if (candidatosSaida.isEmpty()) break
-
-            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
-            val entrando = reservas.removeAt(0)
-
-            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
-            titsAtivos.add(entrando)
-            exitMinutes[saindo.jogador.id]    = minuto
-            entryMinutes[entrando.jogador.id] = minuto
-
-            eventos.add(EventoSimulado(
-                minuto    = minuto,
-                tipo      = TipoEvento.SUBSTITUICAO_SAI,
-                jogadorId = saindo.jogador.id,
-                timeId    = timeId,
-                descricao = saindo.jogador.nomeAbreviado
-            ))
-            eventos.add(EventoSimulado(
-                minuto    = minuto,
-                tipo      = TipoEvento.SUBSTITUICAO_ENTRA,
-                jogadorId = entrando.jogador.id,
-                timeId    = timeId,
-                descricao = entrando.jogador.nomeAbreviado
-            ))
-            subsFeitas++
+            if (reservas.isEmpty()) break
+            aplicarUmaSubstituicao(titsAtivos, reservas, timeId, minuto, entryMinutes, exitMinutes, eventos)
         }
+    }
+
+    /** Sorteia até 3 minutos de substituição distribuídos em janelas realistas. */
+    private fun escolherMinutosSubs(minInicio: Int, minFim: Int): List<Int> {
+        // Janelas típicas do futebol: primeira ~60', segunda ~72', terceira ~85'.
+        val janelas = listOf(55..65, 68..77, 80..88)
+        return janelas.mapNotNull { j ->
+            val lo = maxOf(j.first, minInicio)
+            val hi = minOf(j.last, minFim)
+            if (lo <= hi) rng.nextInt(lo, hi + 1) else null
+        }
+    }
+
+    /** Escolhe um titular para sair, um reserva compatível para entrar e registra os eventos. */
+    private fun aplicarUmaSubstituicao(
+        titsAtivos: MutableList<JogadorNaEscalacao>,
+        reservas:   MutableList<JogadorNaEscalacao>,
+        timeId:     Int,
+        minuto:     Int,
+        entryMinutes: MutableMap<Int, Int>,
+        exitMinutes:  MutableMap<Int, Int>,
+        eventos:    MutableList<EventoSimulado>
+    ) {
+        // Amarelos já emitidos nesta partida (para o time) — usados na priorização de saída
+        val amareladosNoTime = eventos.asSequence()
+            .filter { it.timeId == timeId && it.tipo == TipoEvento.CARTAO_AMARELO }
+            .map { it.jogadorId }.toSet()
+
+        // Candidatos: qualquer titular não-goleiro que ainda não saiu (implícito, pois já foi removido)
+        val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+        if (candidatosSaida.isEmpty()) return
+
+        fun scoreSaida(jne: JogadorNaEscalacao): Double {
+            var s = 0.0
+            if (jne.jogador.id in amareladosNoTime) s += 100.0    // risco de expulsão
+            s += when {
+                jne.jogador.fadiga < 0.60f -> 30.0
+                jne.jogador.fadiga < 0.75f -> 15.0
+                else                        -> 0.0
+            }
+            s -= jne.jogador.forca * 0.5    // fortes ficam mais tempo em campo
+            return s
+        }
+
+        val saindo = candidatosSaida.maxByOrNull { scoreSaida(it) } ?: return
+
+        // Reserva do mesmo setor tem prioridade; fallback é a reserva mais forte disponível
+        val setorAlvo = saindo.posicaoUsada.setor
+        val entrandoIdx = reservas.indexOfFirst { it.jogador.posicao.setor == setorAlvo }
+            .takeIf { it >= 0 }
+            ?: reservas.indices.maxByOrNull { reservas[it].jogador.forcaEfetiva() }
+            ?: 0
+        val entrando = reservas.removeAt(entrandoIdx)
+
+        // Preserva a posição tática do jogador que saiu quando o entrante é do mesmo setor,
+        // para não desmontar a formação. Do contrário, mantém a posição natural do entrante.
+        val posicaoUsadaEntrante = if (entrando.jogador.posicao.setor == setorAlvo)
+            saindo.posicaoUsada
+        else
+            entrando.jogador.posicao
+
+        titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
+        titsAtivos.add(JogadorNaEscalacao(entrando.jogador, posicaoUsadaEntrante))
+        exitMinutes[saindo.jogador.id]    = minuto
+        entryMinutes[entrando.jogador.id] = minuto
+
+        eventos.add(EventoSimulado(
+            minuto    = minuto,
+            tipo      = TipoEvento.SUBSTITUICAO_SAI,
+            jogadorId = saindo.jogador.id,
+            timeId    = timeId,
+            descricao = saindo.jogador.nomeAbreviado
+        ))
+        eventos.add(EventoSimulado(
+            minuto    = minuto,
+            tipo      = TipoEvento.SUBSTITUICAO_ENTRA,
+            jogadorId = entrando.jogador.id,
+            timeId    = timeId,
+            descricao = entrando.jogador.nomeAbreviado
+        ))
     }
 
     // ── Incidentes (cartões + lesões) por jogador ──
@@ -471,7 +529,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
                 val minuto = rng.nextInt(1, 90)
-                val vermelho = rng.nextDouble() < 0.08
+                // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
+                // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
+                val vermelho = rng.nextDouble() < 0.04
                 lista.add(EventoSimulado(
                     minuto = minuto,
                     tipo = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
@@ -481,13 +541,13 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 ))
             }
             // Risco base por físico; multiplicado pela fadiga do jogador:
-            //   fadiga ≥ 80%: risco normal | 75–80%: +50% | 60–74%: +2× | <60%: +4×
+            //   fadiga ≥ 80%: risco normal | 75–80%: +30% | 60–74%: +2× | <60%: +3×
             val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
             val multiplicadorFadiga = when {
                 jne.jogador.fadiga >= 0.80f -> 1.0
-                jne.jogador.fadiga >= 0.75f -> 1.5
-                jne.jogador.fadiga >= 0.60f -> 2.5
-                else                        -> 4.0
+                jne.jogador.fadiga >= 0.75f -> 1.3
+                jne.jogador.fadiga >= 0.60f -> 2.0
+                else                        -> 3.0
             }
             val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
@@ -745,8 +805,12 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
         val domCasa = dominance.coerceAtLeast(0.0)
         val domFora = (-dominance).coerceAtLeast(0.0)
-        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
-        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
+        // Curva convexa (expoente > 1): quase nada acontece em domínios baixos, mas
+        // a resposta cresce rápido nos extremos. Ex.: dom=0.22 → 1.05 (jogos parelhos
+        // seguem parelhos), dom=0.75 → 2.07 (goleada 4×0/4×1), dom=0.83 → 2.36
+        // (goleada 5×0/5×1 em confrontos absurdamente desiguais).
+        val chancesMultCasa = 1.0 + domCasa.pow(2.5) * 2.2
+        val chancesMultFora = 1.0 + domFora.pow(2.5) * 2.2
 
         val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa
         val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora
@@ -809,7 +873,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
                 val minuto = rng.nextInt(efetMin, efetMax)
-                val vermelho = rng.nextDouble() < 0.08
+                // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
+                // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
+                val vermelho = rng.nextDouble() < 0.04
                 lista.add(EventoSimulado(
                     minuto    = minuto,
                     tipo      = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
@@ -822,9 +888,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
             val multiplicadorFadiga = when {
                 jne.jogador.fadiga >= 0.80f -> 1.0
-                jne.jogador.fadiga >= 0.75f -> 1.5
-                jne.jogador.fadiga >= 0.60f -> 2.5
-                else                        -> 4.0
+                jne.jogador.fadiga >= 0.75f -> 1.3
+                jne.jogador.fadiga >= 0.60f -> 2.0
+                else                        -> 3.0
             }
             val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
@@ -860,7 +926,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
             Setor.ATAQUE -> jne.jogador.finalizacao * jne.jogador.finalizacao / 10 + jne.jogador.velocidade + jne.jogador.tecnica
             Setor.MEIO   -> jne.jogador.finalizacao + jne.jogador.tecnica / 2
-            Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
+            // /7 (não /3) — alinha com gerarEventosGol para que a distribuição de
+            // marcadores seja idêntica entre simulação por período e por partida completa.
+            Setor.DEFESA -> (jne.jogador.finalizacao / 7).coerceAtLeast(1)
             else         -> 1
         }
         fun pesoAssist(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
@@ -906,6 +974,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     }
 
     // Substituições táticas da IA restritas ao período [minInicio, minFim]
+    // Reutiliza a mesma heurística de `aplicarSubstituicoesTaticas` (janelas típicas,
+    // priorização por amarelo/fadiga/força, entrada por setor).
     private fun aplicarSubstituicoesTaticasPeriodo(
         titsAtivos:   MutableList<JogadorNaEscalacao>,
         reservas:     MutableList<JogadorNaEscalacao>,
@@ -917,24 +987,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         minFim:       Int
     ) {
         if (reservas.isEmpty()) return
-        val rangeMax = minFim.coerceAtMost(88)
-        if (minInicio > rangeMax) return
-
-        val minutosSub = (minInicio..rangeMax).toList().shuffled(rng).take(3).sorted()
-        var subsFeitas = 0
+        val minutosSub = escolherMinutosSubs(minInicio, minFim.coerceAtMost(88))
         for (minuto in minutosSub) {
-            if (subsFeitas >= 3 || reservas.isEmpty()) break
-            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
-            if (candidatosSaida.isEmpty()) break
-            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
-            val entrando = reservas.removeAt(0)
-            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
-            titsAtivos.add(entrando)
-            exitMinutes[saindo.jogador.id]    = minuto
-            entryMinutes[entrando.jogador.id] = minuto
-            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_SAI,   saindo.jogador.id,   timeId, saindo.jogador.nomeAbreviado))
-            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_ENTRA, entrando.jogador.id, timeId, entrando.jogador.nomeAbreviado))
-            subsFeitas++
+            if (reservas.isEmpty()) break
+            aplicarUmaSubstituicao(titsAtivos, reservas, timeId, minuto, entryMinutes, exitMinutes, eventos)
         }
     }
 }
