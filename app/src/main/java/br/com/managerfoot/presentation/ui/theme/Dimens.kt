@@ -22,6 +22,14 @@ object Radius {
 
 object Elev {
     val flat     = 0.dp
-    val raised   = 2.dp
-    val floating = 8.dp
+    val raised   = 1.dp   // dark refinado: profundidade vem do tom da surface, não de sombra pesada
+    val card     = 2.dp
+    val floating = 4.dp
+}
+
+// Pilar 7: MOVIMENTO — durações padronizadas (ms) para transições e microinterações.
+object Motion {
+    const val fast   = 120   // toques, realces, chips
+    const val medium = 220   // seleção de abas, expand/collapse
+    const val slow   = 360   // transições de conteúdo
 }

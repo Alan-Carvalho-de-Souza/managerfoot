@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,21 +41,48 @@ import br.com.managerfoot.presentation.viewmodel.CopaChaveamentoViewModel
 fun CopaChaveamentoScreen(
     copaId: Int,
     copaArgId: Int = -1,
+    copaInglaterraId: Int = -1,
+    copaEspanholaId: Int = -1,
+    copaItalianaId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
 ) {
     val partidas    by vm.partidas.collectAsState()
     val partidasArg by vm.partidasArg.collectAsState()
+    val partidasIng by vm.partidasIng.collectAsState()
+    val partidasEsp by vm.partidasEsp.collectAsState()
+    val partidasIta by vm.partidasIta.collectAsState()
 
-    LaunchedEffect(copaId, copaArgId) { vm.carregarAmbas(copaId, copaArgId) }
+    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId) {
+        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId)
+    }
 
-    val mostrarFiltroPais = copaId > 0 && copaArgId > 0
-    var paisSelecionado by remember { mutableStateOf("Brasil") }
+    // Copa inicial exibida: prioriza a que existe (Brasil > Argentina > Inglaterra > Espanha > Itália)
+    val copasDisponiveis = buildList {
+        if (copaId > 0) add("Brasil")
+        if (copaArgId > 0) add("Argentina")
+        if (copaInglaterraId > 0) add("Inglaterra")
+        if (copaEspanholaId > 0) add("Espanha")
+        if (copaItalianaId > 0) add("Itália")
+    }
+    val mostrarFiltroPais = copasDisponiveis.size > 1
+    var paisSelecionado by remember(copasDisponiveis) { mutableStateOf(copasDisponiveis.firstOrNull() ?: "Brasil") }
 
-    val partidasAtivas = if (paisSelecionado == "Argentina") partidasArg else partidas
-    val fasesMotor     = if (paisSelecionado == "Argentina")
-        MotorCampeonato.COPA_ARG_FASES else MotorCampeonato.COPA_FASES
+    val jogoUnicoAtivo = paisSelecionado == "Inglaterra"
+    val partidasAtivas = when (paisSelecionado) {
+        "Argentina" -> partidasArg
+        "Inglaterra" -> partidasIng
+        "Espanha" -> partidasEsp
+        "Itália" -> partidasIta
+        else -> partidas
+    }
+    val fasesMotor = when (paisSelecionado) {
+        "Argentina" -> MotorCampeonato.COPA_ARG_FASES
+        "Inglaterra" -> MotorCampeonato.COPA_ING_FASES
+        "Espanha", "Itália" -> MotorCampeonato.COPA16_FASES
+        else -> MotorCampeonato.COPA_FASES
+    }
 
     val faseDisponivel = remember(partidasAtivas, fasesMotor) {
         fasesMotor.filter { fase -> partidasAtivas.any { it.fase == fase } }
@@ -64,19 +93,24 @@ fun CopaChaveamentoScreen(
     }
 
     // Detecta o campeão (se a Final foi concluída) — para a copa ativa
-    val campeao = remember(partidasAtivas) {
+    val campeao = remember(partidasAtivas, jogoUnicoAtivo) {
         val finais = partidasAtivas.filter { it.fase == "Final" }
         if (finais.isEmpty()) null
-        else computarVencedorConfronto(finais)
+        else computarVencedorConfronto(finais, jogoUnico = jogoUnicoAtivo)
     }
 
-    val tituloCopa = if (paisSelecionado == "Argentina") "Copa Argentina"
-                     else "Copa do Brasil"
+    val tituloCopa = when (paisSelecionado) {
+        "Argentina" -> "Copa Argentina"
+        "Inglaterra" -> "Copa da Inglaterra"
+        "Espanha" -> "Copa Espanhola"
+        "Itália" -> "Copa Italiana"
+        else -> "Copa do Brasil"
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = if (mostrarFiltroPais) "Copas" else tituloCopa,
@@ -95,7 +129,7 @@ fun CopaChaveamentoScreen(
                     .fillMaxWidth()
                     .padding(top = Spacing.md, bottom = Spacing.xs)
             ) {
-                items(listOf("Brasil", "Argentina")) { pais ->
+                items(copasDisponiveis) { pais ->
                     FilterChipPill(
                         label = pais,
                         selected = paisSelecionado == pais,
@@ -167,7 +201,8 @@ fun CopaChaveamentoScreen(
                         ida = ida,
                         volta = volta,
                         timeJogadorId = timeJogadorId,
-                        ehFinal = faseSelecionada == "Final"
+                        ehFinal = faseSelecionada == "Final",
+                        jogoUnico = jogoUnicoAtivo
                     )
                 }
             }
@@ -262,7 +297,8 @@ private fun ConfrontoCopaCard(
     ida: CopaPartidaDto,
     volta: CopaPartidaDto?,
     timeJogadorId: Int,
-    ehFinal: Boolean
+    ehFinal: Boolean,
+    jogoUnico: Boolean = false
 ) {
     val teamAId = ida.timeCasaId
     val teamANome = ida.nomeCasa
@@ -273,16 +309,17 @@ private fun ConfrontoCopaCard(
 
     val golsAIda = ida.golsCasa
     val golsBIda = ida.golsFora
-    val golsAVolta = volta?.golsFora   // A é visitante na volta
-    val golsBVolta = volta?.golsCasa   // B é mandante na volta
+    // Jogo único: não há volta; A=casa, B=fora na única partida.
+    val golsAVolta = if (jogoUnico) null else volta?.golsFora   // A é visitante na volta
+    val golsBVolta = if (jogoUnico) null else volta?.golsCasa   // B é mandante na volta
 
     val totalA = (golsAIda ?: 0) + (golsAVolta ?: 0)
     val totalB = (golsBIda ?: 0) + (golsBVolta ?: 0)
 
-    val confrontoCompleto = ida.jogada && (volta?.jogada == true)
+    val confrontoCompleto = if (jogoUnico) ida.jogada else (ida.jogada && volta?.jogada == true)
 
-    val penBVolta = volta?.penaltisCasa
-    val penAVolta = volta?.penaltisForaId
+    val penAVolta = if (jogoUnico) ida.penaltisCasa else volta?.penaltisForaId
+    val penBVolta = if (jogoUnico) ida.penaltisForaId else volta?.penaltisCasa
     val foiParaPenaltis = confrontoCompleto && totalA == totalB && penAVolta != null && penBVolta != null
     val teamAVenceuPenaltis = foiParaPenaltis && (penAVolta ?: 0) > (penBVolta ?: 0)
     val teamBVenceuPenaltis = foiParaPenaltis && (penBVolta ?: 0) > (penAVolta ?: 0)
@@ -371,7 +408,8 @@ private fun ConfrontoCopaCard(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "agregado",
+                                if (foiParaPenaltis) "pên. ${penAVolta ?: 0}-${penBVolta ?: 0}"
+                                else if (jogoUnico) "resultado" else "agregado",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 letterSpacing = 0.5.sp
@@ -393,8 +431,8 @@ private fun ConfrontoCopaCard(
                     )
                 }
 
-                // Mini-cards Ida / Volta com placar
-                if (ida.jogada || volta != null) {
+                // Mini-cards Ida / Volta com placar (só em confrontos ida-e-volta)
+                if (!jogoUnico && (ida.jogada || volta != null)) {
                     Spacer(Modifier.height(Spacing.md))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -550,23 +588,23 @@ private data class VencedorCopa(
 )
 
 /** Calcula o vencedor de um confronto de copa (ida + volta + pênaltis). */
-private fun computarVencedorConfronto(jogos: List<CopaPartidaDto>): VencedorCopa? {
+private fun computarVencedorConfronto(jogos: List<CopaPartidaDto>, jogoUnico: Boolean = false): VencedorCopa? {
     if (jogos.isEmpty()) return null
     val ida = jogos.minByOrNull { it.rodada } ?: return null
-    val volta = jogos.maxByOrNull { it.rodada }
+    val volta = if (jogoUnico) null else jogos.maxByOrNull { it.rodada }
     if (!ida.jogada) return null
-    if (volta == null || !volta.jogada) return null
+    if (!jogoUnico && (volta == null || !volta.jogada)) return null
 
     val golsAIda = ida.golsCasa ?: 0
     val golsBIda = ida.golsFora ?: 0
-    val golsAVolta = volta.golsFora ?: 0
-    val golsBVolta = volta.golsCasa ?: 0
+    val golsAVolta = if (jogoUnico) 0 else (volta?.golsFora ?: 0)
+    val golsBVolta = if (jogoUnico) 0 else (volta?.golsCasa ?: 0)
 
     val totalA = golsAIda + golsAVolta
     val totalB = golsBIda + golsBVolta
 
-    val penA = volta.penaltisForaId
-    val penB = volta.penaltisCasa
+    val penA = if (jogoUnico) ida.penaltisCasa else volta?.penaltisForaId
+    val penB = if (jogoUnico) ida.penaltisForaId else volta?.penaltisCasa
 
     val (vencedorId, vencedorNome, vencedorEscudo) = when {
         totalA > totalB -> Triple(ida.timeCasaId, ida.nomeCasa, ida.escudoCasa)

@@ -70,7 +70,8 @@ object CalculadoraForca {
 
     // Fatores modificadores externos
     // Fator casa proporcional à capacidade do estádio
-    // 5k=1% ... 100k=12% conforme tabela de tiers
+    // Estádios muito pequenos (<5k) ainda recebem +1% — torcida pequena mas presente
+    // ainda oscila jogadores. 100k=12% conforme tabela de tiers.
     fun fatorMandante(capacidade: Int): Double = when {
         capacidade >= 100_000 -> 1.12
         capacidade >=  80_000 -> 1.11
@@ -83,8 +84,9 @@ object CalculadoraForca {
         capacidade >=  20_000 -> 1.04
         capacidade >=  15_000 -> 1.03
         capacidade >=  10_000 -> 1.02
-        capacidade >=   5_000 -> 1.01
-        else                  -> 1.0
+        capacidade >=   5_000 -> 1.015
+        capacidade >=   1_000 -> 1.01
+        else                  -> 1.005
     }
     fun fatorEstilo(atacante: EstiloJogo, defensor: EstiloJogo): Double =
         when {
@@ -105,9 +107,151 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     companion object {
         private const val MEDIA_GOLS_JOGO = 2.7   // média histórica do futebol brasileiro
         private const val PROB_CARTAO_AMARELO = 0.12
-        // Probabilidade base de lesão (fisico=50 ≈ risco neutro)
-        // fisico=99 → ~1.5%  |  fisico=50 → ~3.0%  |  fisico=1 → ~4.5%
-        private const val PROB_LESAO_BASE = 0.03
+        // Probabilidade base de lesão (fisico=50 ≈ risco neutro).
+        // fisico=99 → ~1.25% | fisico=50 → ~2.5% | fisico=1 → ~3.75%
+        // Calibrada em conjunto com multiplicadorFadiga para que o ciclo típico
+        // (treino→partida→treino) tenha ~20-25% de chance de ≥1 lesão por time,
+        // subindo para ~50% quando o gestor negligencia energia (fadiga < 60%).
+        private const val PROB_LESAO_BASE = 0.025
+
+        /**
+         * Faltas de um time em uma partida, derivadas dos cartões emitidos.
+         * Fórmula unificada usada tanto na engine (após simular a partida) quanto
+         * em [GameRepository.estatisticasDeEventos] (ao reconstruir estatísticas
+         * a partir de eventos persistidos), evitando divergência entre os dois
+         * caminhos.
+         *
+         * Base 10 + peso por cartão + jitter aleatório contido em [0..4].
+         *   0 cartões          → 10-14 faltas
+         *   2 amarelos          → 14-18 faltas
+         *   3 amarelos + 1 verm → 19-23 faltas
+         */
+        fun calcularFaltas(amarelos: Int, vermelhos: Int, rng: Random = Random.Default): Int =
+            (10 + amarelos * 2 + vermelhos * 3 + rng.nextInt(0, 5)).coerceIn(5, 30)
+
+        // ── Estatísticas realistas de posse e passe ────────────────────────────
+        // Fonte única de verdade usada tanto pela engine (jogo simulado) quanto
+        // por GameRepository.estatisticasDeEventos (jogo interativo), evitando os
+        // valores fixos antigos (posse 50/50, passes travados).
+
+        /**
+         * "Controle de bola" de um time. Combina duas capacidades reais:
+         *  - RETENÇÃO (manter a bola): passe + técnica.
+         *  - PRESSÃO (recuperar a bola): físico + velocidade + defesa — um time
+         *    intenso e veloz domina a posse "correndo atrás", não só o técnico.
+         * O meio-campo domina a retenção de bola (maior peso). Base para a posse.
+         */
+        fun controlePosse(tits: List<JogadorNaEscalacao>): Double {
+            var soma = 0.0; var peso = 0.0
+            for (j in tits) {
+                val retencao = j.jogador.passe * 0.60 + j.jogador.tecnica * 0.40
+                val pressao  = (j.jogador.fisico + j.jogador.velocidade + j.jogador.defesa) / 3.0
+                val q = retencao * 0.72 + pressao * 0.28
+                val w = when (j.posicaoUsada.setor) {
+                    Setor.MEIO    -> 2.2
+                    Setor.DEFESA  -> 1.2
+                    Setor.ATAQUE  -> 0.7
+                    Setor.GOLEIRO -> 0.3
+                }
+                soma += q * w; peso += w
+            }
+            return if (peso > 0) soma / peso else 50.0
+        }
+
+        /**
+         * Peso do efeito da posse de bola no resultado, por estilo tático
+         * (intensidade FORTE). Posse acima de 50% ajuda estilos que buscam a bola;
+         * CONTRA_ATAQUE tem peso NEGATIVO — se beneficia de jogar SEM a bola
+         * (eficiência em transição), cria o clássico "dominou mas perdeu".
+         */
+        fun pesoPossePorEstilo(estilo: EstiloJogo): Double = when (estilo) {
+            EstiloJogo.OFENSIVO      ->  1.00
+            EstiloJogo.EQUILIBRADO   ->  0.70
+            EstiloJogo.DEFENSIVO     ->  0.30
+            EstiloJogo.CONTRA_ATAQUE -> -0.60
+        }
+
+        /**
+         * Fator multiplicativo aplicado à expectativa de gols conforme a posse do
+         * time e seu estilo. Ex. (OFENSIVO): 65% posse → ~+15%; 35% → ~-15%.
+         * CONTRA_ATAQUE com 35% posse → ~+9% (eficiência sem a bola). Cap [0.78,1.30].
+         * Times equilibrados na posse (50%) → fator 1.0 (sem efeito).
+         */
+        fun fatorPosseResultado(posse: Int, estilo: EstiloJogo): Double {
+            val desvio = (posse - 50) / 100.0
+            return (1.0 + desvio * pesoPossePorEstilo(estilo)).coerceIn(0.78, 1.30)
+        }
+
+        /**
+         * "Intenção de posse" de um estilo: quanto o time busca (ou cede) a bola.
+         * É o que separa um dominador (OFENSIVO) de um time direto/reativo mesmo
+         * quando os atributos brutos são parecidos — o principal diferenciador de
+         * posse entre times de qualidade semelhante (ex.: City × United).
+         */
+        fun intencaoPosse(estilo: EstiloJogo): Double = when (estilo) {
+            EstiloJogo.OFENSIVO      ->  8.0
+            EstiloJogo.EQUILIBRADO   ->  0.0
+            EstiloJogo.DEFENSIVO     -> -6.0
+            EstiloJogo.CONTRA_ATAQUE -> -9.0
+        }
+
+        /**
+         * Posse do mandante (0-100). Combina três forças:
+         *  - DIFERENÇA de controle de bola × 1.4 (sensível a pequenas diferenças de
+         *    qualidade — a versão antiga usava razão e comprimia tudo pra ~50%);
+         *  - INTENÇÃO de posse do estilo (dominador busca a bola, reativo cede);
+         *  - vantagem de mandante + ruído natural.
+         * O visitante fica com o complemento (100 - posseCasa).
+         */
+        fun estimarPosseCasa(
+            titsCasa: List<JogadorNaEscalacao>,
+            titsFora: List<JogadorNaEscalacao>,
+            estiloCasa: EstiloJogo,
+            estiloFora: EstiloJogo,
+            mandante: Boolean,
+            rng: Random
+        ): Int {
+            val cCasa = controlePosse(titsCasa)
+            val cFora = controlePosse(titsFora)
+            val diffControle = (cCasa - cFora) * 1.4              // ~±14 para gap de 10 pontos
+            val diffEstilo   = intencaoPosse(estiloCasa) - intencaoPosse(estiloFora)  // ±17 nos extremos
+            var posse = 50.0 + diffControle + diffEstilo
+            if (mandante) posse += 2.0                            // vantagem de jogar em casa
+            posse += rng.nextInt(-3, 4)                           // ruído natural entre partidas
+            return posse.roundToInt().coerceIn(24, 76)
+        }
+
+        /**
+         * Qualidade de passe de um time: média ponderada de passe (peso maior) +
+         * técnica, meio/defesa contribuindo mais que o ataque.
+         */
+        fun qualidadePasse(tits: List<JogadorNaEscalacao>): Double {
+            var soma = 0.0; var peso = 0.0
+            for (j in tits) {
+                val q = j.jogador.passe * 0.70 + j.jogador.tecnica * 0.30
+                val w = when (j.posicaoUsada.setor) {
+                    Setor.MEIO    -> 2.0
+                    Setor.DEFESA  -> 1.5
+                    Setor.ATAQUE  -> 1.0
+                    Setor.GOLEIRO -> 0.5
+                }
+                soma += q * w; peso += w
+            }
+            return if (peso > 0) soma / peso else 50.0
+        }
+
+        /**
+         * Precisão de passe (%) de um time. Cresce com a qualidade de passe e um
+         * pouco com a posse (mais bola = jogo mais curto/seguro). Faixa realista:
+         * ~60% (time fraco) a ~90% (time de elite).
+         */
+        fun estimarPrecisaoPasse(tits: List<JogadorNaEscalacao>, posse: Int, rng: Random): Int {
+            val q = qualidadePasse(tits)                // ~30..95
+            var prec = 72.0 + (q - 50.0) * 0.32         // q50→72 | q80→82 | q95→86 | q30→65
+            prec += (posse - 50) * 0.05                 // leve bônus de quem tem mais bola
+            prec += rng.nextInt(-2, 3)                  // ruído natural
+            return prec.roundToInt().coerceIn(58, 91)
+        }
     }
 
     fun simular(
@@ -231,9 +375,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             }
         }
 
-        val total    = fCasa + fFora
-        val probCasa = fCasa / total
-        val probFora = fFora / total
+        // Divisão de gols com peso quadrático — amplifica a fatia do time mais forte.
+        // Sem o quadrado, uma diferença de 20% na força só rende ~20% mais gols, o que
+        // deixa confrontos moderadamente desiguais parelhos demais (Liverpool × Brighton).
+        // Com o quadrado, a fatia do lado forte cresce de forma mais realista.
+        val fC2Prob = fCasa * fCasa
+        val fF2Prob = fFora * fFora
+        val probCasa = fC2Prob / (fC2Prob + fF2Prob)
+        val probFora = fF2Prob / (fC2Prob + fF2Prob)
 
         // ── Substituições táticas (até 3 por time) ──────────────────
         // Ocorrem após os incidentes para que reserves de lesão não
@@ -254,13 +403,37 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
         val domCasa = dominance.coerceAtLeast(0.0)
         val domFora = (-dominance).coerceAtLeast(0.0)
-        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
-        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
+        // Condição da partida — sorteada uma vez, aplicada em pontos específicos abaixo.
+        val condicao = sortearCondicaoPartida()
 
-        // Média de gols esperados — total esperado é MEDIA_GOLS_JOGO (sem multiplicador extra)
-        // Com times iguais: probCasa=probFora=0.5 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
-        val mediaGolsCasa = MEDIA_GOLS_JOGO * probCasa * penalCasa * chancesMultCasa
-        val mediaGolsFora = MEDIA_GOLS_JOGO * probFora * penalFora * chancesMultFora
+        // Curva mista linear+quadrática: sensibilidade real no meio do espectro
+        // (onde a maioria dos jogos vive) e cap 3.0 no domínio total.
+        // Ex.: dom=0.10 → 1.07 | dom=0.30 → 1.31 | dom=0.50 → 1.65 | dom=0.75 → 2.24 | dom=1.0 → 3.00
+        // Substituiu a curva convexa pura (pow 2.5 × 2.2) que ficava dormente em
+        // confrontos de força moderadamente desigual (ex.: Liverpool × Brighton).
+        // ALTITUDE penaliza levemente o time visitante (adaptação difícil).
+        val ajusteAltitude = if (condicao == CondicaoPartida.ALTITUDE) 0.95 else 1.0
+        val chancesMultCasa = 1.0 + domCasa * 0.6 + domCasa.pow(2.0) * 1.4
+        val chancesMultFora = (1.0 + domFora * 0.6 + domFora.pow(2.0) * 1.4) * ajusteAltitude
+
+        // Posse de bola: derivada do controle de bola real (retenção + pressão) dos
+        // dois times (com o XI vigente após incidentes/substituições), vantagem de
+        // mandante e ruído natural. Mesma fórmula do jogo interativo — fonte única.
+        // Calculada ANTES dos gols para influenciar a expectativa de gols.
+        val posseCasa = estimarPosseCasa(
+            titsCasa, titsFora, casa.time.estiloJogo, fora.time.estiloJogo,
+            mandante = !campoNeutro, rng = rng
+        )
+        // Fator da posse no resultado (intensidade FORTE), modulado por estilo:
+        // dominar a bola cria chances (ofensivo/equilibrado); CONTRA_ATAQUE se
+        // beneficia de posse baixa (eficiência em transição).
+        val fatorPosseCasa = fatorPosseResultado(posseCasa, casa.time.estiloJogo)
+        val fatorPosseFora = fatorPosseResultado(100 - posseCasa, fora.time.estiloJogo)
+
+        // Média de gols esperados. Com times iguais: probCasa=probFora=0.5, posse
+        // 50/50 → fatorPosse=1 → mediaGols cada lado = 2.7×0.5 = 1.35 → total = 2.7 ✓
+        val mediaGolsCasa = MEDIA_GOLS_JOGO * probCasa * penalCasa * chancesMultCasa * fatorPosseCasa
+        val mediaGolsFora = MEDIA_GOLS_JOGO * probFora * penalFora * chancesMultFora * fatorPosseFora
 
         val golsCasa = poissonRandom(mediaGolsCasa)
         val golsFora = poissonRandom(mediaGolsFora)
@@ -272,23 +445,45 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         eventos.addAll(gerarEventosGol(golsFora, escalacaoForaFinal, false, entryMinutes, exitMinutes))
         eventos.sortBy { it.minuto }
 
-        // Estatísticas derivadas
-        // Posse de bola proporcional à dominância (probCasa/probFora já refletem forças reais)
-        val posseCasa = (50 + ((probCasa - 0.5) * 60)).roundToInt().coerceIn(30, 70)
-        // Finalizações baseadas na dominância — time dominante cria mais chances mesmo sem converter
-        val totalChutes = rng.nextInt(18, 30)
+        // Estatísticas derivadas (posseCasa já calculada acima).
+        // Finalizações derivadas da ofensividade real dos times + estilo tático + dominância.
+        // Antes: rng(18,30) puramente aleatório — um time com finalização média 30 tinha
+        // a mesma quantidade de chutes de um com 90.
+        // Agora: base cresce com a média de (finalizacao+tecnica) dos meio-campistas/atacantes
+        // dos dois times; estilo OFENSIVO/CONTRA_ATAQUE amplifica, DEFENSIVO reduz.
+        // Finalizações derivadas da ofensividade real dos times + estilo tático + dominância.
+        // Antes: rng(18,30) puramente aleatório — um time com finalização média 30 tinha
+        // a mesma quantidade de chutes de um com 90.
+        // Agora: base cresce com a média de (finalizacao+tecnica) dos meio-campistas/atacantes
+        // dos dois times; estilo OFENSIVO/CONTRA_ATAQUE amplifica, DEFENSIVO reduz.
+        val ofensivos = (titsCasa + titsFora)
+            .filter { it.posicaoUsada.setor == Setor.MEIO || it.posicaoUsada.setor == Setor.ATAQUE }
+        val mediaOfens = if (ofensivos.isNotEmpty())
+            ofensivos.map { (it.jogador.finalizacao + it.jogador.tecnica) / 2.0 }.average()
+        else 50.0
+        val bonusEstilo = bonusChutesEstilo(casa.time.estiloJogo) + bonusChutesEstilo(fora.time.estiloJogo)
+        // Base 21 → dois times médios geram ~22-26 finalizações no total (média real
+        // de ligas fortes: 24-27 por jogo, ~12-13 por time).
+        val totalChutes = (21 + (mediaOfens - 50) * 0.16 + bonusEstilo + rng.nextInt(0, 4)
+                              + ajusteChutesPorCondicao(condicao))
+            .toInt().coerceIn(16, 34)
         val chutesCasa = ((totalChutes * probCasa).roundToInt() + rng.nextInt(0, 3))
-            .coerceIn(golsCasa + 2, 22)
+            .coerceIn(golsCasa + 2, 24)
         val chutesFora = ((totalChutes * probFora).roundToInt() + rng.nextInt(0, 3))
-            .coerceIn(golsFora + 2, 22)
-        // Chutes no alvo ≈ 32–44% do total (média real: ~35–38% no futebol profissional)
-        val chutesCasaNoGol = (chutesCasa * rng.nextInt(32, 45) / 100).coerceIn(golsCasa + 1, chutesCasa)
-        val chutesForaNoGol = (chutesFora * rng.nextInt(32, 45) / 100).coerceIn(golsFora + 1, chutesFora)
+            .coerceIn(golsFora + 2, 24)
+        // Chutes no alvo ≈ 30–40% do total (média real: ~33–36%). Ajuste por condição
+        // (chuva/frio → bola escorrega, precisão cai).
+        val precisaoAjuste = ajustePrecisaoPorCondicao(condicao)
+        val faixaMin = (30 + precisaoAjuste).coerceAtLeast(20)
+        val faixaMax = (41 + precisaoAjuste).coerceAtLeast(faixaMin + 5)
+        val chutesCasaNoGol = (chutesCasa * rng.nextInt(faixaMin, faixaMax) / 100).coerceIn(golsCasa + 1, chutesCasa)
+        val chutesForaNoGol = (chutesFora * rng.nextInt(faixaMin, faixaMax) / 100).coerceIn(golsFora + 1, chutesFora)
         // Defesas do goleiro = chutes no alvo que não entraram
         val defesasGoleiroCasa = (chutesForaNoGol - golsFora).coerceAtLeast(0)
         val defesasGoleiroFora = (chutesCasaNoGol - golsCasa).coerceAtLeast(0)
-        val passesErradosCasa = ((100 - posseCasa) / 4 + rng.nextInt(5, 15)).coerceIn(5, 40)
-        val passesErradosFora = (posseCasa / 4 + rng.nextInt(5, 15)).coerceIn(5, 40)
+        // Precisão de passe (%) por time — derivada da qualidade de passe + posse.
+        val precisaoPasseCasa = estimarPrecisaoPasse(titsCasa, posseCasa, rng)
+        val precisaoPasseFora = estimarPrecisaoPasse(titsFora, 100 - posseCasa, rng)
 
         // Goleiros identificados para eventos de defesa e nota
         val gkCasa = escalacaoCasaFinal.titulares.firstOrNull { it.posicaoUsada.setor == Setor.GOLEIRO }
@@ -313,26 +508,35 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             eventos = eventos,
             gkCasaId = gkCasa?.jogador?.id ?: -1,
             gkForaId = gkFora?.jogador?.id ?: -1,
-            estatisticasCasa = EstatisticasTime(
-                chutes = chutesCasa,
-                chutesNoGol = chutesCasaNoGol,
-                posse = posseCasa,
-                faltas = rng.nextInt(8, 18),
-                cartaoAmarelo = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && casa.titulares.any { it.jogador.id == e.jogadorId } },
-                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && casa.titulares.any { it.jogador.id == e.jogadorId } },
-                defesasGoleiro = defesasGoleiroCasa,
-                passesErrados = passesErradosCasa
-            ),
-            estatisticasFora = EstatisticasTime(
-                chutes = chutesFora,
-                chutesNoGol = chutesForaNoGol,
-                posse = 100 - posseCasa,
-                faltas = rng.nextInt(8, 18),
-                cartaoAmarelo = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && fora.titulares.any { it.jogador.id == e.jogadorId } },
-                cartaoVermelho = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && fora.titulares.any { it.jogador.id == e.jogadorId } },
-                defesasGoleiro = defesasGoleiroFora,
-                passesErrados = passesErradosFora
-            )
+            estatisticasCasa = run {
+                val am = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && casa.titulares.any { it.jogador.id == e.jogadorId } }
+                val vm = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && casa.titulares.any { it.jogador.id == e.jogadorId } }
+                EstatisticasTime(
+                    chutes = chutesCasa,
+                    chutesNoGol = chutesCasaNoGol,
+                    posse = posseCasa,
+                    faltas = calcularFaltas(am, vm, rng) + faltasExtraPorCondicao(condicao),
+                    cartaoAmarelo = am,
+                    cartaoVermelho = vm,
+                    defesasGoleiro = defesasGoleiroCasa,
+                    precisaoPasse = precisaoPasseCasa
+                )
+            },
+            estatisticasFora = run {
+                val am = eventos.count { e -> e.tipo == TipoEvento.CARTAO_AMARELO && fora.titulares.any { it.jogador.id == e.jogadorId } }
+                val vm = eventos.count { e -> e.tipo == TipoEvento.CARTAO_VERMELHO && fora.titulares.any { it.jogador.id == e.jogadorId } }
+                EstatisticasTime(
+                    chutes = chutesFora,
+                    chutesNoGol = chutesForaNoGol,
+                    posse = 100 - posseCasa,
+                    faltas = calcularFaltas(am, vm, rng) + faltasExtraPorCondicao(condicao),
+                    cartaoAmarelo = am,
+                    cartaoVermelho = vm,
+                    defesasGoleiro = defesasGoleiroFora,
+                    precisaoPasse = precisaoPasseFora
+                )
+            },
+            condicaoPartida = condicao
         )
     }
 
@@ -388,7 +592,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 )
             )
             // ~72% chance de assistência — apenas jogadores ativos nesse minuto
-            if (rng.nextDouble() < 0.72) {
+            // ~65% dos gols têm assistência — alinhado com a média real do futebol
+            // profissional (bolas paradas, chutes de fora e pênaltis não geram assistência).
+            if (rng.nextDouble() < 0.65) {
                 val candidatosAssist = candidatos.filter { c ->
                     if (c.jogador.id == marcador.jogador.id) return@filter false
                     val cEntry = (entryMinutes[c.jogador.id] ?: 0)
@@ -413,10 +619,13 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     }
 
     // ── Substituições táticas por time ──────────────────────────
-    // Até 3 trocas por time, espalhadas no intervalo 46–88 min.
-    // O jogador que sai é removido de titsAtivos e tem seu exitMinutes
-    // definido, garantindo que não apareça em nenhum evento de gol/assist
-    // gerado depois desta fase.
+    // Até 3 trocas por time, distribuídas em janelas típicas (55-65 | 68-77 | 80-88).
+    // Escolhas priorizam:
+    //   • Quem levou amarelo (evitar segundo cartão) — peso alto
+    //   • Quem está mais desgastado (fadiga baixa)   — peso médio
+    //   • Jogadores fortes tendem a ficar em campo    — peso negativo
+    // Nunca substitui o goleiro. O reserva que entra é escolhido pelo MESMO setor
+    // do que saiu (fallback: reserva mais forte).
     private fun aplicarSubstituicoesTaticas(
         titsAtivos: MutableList<JogadorNaEscalacao>,
         reservas:   MutableList<JogadorNaEscalacao>,
@@ -425,44 +634,92 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         exitMinutes:  MutableMap<Int, Int>,
         eventos:    MutableList<EventoSimulado>
     ) {
-        val maxSubs = 3
         if (reservas.isEmpty()) return
-
-        // Escolhe até 3 minutos aleatórios na segunda metade, sem repetição
-        val minutosSub = (46..88).toList().shuffled(rng).take(maxSubs).sorted()
-        var subsFeitas = 0
-
+        val minutosSub = escolherMinutosSubs(46, 88)
         for (minuto in minutosSub) {
-            if (subsFeitas >= maxSubs || reservas.isEmpty()) break
-
-            // Prefere não substituir o goleiro
-            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
-            if (candidatosSaida.isEmpty()) break
-
-            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
-            val entrando = reservas.removeAt(0)
-
-            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
-            titsAtivos.add(entrando)
-            exitMinutes[saindo.jogador.id]    = minuto
-            entryMinutes[entrando.jogador.id] = minuto
-
-            eventos.add(EventoSimulado(
-                minuto    = minuto,
-                tipo      = TipoEvento.SUBSTITUICAO_SAI,
-                jogadorId = saindo.jogador.id,
-                timeId    = timeId,
-                descricao = saindo.jogador.nomeAbreviado
-            ))
-            eventos.add(EventoSimulado(
-                minuto    = minuto,
-                tipo      = TipoEvento.SUBSTITUICAO_ENTRA,
-                jogadorId = entrando.jogador.id,
-                timeId    = timeId,
-                descricao = entrando.jogador.nomeAbreviado
-            ))
-            subsFeitas++
+            if (reservas.isEmpty()) break
+            aplicarUmaSubstituicao(titsAtivos, reservas, timeId, minuto, entryMinutes, exitMinutes, eventos)
         }
+    }
+
+    /** Sorteia até 3 minutos de substituição distribuídos em janelas realistas. */
+    private fun escolherMinutosSubs(minInicio: Int, minFim: Int): List<Int> {
+        // Janelas típicas do futebol: primeira ~60', segunda ~72', terceira ~85'.
+        val janelas = listOf(55..65, 68..77, 80..88)
+        return janelas.mapNotNull { j ->
+            val lo = maxOf(j.first, minInicio)
+            val hi = minOf(j.last, minFim)
+            if (lo <= hi) rng.nextInt(lo, hi + 1) else null
+        }
+    }
+
+    /** Escolhe um titular para sair, um reserva compatível para entrar e registra os eventos. */
+    private fun aplicarUmaSubstituicao(
+        titsAtivos: MutableList<JogadorNaEscalacao>,
+        reservas:   MutableList<JogadorNaEscalacao>,
+        timeId:     Int,
+        minuto:     Int,
+        entryMinutes: MutableMap<Int, Int>,
+        exitMinutes:  MutableMap<Int, Int>,
+        eventos:    MutableList<EventoSimulado>
+    ) {
+        // Amarelos já emitidos nesta partida (para o time) — usados na priorização de saída
+        val amareladosNoTime = eventos.asSequence()
+            .filter { it.timeId == timeId && it.tipo == TipoEvento.CARTAO_AMARELO }
+            .map { it.jogadorId }.toSet()
+
+        // Candidatos: qualquer titular não-goleiro que ainda não saiu (implícito, pois já foi removido)
+        val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
+        if (candidatosSaida.isEmpty()) return
+
+        fun scoreSaida(jne: JogadorNaEscalacao): Double {
+            var s = 0.0
+            if (jne.jogador.id in amareladosNoTime) s += 100.0    // risco de expulsão
+            s += when {
+                jne.jogador.fadiga < 0.60f -> 30.0
+                jne.jogador.fadiga < 0.75f -> 15.0
+                else                        -> 0.0
+            }
+            s -= jne.jogador.forca * 0.5    // fortes ficam mais tempo em campo
+            return s
+        }
+
+        val saindo = candidatosSaida.maxByOrNull { scoreSaida(it) } ?: return
+
+        // Reserva do mesmo setor tem prioridade; fallback é a reserva mais forte disponível
+        val setorAlvo = saindo.posicaoUsada.setor
+        val entrandoIdx = reservas.indexOfFirst { it.jogador.posicao.setor == setorAlvo }
+            .takeIf { it >= 0 }
+            ?: reservas.indices.maxByOrNull { reservas[it].jogador.forcaEfetiva() }
+            ?: 0
+        val entrando = reservas.removeAt(entrandoIdx)
+
+        // Preserva a posição tática do jogador que saiu quando o entrante é do mesmo setor,
+        // para não desmontar a formação. Do contrário, mantém a posição natural do entrante.
+        val posicaoUsadaEntrante = if (entrando.jogador.posicao.setor == setorAlvo)
+            saindo.posicaoUsada
+        else
+            entrando.jogador.posicao
+
+        titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
+        titsAtivos.add(JogadorNaEscalacao(entrando.jogador, posicaoUsadaEntrante))
+        exitMinutes[saindo.jogador.id]    = minuto
+        entryMinutes[entrando.jogador.id] = minuto
+
+        eventos.add(EventoSimulado(
+            minuto    = minuto,
+            tipo      = TipoEvento.SUBSTITUICAO_SAI,
+            jogadorId = saindo.jogador.id,
+            timeId    = timeId,
+            descricao = saindo.jogador.nomeAbreviado
+        ))
+        eventos.add(EventoSimulado(
+            minuto    = minuto,
+            tipo      = TipoEvento.SUBSTITUICAO_ENTRA,
+            jogadorId = entrando.jogador.id,
+            timeId    = timeId,
+            descricao = entrando.jogador.nomeAbreviado
+        ))
     }
 
     // ── Incidentes (cartões + lesões) por jogador ──
@@ -471,7 +728,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
                 val minuto = rng.nextInt(1, 90)
-                val vermelho = rng.nextDouble() < 0.08
+                // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
+                // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
+                val vermelho = rng.nextDouble() < 0.04
                 lista.add(EventoSimulado(
                     minuto = minuto,
                     tipo = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
@@ -481,13 +740,13 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 ))
             }
             // Risco base por físico; multiplicado pela fadiga do jogador:
-            //   fadiga ≥ 80%: risco normal | 75–80%: +50% | 60–74%: +2× | <60%: +4×
+            //   fadiga ≥ 80%: risco normal | 75–80%: +30% | 60–74%: +2× | <60%: +3×
             val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
             val multiplicadorFadiga = when {
                 jne.jogador.fadiga >= 0.80f -> 1.0
-                jne.jogador.fadiga >= 0.75f -> 1.5
-                jne.jogador.fadiga >= 0.60f -> 2.5
-                else                        -> 4.0
+                jne.jogador.fadiga >= 0.75f -> 1.3
+                jne.jogador.fadiga >= 0.60f -> 2.0
+                else                        -> 3.0
             }
             val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
@@ -497,21 +756,78 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     jogadorId = jne.jogador.id,
                     timeId = timeId,
                     descricao = "${jne.jogador.nomeAbreviado} saiu lesionado",
-                    grauLesao = sortearGrauLesao()
+                    grauLesao = sortearGrauLesao(jne.jogador.idade)
                 ))
             }
             lista
         }
     }
 
-    // ── Sorteia grau da lesão: 1=leve(2-3j) 60%, 2=moderada(4-5j) 25%, 3=grave(6-8j) 15% ──
-    private fun sortearGrauLesao(): Int {
+    // ── Sorteia grau da lesão: 1=leve(2-3j) | 2=moderada(4-5j) | 3=grave(6-8j) ──
+    // Distribuição varia com a idade do jogador:
+    //   ≤22 anos: viés jovem — 70/22/8  (recupera rápido)
+    //   23–32 anos (padrão): 60/25/15
+    //   33+ anos: viés veterano — 45/30/25  (lesão grave mais comum)
+    private fun sortearGrauLesao(idade: Int = 26): Int {
         val r = rng.nextDouble()
         return when {
-            r < 0.60 -> 1
-            r < 0.85 -> 2
-            else     -> 3
+            idade <= 22 -> when {
+                r < 0.70 -> 1
+                r < 0.92 -> 2
+                else     -> 3
+            }
+            idade >= 33 -> when {
+                r < 0.45 -> 1
+                r < 0.75 -> 2
+                else     -> 3
+            }
+            else -> when {
+                r < 0.60 -> 1
+                r < 0.85 -> 2
+                else     -> 3
+            }
         }
+    }
+
+    // Bônus (ou penalidade) de chutes por partida devido ao estilo tático do time.
+    // OFENSIVO e CONTRA_ATAQUE tendem a finalizar mais; DEFENSIVO se retrai.
+    private fun bonusChutesEstilo(estilo: EstiloJogo): Int = when (estilo) {
+        EstiloJogo.OFENSIVO      -> 2
+        EstiloJogo.CONTRA_ATAQUE -> 1
+        EstiloJogo.EQUILIBRADO   -> 0
+        EstiloJogo.DEFENSIVO     -> -1
+    }
+
+    // Distribuição por partida: 50% Ensolarado, 20% Chuvoso, 15% Calor, 10% Frio, 5% Altitude.
+    // Cada condição afeta chutes/precisão/faltas/físico de forma leve mas perceptível.
+    private fun sortearCondicaoPartida(): CondicaoPartida {
+        val r = rng.nextDouble()
+        return when {
+            r < 0.50 -> CondicaoPartida.ENSOLARADO
+            r < 0.70 -> CondicaoPartida.CHUVOSO
+            r < 0.85 -> CondicaoPartida.CALOR
+            r < 0.95 -> CondicaoPartida.FRIO
+            else     -> CondicaoPartida.ALTITUDE
+        }
+    }
+
+    /** Modificador aditivo no totalChutes conforme condição. */
+    private fun ajusteChutesPorCondicao(c: CondicaoPartida): Int = when (c) {
+        CondicaoPartida.CALOR -> -2   // times cansam mais, finalizam menos
+        else                   -> 0
+    }
+
+    /** Ajuste percentual na taxa de chutes-no-alvo (bola escorrega na chuva/frio). */
+    private fun ajustePrecisaoPorCondicao(c: CondicaoPartida): Int = when (c) {
+        CondicaoPartida.CHUVOSO -> -6   // bola escorrega, chutes menos precisos
+        CondicaoPartida.FRIO    -> -3   // mãos e pés menos precisos
+        else                     -> 0
+    }
+
+    /** Faltas extras por condição (bola escorregando aumenta disputas duras). */
+    private fun faltasExtraPorCondicao(c: CondicaoPartida): Int = when (c) {
+        CondicaoPartida.CHUVOSO -> 2
+        else                     -> 0
     }
 
     // ── Distribuição de Poisson ──
@@ -595,19 +911,16 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
 
             val minRodadas = 5
             if (rodada >= minRodadas) {
-                // Verificar se o resultado já é decidido ou se a série normal terminou
-                val cobrandasRestantes = minRodadas - rodada
-                if (cobrandasRestantes <= 0) {
-                    // Série de 5 finalizada
+                val naSerieRegular = rodada == minRodadas
+                if (naSerieRegular) {
+                    // Fim da série regular: se placar decidido, encerra. Se empate,
+                    // NÃO encerra — segue para morte súbita (não usar convertidoX != convertidoY aqui,
+                    // pois isso encerraria a série 3×3 apenas porque cobradores tiveram sortes opostas).
                     if (golsCasa != golsFora) break
-                    // Empate → morte súbita: continua até um converter e outro não na mesma rodada
+                } else {
+                    // Morte súbita: só encerra quando os dois cobram na mesma rodada e um faz e o outro não.
                     if (convertidoCasa != convertidoFora) break
                 }
-                // Eliminação antecipada: uma equipe não pode mais alcançar a outra
-                val maxGolsCasaRestantes = 0
-                val maxGolsForaRestantes = 0
-                if (golsCasa > golsFora + maxGolsForaRestantes) break
-                if (golsFora > golsCasa + maxGolsCasaRestantes) break
             }
 
             // Segurança: máximo 50 cobranças para evitar loop infinito (probabilidade ínfima)
@@ -725,9 +1038,14 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             }
         }
 
-        val total    = fCasa + fFora
-        val probCasa = fCasa / total
-        val probFora = fFora / total
+        // Divisão de gols com peso quadrático — amplifica a fatia do time mais forte.
+        // Sem o quadrado, uma diferença de 20% na força só rende ~20% mais gols, o que
+        // deixa confrontos moderadamente desiguais parelhos demais (Liverpool × Brighton).
+        // Com o quadrado, a fatia do lado forte cresce de forma mais realista.
+        val fC2Prob = fCasa * fCasa
+        val fF2Prob = fFora * fFora
+        val probCasa = fC2Prob / (fC2Prob + fF2Prob)
+        val probFora = fF2Prob / (fC2Prob + fF2Prob)
 
         // Substituições táticas da IA (apenas no 2º tempo ou em períodos >= 46)
         if (minFim >= 46) {
@@ -745,11 +1063,34 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         val dominance = ((fCasa2 - fFora2) / (fCasa2 + fFora2)).coerceIn(-1.0, 1.0)
         val domCasa = dominance.coerceAtLeast(0.0)
         val domFora = (-dominance).coerceAtLeast(0.0)
-        val chancesMultCasa = 1.0 + domCasa.pow(0.65) * 2.2   // dom^0.65 × 2.2
-        val chancesMultFora = 1.0 + domFora.pow(0.65) * 2.2
+        // Condição da partida — sorteada uma vez, aplicada em pontos específicos abaixo.
+        val condicao = sortearCondicaoPartida()
 
-        val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa
-        val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora
+        // Curva mista linear+quadrática: sensibilidade real no meio do espectro
+        // (onde a maioria dos jogos vive) e cap 3.0 no domínio total.
+        // Ex.: dom=0.10 → 1.07 | dom=0.30 → 1.31 | dom=0.50 → 1.65 | dom=0.75 → 2.24 | dom=1.0 → 3.00
+        // Substituiu a curva convexa pura (pow 2.5 × 2.2) que ficava dormente em
+        // confrontos de força moderadamente desigual (ex.: Liverpool × Brighton).
+        // ALTITUDE penaliza levemente o time visitante (adaptação difícil).
+        val ajusteAltitude = if (condicao == CondicaoPartida.ALTITUDE) 0.95 else 1.0
+        val chancesMultCasa = 1.0 + domCasa * 0.6 + domCasa.pow(2.0) * 1.4
+        val chancesMultFora = (1.0 + domFora * 0.6 + domFora.pow(2.0) * 1.4) * ajusteAltitude
+
+        // Fator da posse no resultado — usa o XI vigente do período (via escalação, a
+        // mesma fonte da força). No 2º tempo isso já reflete as substituições do
+        // jogador, então trocar por um meio-campo técnico sobe posse e criação;
+        // entrar com atacante veloz + estilo CONTRA_ATAQUE baixa posse mas ganha
+        // eficiência. Assim as substituições influenciam o domínio e o placar.
+        val posseCasaP = estimarPosseCasa(
+            escalacaoCasa.titulares, escalacaoFora.titulares,
+            escalacaoCasa.time.estiloJogo, escalacaoFora.time.estiloJogo,
+            mandante = !campoNeutro, rng = rng
+        )
+        val fatorPosseCasaP = fatorPosseResultado(posseCasaP, escalacaoCasa.time.estiloJogo)
+        val fatorPosseForaP = fatorPosseResultado(100 - posseCasaP, escalacaoFora.time.estiloJogo)
+
+        val mediaGolsCasa = MEDIA_GOLS_JOGO * fracaoGols * probCasa * penalCasa * chancesMultCasa * fatorPosseCasaP
+        val mediaGolsFora = MEDIA_GOLS_JOGO * fracaoGols * probFora * penalFora * chancesMultFora * fatorPosseForaP
 
         val golsCasa = poissonRandom(mediaGolsCasa)
         val golsFora = poissonRandom(mediaGolsFora)
@@ -809,7 +1150,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
                 val minuto = rng.nextInt(efetMin, efetMax)
-                val vermelho = rng.nextDouble() < 0.08
+                // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
+                // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
+                val vermelho = rng.nextDouble() < 0.04
                 lista.add(EventoSimulado(
                     minuto    = minuto,
                     tipo      = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
@@ -822,9 +1165,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
             val multiplicadorFadiga = when {
                 jne.jogador.fadiga >= 0.80f -> 1.0
-                jne.jogador.fadiga >= 0.75f -> 1.5
-                jne.jogador.fadiga >= 0.60f -> 2.5
-                else                        -> 4.0
+                jne.jogador.fadiga >= 0.75f -> 1.3
+                jne.jogador.fadiga >= 0.60f -> 2.0
+                else                        -> 3.0
             }
             val probLesao = probLesaoBase * multiplicadorFadiga
             if (rng.nextDouble() < probLesao) {
@@ -836,7 +1179,7 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     jogadorId = jne.jogador.id,
                     timeId    = timeId,
                     descricao = "${jne.jogador.nomeAbreviado} saiu lesionado",
-                    grauLesao = sortearGrauLesao()
+                    grauLesao = sortearGrauLesao(jne.jogador.idade)
                 ))
             }
             lista
@@ -860,7 +1203,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         fun pesoGol(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
             Setor.ATAQUE -> jne.jogador.finalizacao * jne.jogador.finalizacao / 10 + jne.jogador.velocidade + jne.jogador.tecnica
             Setor.MEIO   -> jne.jogador.finalizacao + jne.jogador.tecnica / 2
-            Setor.DEFESA -> (jne.jogador.finalizacao / 3).coerceAtLeast(1)
+            // /7 (não /3) — alinha com gerarEventosGol para que a distribuição de
+            // marcadores seja idêntica entre simulação por período e por partida completa.
+            Setor.DEFESA -> (jne.jogador.finalizacao / 7).coerceAtLeast(1)
             else         -> 1
         }
         fun pesoAssist(jne: JogadorNaEscalacao): Int = when (jne.posicaoUsada.setor) {
@@ -883,7 +1228,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 timeId    = timeId,
                 descricao = "${marcador.jogador.nomeAbreviado} ${minuto}'"
             ))
-            if (rng.nextDouble() < 0.72) {
+            // ~65% dos gols têm assistência — alinhado com a média real do futebol
+            // profissional (bolas paradas, chutes de fora e pênaltis não geram assistência).
+            if (rng.nextDouble() < 0.65) {
                 val candidatosAssist = candidatos.filter { c ->
                     if (c.jogador.id == marcador.jogador.id) return@filter false
                     val cEntry = (entryMinutes[c.jogador.id] ?: 0)
@@ -906,6 +1253,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
     }
 
     // Substituições táticas da IA restritas ao período [minInicio, minFim]
+    // Reutiliza a mesma heurística de `aplicarSubstituicoesTaticas` (janelas típicas,
+    // priorização por amarelo/fadiga/força, entrada por setor).
     private fun aplicarSubstituicoesTaticasPeriodo(
         titsAtivos:   MutableList<JogadorNaEscalacao>,
         reservas:     MutableList<JogadorNaEscalacao>,
@@ -917,24 +1266,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         minFim:       Int
     ) {
         if (reservas.isEmpty()) return
-        val rangeMax = minFim.coerceAtMost(88)
-        if (minInicio > rangeMax) return
-
-        val minutosSub = (minInicio..rangeMax).toList().shuffled(rng).take(3).sorted()
-        var subsFeitas = 0
+        val minutosSub = escolherMinutosSubs(minInicio, minFim.coerceAtMost(88))
         for (minuto in minutosSub) {
-            if (subsFeitas >= 3 || reservas.isEmpty()) break
-            val candidatosSaida = titsAtivos.filter { it.posicaoUsada.setor != Setor.GOLEIRO }
-            if (candidatosSaida.isEmpty()) break
-            val saindo   = candidatosSaida[rng.nextInt(candidatosSaida.size)]
-            val entrando = reservas.removeAt(0)
-            titsAtivos.removeIf { it.jogador.id == saindo.jogador.id }
-            titsAtivos.add(entrando)
-            exitMinutes[saindo.jogador.id]    = minuto
-            entryMinutes[entrando.jogador.id] = minuto
-            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_SAI,   saindo.jogador.id,   timeId, saindo.jogador.nomeAbreviado))
-            eventos.add(EventoSimulado(minuto, TipoEvento.SUBSTITUICAO_ENTRA, entrando.jogador.id, timeId, entrando.jogador.nomeAbreviado))
-            subsFeitas++
+            if (reservas.isEmpty()) break
+            aplicarUmaSubstituicao(titsAtivos, reservas, timeId, minuto, entryMinutes, exitMinutes, eventos)
         }
     }
 }

@@ -1,4 +1,6 @@
-﻿package br.com.managerfoot.presentation.ui.screens
+package br.com.managerfoot.presentation.ui.screens
+
+import br.com.managerfoot.presentation.ui.theme.fundoApp
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -99,6 +101,8 @@ fun PartidaSimulacaoScreen(
     escalacaoJogador: Escalacao? = null,
     escalacaoAdversario: Escalacao? = null,
     isTimeCasaOJogador: Boolean = true,
+    outrosJogos: List<br.com.managerfoot.data.repository.GameRepository.JogoRodadaAoVivo> = emptyList(),
+    timeJogadorId: Int = -1,
     penaltisResultado: ResultadoPenaltis? = null,
     dadosPenaltisAdversario: DadosPenaltiAdversario? = null,
     penaltisInterativoConcluido: Boolean = false,
@@ -424,6 +428,22 @@ fun PartidaSimulacaoScreen(
         }
     }
 
+    // Estatísticas PROGRESSIVAS do minuto atual — exibidas nos painéis de pausa
+    // durante o jogo. Começam igualadas (posse 50/50, precisão na média) e crescem
+    // até os valores finais conforme o domínio se firma. Ao encerrar, o card final
+    // usa os valores definitivos (resultado.estatisticas*).
+    val progressoStats = (minutoAtual / (90f + acrescimo2Tempo)).coerceIn(0f, 1f)
+    val (estatCasaProgressiva, estatForaProgressiva) = estatisticasProgressivas(
+        finalCasa       = resultado.estatisticasCasa,
+        finalFora       = resultado.estatisticasFora,
+        eventosExibidos = eventosExibidos,
+        timeCasaId      = resultado.timeCasaId,
+        timeForaId      = resultado.timeForaId,
+        golsCasaAtual   = golsCasaAtual,
+        golsForaAtual   = golsForaAtual,
+        progresso       = progressoStats
+    )
+
     // Painel de lesão — interrompe a animação para substituição imediata
     if (pausadoPorLesao) {
         LesaoPainel(
@@ -452,7 +472,7 @@ fun PartidaSimulacaoScreen(
             onFormacaoChange = { formacaoAtual = it },
             onEstiloChange = { estiloAtual = it },
             onSubstituicao = { sai, entra ->
-                if (substituicoes.size < 6) {
+                if (substituicoes.size < 5) {
                     substituicoes.add(SubstituicaoIntervalo(minuto = minutoAtual, sai = sai, entra = entra, timeId = timeJogadorId))
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
@@ -485,8 +505,8 @@ fun PartidaSimulacaoScreen(
             rotuloBotao = "Continuar Partida",
             tituloHeader = "MEXER NO TIME",
             subtituloHeader = "Partida pausada — jogo continua do minuto ${minutoAtual}'",
-            estatisticasCasa = resultado.estatisticasCasa,
-            estatisticasFora = resultado.estatisticasFora,
+            estatisticasCasa = estatCasaProgressiva,
+            estatisticasFora = estatForaProgressiva,
             nomeTimeCasaStats = nomeTimeCasa,
             nomeTimeForaStats = nomeTimeFora,
             escalacaoAdversario = escalacaoAdversario,
@@ -506,7 +526,7 @@ fun PartidaSimulacaoScreen(
             onFormacaoChange = { formacaoAtual = it },
             onEstiloChange = { estiloAtual = it },
             onSubstituicao = { sai, entra ->
-                if (substituicoes.size < 6) {
+                if (substituicoes.size < 5) {
                     substituicoes.add(SubstituicaoIntervalo(sai = sai, entra = entra, timeId = jogadorTimeId))
                     titularesAtuais.remove(sai)
                     titularesAtuais.add(entra)
@@ -525,8 +545,8 @@ fun PartidaSimulacaoScreen(
                     titularesAtuais[idxB] = titularesAtuais[idxB].copy(posicaoUsada = posA)
                 }
             },
-            estatisticasCasa = resultado.estatisticasCasa,
-            estatisticasFora = resultado.estatisticasFora,
+            estatisticasCasa = estatCasaProgressiva,
+            estatisticasFora = estatForaProgressiva,
             nomeTimeCasaStats = nomeTimeCasa,
             nomeTimeForaStats = nomeTimeFora,
             escalacaoAdversario = escalacaoAdversario,
@@ -571,7 +591,7 @@ fun PartidaSimulacaoScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // ── Placar (scoreboard polido) ──────────────────────────
         MatchScoreboard(
@@ -620,6 +640,35 @@ fun PartidaSimulacaoScreen(
                 Text("Mexer no Time")
             }
         }
+
+        // ── Toggle: Eventos | Placares ao vivo (outros jogos da rodada) ─────────
+        val mostrarToggle = outrosJogos.isNotEmpty() && !simulacaoEncerrada
+        var abaAoVivo by remember(resultado.partidaId) { mutableIntStateOf(0) }
+        if (mostrarToggle) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                ToggleAoVivoChip("Eventos", abaAoVivo == 0, Modifier.weight(1f)) { abaAoVivo = 0 }
+                ToggleAoVivoChip("Placares ao vivo", abaAoVivo == 1, Modifier.weight(1f)) { abaAoVivo = 1 }
+            }
+        }
+
+        if (mostrarToggle && abaAoVivo == 1) {
+            PlacaresAoVivoPanel(
+                outrosJogos = outrosJogos,
+                minutoAtual = minutoAtual,
+                nomeCasa    = nomeTimeCasa,
+                nomeFora    = nomeTimeFora,
+                escudoCasa  = escudoTimeCasa,
+                escudoFora  = escudoTimeFora,
+                golsCasa    = golsCasaAtual,
+                golsFora    = golsForaAtual,
+                modifier    = Modifier.weight(1f)
+            )
+        } else {
 
         SectionTitle(titulo = "Eventos da partida")
 
@@ -672,6 +721,7 @@ fun PartidaSimulacaoScreen(
                 }
             }
         }
+        } // fim do else (feed de eventos)
 
         // ── Botão de encerrar ────────────────────────────────────
         // Spinner enquanto dadosPenaltisAdversario ainda não chegou (caso raro de delay).
@@ -710,6 +760,138 @@ fun PartidaSimulacaoScreen(
     }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Placares ao vivo — outros jogos da mesma rodada durante a partida
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun ToggleAoVivoChip(
+    label: String,
+    selecionado: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(Radius.pill),
+        color = if (selecionado) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            if (selecionado) 1.5.dp else 1.dp,
+            if (selecionado) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        )
+    ) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selecionado) FontWeight.Bold else FontWeight.Normal,
+            color = if (selecionado) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PlacaresAoVivoPanel(
+    outrosJogos: List<br.com.managerfoot.data.repository.GameRepository.JogoRodadaAoVivo>,
+    minutoAtual: Int,
+    nomeCasa: String, nomeFora: String, escudoCasa: String, escudoFora: String,
+    golsCasa: Int, golsFora: Int,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        item {
+            Text(
+                "Placares ao vivo · outros jogos da rodada",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = Spacing.xs)
+            )
+        }
+        // Jogo do usuário — destacado
+        item {
+            JogoAoVivoRow(nomeCasa, escudoCasa, golsCasa, nomeFora, escudoFora, golsFora, ehSeuJogo = true)
+        }
+        items(outrosJogos, key = { it.partidaId }) { j ->
+            val gc = j.minutosGolsCasa.count { it <= minutoAtual }
+            val gf = j.minutosGolsFora.count { it <= minutoAtual }
+            // Pênaltis (copa) só aparecem após os 90' e quando o confronto empatou.
+            val pen = if (minutoAtual >= 90 && j.penaltisCasa != null && j.penaltisFora != null)
+                j.penaltisCasa to j.penaltisFora else null
+            JogoAoVivoRow(j.nomeCasa, j.escudoCasa, gc, j.nomeFora, j.escudoFora, gf, ehSeuJogo = false, penaltis = pen)
+        }
+    }
+}
+
+@Composable
+private fun JogoAoVivoRow(
+    nomeCasa: String, escudoCasa: String, gc: Int,
+    nomeFora: String, escudoFora: String, gf: Int,
+    ehSeuJogo: Boolean,
+    penaltis: Pair<Int, Int>? = null
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        color = if (ehSeuJogo) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            if (ehSeuJogo) 1.5.dp else 1.dp,
+            if (ehSeuJogo) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                nomeCasa,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.End,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.width(Spacing.xs))
+            TeamBadge(nome = nomeCasa, escudoRes = escudoCasa, size = 22.dp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "  $gc x $gf  ",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (penaltis != null) {
+                    Text(
+                        "pên ${penaltis.first}-${penaltis.second}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            TeamBadge(nome = nomeFora, escudoRes = escudoFora, size = 22.dp)
+            Spacer(Modifier.width(Spacing.xs))
+            Text(
+                nomeFora,
+                modifier = Modifier.weight(1f),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Estatísticas — tab usada no IntervaloPainel e card ao final da partida
@@ -766,11 +948,68 @@ private fun EstatisticasTab(
         EstatisticaRow("No alvo",            estatisticasCasa.chutesNoGol,     estatisticasFora.chutesNoGol)
         EstatisticaRow("Defesas do goleiro", estatisticasCasa.defesasGoleiro,  estatisticasFora.defesasGoleiro)
         EstatisticaRow("Posse de bola",      estatisticasCasa.posse,           estatisticasFora.posse, sufixo = "%")
-        EstatisticaRow("Passes errados",     estatisticasCasa.passesErrados,   estatisticasFora.passesErrados, invertido = true)
+        EstatisticaRow("Precisão de passe",  estatisticasCasa.precisaoPasse,   estatisticasFora.precisaoPasse, sufixo = "%")
         EstatisticaRow("Faltas",             estatisticasCasa.faltas,          estatisticasFora.faltas,        invertido = true)
         EstatisticaRow("Cartões amarelos",   estatisticasCasa.cartaoAmarelo,   estatisticasFora.cartaoAmarelo, invertido = true)
         EstatisticaRow("Cartões vermelhos",  estatisticasCasa.cartaoVermelho,  estatisticasFora.cartaoVermelho, invertido = true)
     }
+}
+
+/**
+ * Deriva estatísticas PROGRESSIVAS (do minuto atual) a partir das finais.
+ *
+ * - Contagens (finalizações, no alvo, faltas, defesas) crescem proporcionalmente
+ *   ao andamento da partida (`progresso` 0..1).
+ * - Cartões são contados diretamente do feed já exibido (exatos, batem com a timeline).
+ * - Posse parte de 50/50 e converge para o split real; precisão de passe parte da
+ *   média dos dois times (igualadas) e diverge para o valor real de cada um.
+ *   Assim o domínio do time mais forte "cresce" ao longo do jogo.
+ *
+ * No minuto 0 tudo aparece igualado; ao fim (progresso≈1) coincide com os finais.
+ */
+private fun estatisticasProgressivas(
+    finalCasa: EstatisticasTime,
+    finalFora: EstatisticasTime,
+    eventosExibidos: List<EventoExibicao>,
+    timeCasaId: Int,
+    timeForaId: Int,
+    golsCasaAtual: Int,
+    golsForaAtual: Int,
+    progresso: Float
+): Pair<EstatisticasTime, EstatisticasTime> {
+    val p = progresso.coerceIn(0f, 1f)
+    fun escala(v: Int) = kotlin.math.round(v * p).toInt()
+    fun contar(tipo: TipoEvento, timeId: Int) =
+        eventosExibidos.count { it.tipo == tipo && it.timeId == timeId }
+
+    // Posse: 50/50 no início → split real no fim (soma sempre 100).
+    val posseCasa = kotlin.math.round(50 + (finalCasa.posse - 50) * p).toInt().coerceIn(0, 100)
+    val posseFora = 100 - posseCasa
+    // Precisão de passe: começa na média dos dois (igualadas) e diverge.
+    val mediaPrec = (finalCasa.precisaoPasse + finalFora.precisaoPasse) / 2.0
+    val precCasa = kotlin.math.round(mediaPrec + (finalCasa.precisaoPasse - mediaPrec) * p).toInt()
+    val precFora = kotlin.math.round(mediaPrec + (finalFora.precisaoPasse - mediaPrec) * p).toInt()
+    // No alvo ≥ gols já marcados; finalizações ≥ no alvo (coerência visual).
+    val noGolCasa = maxOf(escala(finalCasa.chutesNoGol), golsCasaAtual)
+    val noGolFora = maxOf(escala(finalFora.chutesNoGol), golsForaAtual)
+    val chutesCasa = maxOf(escala(finalCasa.chutes), noGolCasa)
+    val chutesFora = maxOf(escala(finalFora.chutes), noGolFora)
+
+    val casa = finalCasa.copy(
+        chutes = chutesCasa, chutesNoGol = noGolCasa, posse = posseCasa,
+        faltas = escala(finalCasa.faltas),
+        cartaoAmarelo = contar(TipoEvento.CARTAO_AMARELO, timeCasaId),
+        cartaoVermelho = contar(TipoEvento.CARTAO_VERMELHO, timeCasaId),
+        defesasGoleiro = escala(finalCasa.defesasGoleiro), precisaoPasse = precCasa
+    )
+    val fora = finalFora.copy(
+        chutes = chutesFora, chutesNoGol = noGolFora, posse = posseFora,
+        faltas = escala(finalFora.faltas),
+        cartaoAmarelo = contar(TipoEvento.CARTAO_AMARELO, timeForaId),
+        cartaoVermelho = contar(TipoEvento.CARTAO_VERMELHO, timeForaId),
+        defesasGoleiro = escala(finalFora.defesasGoleiro), precisaoPasse = precFora
+    )
+    return casa to fora
 }
 
 @Composable
@@ -1384,7 +1623,7 @@ private fun PenaltiInterativoPainel(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Header dramático com placar gigante e tracker
         PenaltiPlacardCard(
@@ -1626,7 +1865,7 @@ private fun PenaltiSelecaoPainel(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Header dramático
         PainelHeader(
@@ -1798,7 +2037,7 @@ private fun PenaltiResultadoPainel(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         PenaltiPlacardCard(
             nomeTimeCasa     = nomeTimeCasa,
@@ -1889,7 +2128,7 @@ private fun IntervaloPainel(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Header com chip de substituições restantes
         PainelHeader(
@@ -1908,7 +2147,7 @@ private fun IntervaloPainel(
                         .padding(horizontal = Spacing.sm, vertical = 4.dp)
                 ) {
                     Text(
-                        "${substituicoes.size}/6 subs",
+                        "${substituicoes.size}/5 subs",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = cor
@@ -2041,7 +2280,7 @@ private fun SubstituicoesTab(
     onSelecionarTitular: (JogadorNaEscalacao?) -> Unit,
     onSubstituicao: (sai: JogadorNaEscalacao, entra: JogadorNaEscalacao) -> Unit
 ) {
-    val podeFazerMais = substituicoes.size < 6
+    val podeFazerMais = substituicoes.size < 5
 
     val posOrder = mapOf(Setor.GOLEIRO to 0, Setor.DEFESA to 1, Setor.MEIO to 2, Setor.ATAQUE to 3)
     val titularesOrdenados = remember(titulares) {
@@ -2467,12 +2706,13 @@ private fun TaticaIntervaloPainel(
     onFormacaoChange: (String) -> Unit,
     onEstiloChange: (EstiloJogo) -> Unit
 ) {
+    // Apenas formações realistas e efetivamente distinguíveis pela engine
+    // (que normaliza para [DEF/MEIO/ATA] — variantes como 4-2-3-1 vs 4-5-1
+    // produziriam o mesmo resultado).
     val formacoes = listOf(
-        "4-4-2", "4-5-1", "4-3-3",
-        "4-3-2-1", "5-4-1", "4-1-2-1-2",
-        "3-5-2", "5-3-2", "4-2-3-1",
-        "3-2-4-1", "2-3-5", "2-3-2-3", "4-2-4",
-        "3-4-3", "4-2-2-2"
+        "4-4-2", "4-3-3", "4-5-1",
+        "3-5-2", "3-4-3",
+        "5-3-2", "5-4-1"
     )
 
     Column(
@@ -2497,6 +2737,7 @@ private fun TaticaIntervaloPainel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             FlowRow(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
@@ -2905,7 +3146,7 @@ private fun LesaoPainel(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Header de alerta
         PainelHeader(

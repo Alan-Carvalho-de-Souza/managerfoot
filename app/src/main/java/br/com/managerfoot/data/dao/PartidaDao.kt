@@ -58,6 +58,7 @@ interface PartidaDao {
     @Query("""
         SELECT * FROM partidas
         WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0
+          AND campeonatoId NOT IN (SELECT id FROM campeonatos WHERE tipo = 'AMISTOSO')
         ORDER BY ordemGlobal
         LIMIT 1
     """)
@@ -86,6 +87,15 @@ interface PartidaDao {
         LIMIT :limite
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
+
+    /** Últimas partidas jogadas por um time em qualquer competição (para cálculo de moral). */
+    @Query("""
+        SELECT * FROM partidas
+        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
+        ORDER BY ordemGlobal DESC
+        LIMIT :limite
+    """)
+    suspend fun buscarUltimasPartidasDoTime(timeId: Int, limite: Int = 5): List<PartidaEntity>
 
     @Query("SELECT * FROM partidas WHERE id = :id")
     suspend fun buscarPorId(id: Int): PartidaEntity?
@@ -119,6 +129,9 @@ interface PartidaDao {
 
     @Query("DELETE FROM partidas")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM partidas WHERE campeonatoId = :campeonatoId")
+    suspend fun deletePorCampeonato(campeonatoId: Int)
 
     @Query("DELETE FROM escalacoes")
     suspend fun deleteAllEscalacoes()
@@ -301,6 +314,40 @@ interface PartidaDao {
         LIMIT :limite
     """)
     fun observeAssistentesHistoricoFiltrado(tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    // ── Histórico ciente do PAÍS ──
+    // Vários países compartilham o mesmo `tipo` (ex.: NACIONAL_DIVISAO1 = Brasil A,
+    // Premier, La Liga, Serie A). Filtrar só por tipo mistura países no histórico.
+    // Estas variantes casam também o país do campeonato.
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'GOL' AND c.pais = :pais AND c.tipo IN (:tipos)
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeArtilheirosHistoricoPaisTipo(pais: String, tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
+
+    @Query("""
+        SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
+               COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total
+        FROM eventos_partida ep
+        INNER JOIN partidas p  ON ep.partidaId   = p.id
+        INNER JOIN campeonatos c ON p.campeonatoId = c.id
+        INNER JOIN jogadores j ON ep.jogadorId   = j.id
+        LEFT JOIN times t     ON j.timeId       = t.id
+        WHERE ep.tipo = 'ASSISTENCIA' AND c.pais = :pais AND c.tipo IN (:tipos)
+        GROUP BY ep.jogadorId
+        ORDER BY total DESC
+        LIMIT :limite
+    """)
+    fun observeAssistentesHistoricoPaisTipo(pais: String, tipos: List<String>, limite: Int = 40): Flow<List<ArtilheiroDto>>
 
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
@@ -559,7 +606,46 @@ interface PartidaDao {
         ORDER BY gols DESC, assistencias DESC
     """)
     suspend fun buscarEstatisticasJogadoresAllTime(timeId: Int): List<EstatisticaJogadorDto>
+
+    /**
+     * Busca todos os eventos (GOL, ASSISTENCIA, PARTICIPOU, etc) de UM jogador.
+     * Usa LEFT JOIN para campeonatos/temporadas para sobreviver a saves antigos
+     * onde o vínculo da partida com a temporada possa estar quebrado — nesse
+     * caso `ano` vem como 0 e o consumidor usa fallback.
+     */
+    @Query("""
+        SELECT
+            ep.partidaId   AS partidaId,
+            ep.tipo        AS tipo,
+            p.timeCasaId   AS timeCasaId,
+            p.timeForaId   AS timeForaId,
+            p.campeonatoId AS campeonatoId,
+            p.ordemGlobal  AS ordemGlobal,
+            COALESCE(c.temporadaId, 0) AS temporadaId,
+            COALESCE(t.ano, 0)         AS ano
+        FROM eventos_partida ep
+        INNER JOIN partidas p     ON p.id = ep.partidaId
+        LEFT JOIN campeonatos c   ON c.id = p.campeonatoId
+        LEFT JOIN temporadas t    ON t.id = c.temporadaId
+        WHERE ep.jogadorId = :jogadorId
+        ORDER BY t.ano ASC, p.ordemGlobal ASC
+    """)
+    suspend fun buscarEventosCarreiraJogador(jogadorId: Int): List<EventoCarreiraDto>
 }
+
+/** DTO retornado por `buscarEventosCarreiraJogador`. Cada evento sabe em qual
+ *  partida ocorreu (com os 2 times) e em qual temporada/ano. O time do jogador
+ *  no momento é derivado depois cruzando com TransferenciaEntity. */
+data class EventoCarreiraDto(
+    val partidaId: Int,
+    val tipo: String,         // valores do enum TipoEvento (GOL, ASSISTENCIA, PARTICIPOU, etc.)
+    val timeCasaId: Int,
+    val timeForaId: Int,
+    val campeonatoId: Int,
+    val ordemGlobal: Int,
+    val temporadaId: Int,
+    val ano: Int
+)
 
 data class ArtilheiroDto(
     val jogadorId: Int,

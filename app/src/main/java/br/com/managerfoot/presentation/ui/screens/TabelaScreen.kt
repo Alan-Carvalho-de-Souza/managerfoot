@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -48,6 +50,10 @@ fun TabelaScreen(
     campeonatoUruIntermedId: Int = -1,
     campeonatoUruBCompetId: Int = -1,
     copaId: Int = -1,
+    campeonatoPremierId: Int = -1,
+    campeonatoChampionshipId: Int = -1,
+    campeonatoLaLigaId: Int = -1,
+    campeonatoSerieAId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -68,7 +74,8 @@ fun TabelaScreen(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
         campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
-        campeonatoUruIntermedId, campeonatoUruBCompetId, copaId
+        campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
+        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -80,6 +87,10 @@ fun TabelaScreen(
             campUruIntermedId = campeonatoUruIntermedId,
             campUruBCompetId = campeonatoUruBCompetId,
             copaIdBrasil = copaId,
+            campPremierId = campeonatoPremierId,
+            campChampionshipId = campeonatoChampionshipId,
+            campLaLigaId = campeonatoLaLigaId,
+            campSerieAId = campeonatoSerieAId,
             timeJogadorId = timeJogadorId
         )
     }
@@ -105,11 +116,24 @@ fun TabelaScreen(
         if (campeonatoUruBCompetId > 0) add(14 to "Competencia")
         if (campeonatoUruBId > 0) add(10 to "Segunda Div.")
     }
+    val opcoesInglaterra = buildList {
+        if (campeonatoPremierId > 0) add(20 to "Premier League")
+        if (campeonatoChampionshipId > 0) add(21 to "EFL Championship")
+    }
+    val opcoesEspanha = buildList {
+        if (campeonatoLaLigaId > 0) add(22 to "La Liga")
+    }
+    val opcoesItalia = buildList {
+        if (campeonatoSerieAId > 0) add(23 to "Serie A")
+    }
 
     val paises = buildList {
         if (opcoesBrasil.isNotEmpty()) add("Brasil")
         if (opcoesArgentina.isNotEmpty()) add("Argentina")
         if (opcoesUruguai.isNotEmpty()) add("Uruguai")
+        if (opcoesInglaterra.isNotEmpty()) add("Inglaterra")
+        if (opcoesEspanha.isNotEmpty()) add("Espanha")
+        if (opcoesItalia.isNotEmpty()) add("Italia")
     }
 
     // País selecionado: derivado da divisão atual
@@ -117,12 +141,18 @@ fun TabelaScreen(
         when (divisaoSelecionada) {
             in 5..8 -> "Argentina"
             in 9..14 -> "Uruguai"
+            in 20..21 -> "Inglaterra"
+            22 -> "Espanha"
+            23 -> "Italia"
             else -> "Brasil"
         }
     }
     val opcoesDivisaoPais = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
         "Uruguai" -> opcoesUruguai
+        "Inglaterra" -> opcoesInglaterra
+        "Espanha" -> opcoesEspanha
+        "Italia" -> opcoesItalia
         else -> opcoesBrasil
     }
     val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
@@ -141,7 +171,7 @@ fun TabelaScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Classificação",
@@ -170,6 +200,9 @@ fun TabelaScreen(
                             val primeiraDivisao = when (pais) {
                                 "Argentina" -> opcoesArgentina.firstOrNull()?.first ?: 5
                                 "Uruguai" -> opcoesUruguai.firstOrNull()?.first ?: 9
+                                "Inglaterra" -> opcoesInglaterra.firstOrNull()?.first ?: 20
+                                "Espanha" -> opcoesEspanha.firstOrNull()?.first ?: 22
+                                "Italia" -> opcoesItalia.firstOrNull()?.first ?: 23
                                 else -> opcoesBrasil.firstOrNull()?.first ?: 1
                             }
                             vm.selecionarDivisao(primeiraDivisao)
@@ -293,6 +326,7 @@ private fun TabelaColunasHeader() {
                 "TIME",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.sp
@@ -302,6 +336,7 @@ private fun TabelaColunasHeader() {
                     col,
                     modifier = Modifier.width(28.dp),
                     style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -377,6 +412,12 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao >= 13 -> RelegationRed
         else -> null
     }
+    20 -> when {                            // Premier League
+        posicao <= 4 -> LibertadoresBlue   // Champions League
+        posicao <= 6 -> SulAmericanaTeal   // Europa/Conference
+        posicao >= 18 -> RelegationRed     // Rebaixamento (3 últimos)
+        else -> null
+    }
     else -> when {
         posicao <= 4 -> LibertadoresBlue
         else -> null
@@ -417,6 +458,11 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
             LibertadoresBlue to "G2 Acesso direto",
             PlayoffOrange to "G6 Playoff",
             RelegationRed to "Z2 Rebaixamento"
+        )
+        20 -> listOf(
+            LibertadoresBlue to "G4 Champions League",
+            SulAmericanaTeal to "G6 Europa/Conference",
+            RelegationRed to "Z3 Rebaixamento"
         )
         14 -> listOf(
             LibertadoresBlue to "1º Classifica para a Final"
@@ -469,5 +515,8 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Brasil" -> "🇧🇷"
     "Argentina" -> "🇦🇷"
     "Uruguai" -> "🇺🇾"
+    "Inglaterra" -> "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+    "Espanha" -> "🇪🇸"
+    "Italia" -> "🇮🇹"
     else -> ""
 }

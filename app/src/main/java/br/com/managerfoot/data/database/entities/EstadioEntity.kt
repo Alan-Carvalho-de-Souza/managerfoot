@@ -43,8 +43,22 @@ data class EstadioEntity(
     val nivelArquibancada: Int = 0,   // 0–10
     val nivelCadeira: Int = 0,        // 0–10
     val nivelCamarote: Int = 0,       // 0–10
+    // Preço do ingresso por setor (centavos). 0 = ainda não inicializado
+    // (o EstadioRepository preenche a partir do preço-base do clube).
+    val precoArquibancada: Long = 0,
+    val precoCadeira: Long = 0,
+    val precoCamarote: Long = 0,
 ) {
     companion object {
+        // Multiplicadores de referência por setor sobre o preço-base do clube.
+        const val MULT_ARQUIBANCADA = 1
+        const val MULT_CADEIRA = 2
+        const val MULT_CAMAROTE = 5
+
+        /** Preços padrão por setor a partir do preço-base do clube (arqui=base, cadeira=2×, camarote=5×). */
+        fun precosPadrao(precoBase: Long): Triple<Long, Long, Long> =
+            Triple(precoBase * MULT_ARQUIBANCADA, precoBase * MULT_CADEIRA, precoBase * MULT_CAMAROTE)
+
 
         // Capacidade de cada setor conforme nível (índices 0–10)
         val CAPACIDADE_ARQUIBANCADA = intArrayOf(

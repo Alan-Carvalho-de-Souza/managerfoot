@@ -7,8 +7,11 @@ import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
 import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.PartidaDao
+import br.com.managerfoot.data.dao.RankingConmebolLinha
 import br.com.managerfoot.data.dao.TransferenciaDetalhe
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.data.datasource.GameDataStore
 import br.com.managerfoot.data.datasource.SeedDataSource
@@ -45,6 +48,7 @@ class InicioViewModel @Inject constructor(
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository,
     private val gameRepository: GameRepository,
+    private val tecnicoRepository: TecnicoRepository,
     private val seedDataSource: SeedDataSource,
     private val timeDao: br.com.managerfoot.data.dao.TimeDao,
     private val jogadorDao: br.com.managerfoot.data.dao.JogadorDao
@@ -64,6 +68,15 @@ class InicioViewModel @Inject constructor(
 
     private fun verificarSave() = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
+        // Backfill de escudos para bancos populados por uma versão do seed
+        // anterior aos escudos de uma liga (ex.: Premier). Idempotente e barato:
+        // só preenche escudos vazios de times já existentes, sem tocar no jogo.
+        try {
+            val seed = seedDataSource.carregar()
+            gameRepository.sincronizarEscudosDoSeed(seed.times)
+        } catch (e: Exception) {
+            Log.e("InicioViewModel", "backfill de escudos falhou", e)
+        }
         _uiState.value = if (save.jogoInicializado) InicioUiState.TemSave
         else InicioUiState.SemSave
     }
@@ -74,10 +87,17 @@ class InicioViewModel @Inject constructor(
         try {
             // Verifica se o seed já está íntegro (times E jogadores presentes).
             // Isso detecta o estado corrompido de crash entre as duas inserções.
+            val seed = seedDataSource.carregar()
             if (!gameRepository.seedEstaIntegro()) {
-                val seed = seedDataSource.carregar()
                 gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
+            } else {
+                // Banco já íntegro, mas pode ter sido populado por uma versão do seed
+                // anterior a uma liga nova (ex.: Premier). Adiciona de forma aditiva
+                // os times/jogadores que faltam, sem tocar em jogos em andamento.
+                gameRepository.inserirSeedFaltante(seed.times, seed.jogadores)
             }
+            // Preenche escudos que passaram a existir no seed para times já no banco.
+            gameRepository.sincronizarEscudosDoSeed(seed.times)
             _uiState.value = InicioUiState.SelecionandoTime
         } catch (e: Exception) {
             Log.e("InicioViewModel", "iniciarSelecionarTime falhou", e)
@@ -85,7 +105,21 @@ class InicioViewModel @Inject constructor(
         }
     }
 
-    fun iniciarNovoJogo(timeId: Int) = viewModelScope.launch {
+    /** Após o usuário escolher o time, transita para o estado de prompt
+     *  de nome do técnico (sem rodar a inicialização completa ainda). */
+    fun timeEscolhido(timeId: Int) {
+        _uiState.value = InicioUiState.PerguntandoNomeTecnico(timeId)
+    }
+
+    fun voltarParaSelecionarTime() {
+        _uiState.value = InicioUiState.SelecionandoTime
+    }
+
+    fun iniciarNovoJogo(
+        timeId: Int,
+        nomeTecnico: String = "Técnico",
+        nacionalidadeTecnico: String = "Brasil"
+    ) = viewModelScope.launch {
         _uiState.value = InicioUiState.Carregando
         try {
             // Limpa TODOS os dados do jogo atual (campeonatos, partidas, times, jogadores, etc.)
@@ -94,9 +128,9 @@ class InicioViewModel @Inject constructor(
             timeDao.deleteAll()
             jogadorDao.deleteAll()
 
-            // Insere dados frescos do seed em uma única transação atômica
+            // Insere dados frescos do seed em uma única transação atômica (times+jogadores+técnicos)
             val seed = seedDataSource.carregar()
-            gameRepository.inserirSeedTransacional(seed.times, seed.jogadores)
+            gameRepository.inserirSeedTransacional(seed.times, seed.jogadores, seed.tecnicos)
 
             // Marca apenas o time escolhido como controlado pelo jogador
             val timeEntity = timeDao.buscarPorId(timeId) ?: run {
@@ -104,6 +138,25 @@ class InicioViewModel @Inject constructor(
                 return@launch
             }
             timeDao.atualizar(timeEntity.copy(controladoPorJogador = true))
+
+            // Cadastra o técnico do usuário no clube escolhido. O técnico que
+            // estava nesse clube no seed é demitido (vira free agent).
+            tecnicoRepository.cadastrarTecnicoUsuario(
+                nome = nomeTecnico,
+                nacionalidade = nacionalidadeTecnico,
+                timeId = timeId,
+                anoInicial = 2026
+            )
+
+            // Cria a passagem ativa inicial dos técnicos da IA já empregados, para
+            // que o Ranking/Histórico exiba suas passagens desde os primeiros jogos
+            // (o técnico do usuário já ganhou a sua acima; este passo o ignora).
+            tecnicoRepository.criarPassagensIniciaisEmClubes(anoInicial = 2026)
+
+            // Ranking CONMEBOL: semeia o coeficiente histórico (1960-2014) dos
+            // clubes sul-americanos a partir da reputação do seed, para o ranking
+            // já nascer com a hierarquia tradicional do continente.
+            gameRepository.semearCoeficienteHistoricoConmebol()
 
             val temporadaId = 1
             // Usa o campo divisao do seed — não assume IDs fixos por divisão
@@ -240,6 +293,106 @@ class InicioViewModel @Inject constructor(
             val campeonatoUruBCompetId = if (participantesUruB.size >= 2)
                 gameRepository.criarUruguaiSegundaDivCompetencia(participantesUruB, temporadaId, 2026) else -1
 
+            // ── Premier League (Inglaterra, divisao 11) — pontos corridos ────────
+            val participantesPremier = timeDao.observePorDivisao(11).first().map { it.id }
+            val campeonatoPremierId = if (participantesPremier.isNotEmpty()) gameRepository.criarCampeonato(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Premier League 2026/27",
+                    tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
+                    formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                    totalRodadas = (participantesPremier.size - 1) * 2,
+                    pais         = "Inglaterra"
+                ),
+                participantesPremier
+            ) else -1
+
+            // ── EFL Championship (Inglaterra, divisao 12) — pontos corridos ──────
+            val participantesChampionship = timeDao.observePorDivisao(12).first().map { it.id }
+            val campeonatoChampionshipId = if (participantesChampionship.isNotEmpty()) gameRepository.criarCampeonato(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "EFL Championship 2026/27",
+                    tipo         = TipoCampeonato.NACIONAL_DIVISAO2,
+                    formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                    totalRodadas = (participantesChampionship.size - 1) * 2,
+                    pais         = "Inglaterra"
+                ),
+                participantesChampionship
+            ) else -1
+
+            // ── La Liga (Espanha, divisao 13) — pontos corridos ─────────────────
+            val participantesLaLiga = timeDao.observePorDivisao(13).first().map { it.id }
+            val campeonatoLaLigaId = if (participantesLaLiga.isNotEmpty()) gameRepository.criarCampeonato(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "La Liga 2026/27",
+                    tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
+                    formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                    totalRodadas = (participantesLaLiga.size - 1) * 2,
+                    pais         = "Espanha"
+                ),
+                participantesLaLiga
+            ) else -1
+
+            // ── Serie A (Italia, divisao 14) — pontos corridos ──────────────────
+            val participantesSerieA = timeDao.observePorDivisao(14).first().map { it.id }
+            val campeonatoSerieAId = if (participantesSerieA.isNotEmpty()) gameRepository.criarCampeonato(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Serie A 2026/27",
+                    tipo         = TipoCampeonato.NACIONAL_DIVISAO1,
+                    formato      = FormatoCampeonato.PONTOS_CORRIDOS,
+                    totalRodadas = (participantesSerieA.size - 1) * 2,
+                    pais         = "Italia"
+                ),
+                participantesSerieA
+            ) else -1
+
+            // ── Copa da Inglaterra (FA Cup) — 32 times, jogo único + pênaltis ────
+            val participantesCopaIng = gameRepository.determinarParticipantesCopaInglaterra(
+                campeonatoPremierId, campeonatoChampionshipId
+            )
+            val copaInglaterraId = if (participantesCopaIng.size >= 2) gameRepository.criarCopaInglaterra(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Copa da Inglaterra 2026",
+                    tipo         = TipoCampeonato.COPA_NACIONAL,
+                    formato      = FormatoCampeonato.MATA_MATA_SIMPLES,
+                    totalRodadas = 5,
+                    pais         = "Inglaterra"
+                ),
+                participantesCopaIng
+            ) else -1
+
+            // ── Copa Espanhola (Copa do Rei) e Copa Italiana (Coppa Italia) — 16 melhores,
+            //    ida/volta a partir das Oitavas (modelo Copa do Brasil) ──
+            val participantesCopaEsp = gameRepository.determinarParticipantesCopaEspanhola(campeonatoLaLigaId)
+            val copaEspanholaId = if (participantesCopaEsp.size >= 2) gameRepository.criarCopa16(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Copa Espanhola 2026",
+                    tipo         = TipoCampeonato.COPA_NACIONAL,
+                    formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                    totalRodadas = 8,
+                    pais         = "Espanha"
+                ),
+                participantesCopaEsp
+            ) else -1
+
+            val participantesCopaIta = gameRepository.determinarParticipantesCopaItaliana(campeonatoSerieAId)
+            val copaItalianaId = if (participantesCopaIta.size >= 2) gameRepository.criarCopa16(
+                CampeonatoEntity(
+                    temporadaId  = temporadaId,
+                    nome         = "Copa Italiana 2026",
+                    tipo         = TipoCampeonato.COPA_NACIONAL,
+                    formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                    totalRodadas = 8,
+                    pais         = "Italia"
+                ),
+                participantesCopaIta
+            ) else -1
+
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)
             val divJogador = timeEntity2?.divisao ?: 1
@@ -249,6 +402,10 @@ class InicioViewModel @Inject constructor(
                 6 -> campeonatoArgBId
                 9 -> campeonatoUruAperturaId
                 10 -> campeonatoUruBId
+                11 -> campeonatoPremierId
+                12 -> campeonatoChampionshipId
+                13 -> campeonatoLaLigaId
+                14 -> campeonatoSerieAId
                 else -> campeonatoArgAId
             }
 
@@ -268,8 +425,15 @@ class InicioViewModel @Inject constructor(
                 campeonatoUruIntermedId = campeonatoUruIntermedId,
                 campeonatoUruBId = campeonatoUruBId,
                 campeonatoUruBCompetId = campeonatoUruBCompetId,
+                campeonatoPremierId = campeonatoPremierId,
+                campeonatoChampionshipId = campeonatoChampionshipId,
+                campeonatoLaLigaId = campeonatoLaLigaId,
+                campeonatoSerieAId = campeonatoSerieAId,
                 copaId = copaId,
                 copaArgId = copaArgId,
+                copaInglaterraId = copaInglaterraId,
+                copaEspanholaId = copaEspanholaId,
+                copaItalianaId = copaItalianaId,
                 supercopaId = supercopaId,
                 ano = 2026
             )
@@ -283,6 +447,10 @@ class InicioViewModel @Inject constructor(
     fun continuarJogo() = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         if (save.jogoInicializado) {
+            // Saves criados antes do Ranking CONMEBOL não têm o coeficiente histórico,
+            // o que deixaria a aba Colocação achatada para sempre. A semeadura é
+            // idempotente, então aqui ela só age na primeira vez.
+            gameRepository.semearCoeficienteHistoricoConmebol()
             _uiState.value = InicioUiState.JogoIniciado(save.timeIdJogador)
         }
     }
@@ -293,6 +461,8 @@ sealed class InicioUiState {
     object SemSave          : InicioUiState()
     object TemSave          : InicioUiState()
     object SelecionandoTime : InicioUiState()
+    /** Após o usuário escolher o time, perguntar nome + nacionalidade do técnico. */
+    data class PerguntandoNomeTecnico(val timeId: Int) : InicioUiState()
     data class JogoIniciado(val timeId: Int) : InicioUiState()
     data class Erro(val mensagem: String) : InicioUiState()
 }
@@ -305,7 +475,8 @@ class DashboardViewModel @Inject constructor(
     private val gameDataStore: GameDataStore,
     private val timeRepository: TimeRepository,
     private val jogadorRepository: JogadorRepository,
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
+    private val tecnicoRepository: TecnicoRepository
 ) : ViewModel() {
 
     val saveState = gameDataStore.saveState
@@ -318,6 +489,20 @@ class DashboardViewModel @Inject constructor(
 
     private val _timeJogador = MutableStateFlow<Time?>(null)
     val timeJogador: StateFlow<Time?> = _timeJogador.asStateFlow()
+
+    /** Meta de temporada do clube do jogador, derivada de divisão + reputação. */
+    val metaTemporada: StateFlow<br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada?> =
+        _timeJogador
+            .map { time -> time?.let { br.com.managerfoot.domain.engine.MotorFinanceiro.calcularMetaTemporada(it) } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Técnico do clube do jogador (controlado pelo jogador). Atualiza quando o time muda. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val tecnicoJogador: StateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?> =
+        gameDataStore.saveState
+            .filter { it.timeIdJogador > 0 }
+            .flatMapLatest { save -> tecnicoRepository.observePorTime(save.timeIdJogador) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // Todos os times para resolver nomes nas telas
     private val _todosOsTimes = MutableStateFlow<List<Time>>(emptyList())
@@ -332,12 +517,54 @@ class DashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Carregando)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    // Mensagens transitórias (erros/avisos) para exibição em Snackbar na Dashboard.
+    private val _mensagem = MutableStateFlow<String?>(null)
+    val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
+    fun limparMensagem() { _mensagem.value = null }
+
+    // ── Amistosos de entressafra ─────────────────────────────────────────────
+    // Flag: a partida em simulação é um amistoso (roteia a finalização leve).
+    @Volatile private var _ehAmistoso = false
+    @Volatile private var _amistosoEhJaneiro = false
+
+    /** Estado da janela de amistosos (dez/jan) para a UI. */
+    data class AmistosoJanela(val ativa: Boolean, val ehJaneiro: Boolean, val restantes: Int)
+    val amistosoJanela: StateFlow<AmistosoJanela> =
+        combine(gameDataStore.saveState, _proximaPartidaFlow()) { save, prox ->
+            if (!save.jogoInicializado) AmistosoJanela(false, false, 0)
+            else {
+                val janeiro = save.amistosoJaneiroAtivo
+                val dezembro = prox == null && !janeiro
+                when {
+                    janeiro && save.amistososJan < 2  -> AmistosoJanela(true, true, 2 - save.amistososJan)
+                    dezembro && save.amistososDez < 2 -> AmistosoJanela(true, false, 2 - save.amistososDez)
+                    else -> AmistosoJanela(false, janeiro, 0)
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AmistosoJanela(false, false, 0))
+
+    private fun _proximaPartidaFlow() = _proximaPartida.asStateFlow()
+
+    /** Marca o onboarding como concluído (chamado ao fechar/pular o tutorial). */
+    fun concluirOnboarding() = viewModelScope.launch {
+        gameDataStore.marcarOnboardingConcluido()
+    }
+
+    /** Reabilita o tutorial (para o botão "Ver tutorial de novo" no menu Mais). */
+    fun reiniciarOnboarding() = viewModelScope.launch {
+        gameDataStore.resetarOnboarding()
+    }
+
     // Resultado da última simulação — quando não nulo, abre a tela de simulação
     private val _resultadoSimulado = MutableStateFlow<ResultadoPartida?>(null)
     val resultadoSimulado: StateFlow<ResultadoPartida?> = _resultadoSimulado.asStateFlow()
 
+    // Outros jogos da MESMA rodada (pré-simulados) — para o painel "Placares ao vivo".
+    private val _outrosJogosRodada = MutableStateFlow<List<GameRepository.JogoRodadaAoVivo>>(emptyList())
+    val outrosJogosRodada: StateFlow<List<GameRepository.JogoRodadaAoVivo>> = _outrosJogosRodada.asStateFlow()
+
     // Contexto entre metades - armazena estado do 1o tempo para continuar no 2o
-    private var _contextoSimulacao: ContextoSimulacaoMetade? = null
+    @Volatile private var _contextoSimulacao: ContextoSimulacaoMetade? = null
 
     // Escalação em uso durante a simulação (para o painel do intervalo)
     private val _escalacaoSimulacao = MutableStateFlow<Escalacao?>(null)
@@ -349,6 +576,8 @@ class DashboardViewModel @Inject constructor(
 
     // Indica que os pênaltis pendentes são da Supercopa (não da Copa do Brasil)
     private var _penaltisParaSupercopa = false
+    // Qual supercopa (Brasil/Inglaterra/Espanha/Itália) está em disputa de pênaltis
+    private var _supercopaAtivaId = -1
 
     // Resultado dos pênaltis (Copa): não nulo quando disputa de pênaltis foi simulada
     private val _penaltisResultado = MutableStateFlow<ResultadoPenaltis?>(null)
@@ -414,7 +643,7 @@ class DashboardViewModel @Inject constructor(
 
     fun aceitarPropostaClube(propostaId: Int, novoTimeId: Int) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
-        gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId)
+        gameRepository.aceitarPropostaClube(propostaId, save.timeIdJogador, novoTimeId, save.anoAtual)
         val novaDiv = gameRepository.buscarInfoPropostaClube(novoTimeId, save.temporadaId)?.divisao ?: 1
         val novoCampId = when (novaDiv) {
             1 -> save.campeonatoAId; 2 -> save.campeonatoBId
@@ -423,6 +652,10 @@ class DashboardViewModel @Inject constructor(
             6 -> save.campeonatoArgBId
             9 -> save.campeonatoUruAperturaId
             10 -> save.campeonatoUruBId
+            11 -> save.campeonatoPremierId
+            12 -> save.campeonatoChampionshipId
+            13 -> save.campeonatoLaLigaId
+            14 -> save.campeonatoSerieAId
             else -> save.campeonatoAId
         }
         gameDataStore.salvarTimeDoJogador(novoTimeId, novoCampId)
@@ -447,7 +680,7 @@ class DashboardViewModel @Inject constructor(
         // durante a simulação para evitar exibir o resultado antes da animação finalizar
         val copaIdInicial = save.copaId
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.supercopaId, save.campeonatoArgClausuraId).filter { it > 0 }
+            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.campeonatoAmistososId).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
         _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
@@ -455,7 +688,7 @@ class DashboardViewModel @Inject constructor(
     }
 
     // Simula a partida do jogador e abre a tela de animação
-    fun simularProximaPartida(campeonatoId: Int, rodada: Int) = viewModelScope.launch {
+    fun simularProximaPartida(campeonatoId: Int, rodada: Int) = viewModelScope.launch(Dispatchers.Default) {
         val save = gameDataStore.saveState.first()
         _proximaPartida.value ?: return@launch
 
@@ -467,19 +700,53 @@ class DashboardViewModel @Inject constructor(
             _escalacaoSimulacao.value = escalacaoJogador
 
             // Simula apenas o 1o tempo; o 2o sera simulado apos o intervalo
-            val (contexto, resultadoParcial) = gameRepository.iniciarPartidaComJogador(
+            val inicio = gameRepository.iniciarPartidaComJogador(
                 campeonatoId     = campeonatoId,
                 rodada           = rodada,
                 timeJogadorId    = save.timeIdJogador,
                 escalacaoJogador = escalacaoJogador
             )
-            _contextoSimulacao = contexto
-            _escalacaoAdversarioSimulacao.value = contexto.escalacaoAdversario
-            _resultadoSimulado.value = resultadoParcial
+            _contextoSimulacao = inicio.contexto
+            _escalacaoAdversarioSimulacao.value = inicio.contexto.escalacaoAdversario
+            _resultadoSimulado.value = inicio.resultadoParcial
+            _outrosJogosRodada.value = inicio.outrosJogos
         } catch (e: Exception) {
-            // Ignora erro e volta para o estado normal
+            Log.e("DashboardViewModel", "simularProximaPartida falhou", e)
+            _mensagem.value = "Não foi possível simular a partida. Tente novamente."
         }
 
+        _uiState.value = DashboardUiState.Pronto
+    }
+
+    /** Inicia um amistoso de entressafra (jogado como partida normal, interativo). */
+    fun iniciarAmistoso(adversarioId: Int, ehCasa: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        val save = gameDataStore.saveState.first()
+        if (save.timeIdJogador <= 0) return@launch
+        _uiState.value = DashboardUiState.Simulando
+        try {
+            val campId = gameRepository.criarOuObterCampeonatoAmistosos(save.campeonatoAmistososId, save.temporadaId, save.anoAtual)
+            if (campId != save.campeonatoAmistososId) gameDataStore.salvarAmistosoCampId(campId)
+            // ordemGlobal: janeiro ~5 (antes da 1ª rodada, envelhece cedo); dezembro ~450 (após todos os oficiais)
+            val ogBase = if (save.amistosoJaneiroAtivo) 5 else 450
+            val (_, rodada) = gameRepository.criarAmistoso(campId, save.timeIdJogador, adversarioId, ehCasa, ogBase)
+            val escalacaoJogador = gameRepository.gerarEscalacaoJogador(save.timeIdJogador)
+            _escalacaoSimulacao.value = escalacaoJogador
+            val inicio = gameRepository.iniciarPartidaComJogador(
+                campeonatoId     = campId,
+                rodada           = rodada,
+                timeJogadorId    = save.timeIdJogador,
+                escalacaoJogador = escalacaoJogador
+            )
+            _contextoSimulacao = inicio.contexto
+            _escalacaoAdversarioSimulacao.value = inicio.contexto.escalacaoAdversario
+            _resultadoSimulado.value = inicio.resultadoParcial
+            _outrosJogosRodada.value = inicio.outrosJogos   // amistoso: vazio (fase != null)
+            _ehAmistoso = true
+            _amistosoEhJaneiro = save.amistosoJaneiroAtivo
+        } catch (e: Exception) {
+            Log.e("DashboardViewModel", "iniciarAmistoso falhou", e)
+            _mensagem.value = "Não foi possível iniciar o amistoso."
+        }
         _uiState.value = DashboardUiState.Pronto
     }
 
@@ -494,16 +761,18 @@ class DashboardViewModel @Inject constructor(
         minFim: Int
     ): List<EventoSimulado> {
         val ctx = _contextoSimulacao ?: return emptyList()
-        val (ctxAtualizado, eventos) = gameRepository.simularPeriodoComJogador(
-            ctx              = ctx,
-            titularesJogador = titularesJogador,
-            reservasJogador  = reservasJogador,
-            substituicoes    = substituicoes,
-            formacao         = formacao,
-            estilo           = estilo,
-            minInicio        = minInicio,
-            minFim           = minFim
-        )
+        val (ctxAtualizado, eventos) = withContext(Dispatchers.Default) {
+            gameRepository.simularPeriodoComJogador(
+                ctx              = ctx,
+                titularesJogador = titularesJogador,
+                reservasJogador  = reservasJogador,
+                substituicoes    = substituicoes,
+                formacao         = formacao,
+                estilo           = estilo,
+                minInicio        = minInicio,
+                minFim           = minFim
+            )
+        }
         _contextoSimulacao = ctxAtualizado
         return eventos
     }
@@ -515,8 +784,28 @@ class DashboardViewModel @Inject constructor(
         val ctx = _contextoSimulacao ?: return
         // Libera o contexto imediatamente — não é mais necessário após captura local
         _contextoSimulacao = null
+
+        // ── Amistoso: finalização LEVE (sem tabela/copa/mês) ────────────────────
+        if (_ehAmistoso) {
+            try {
+                val resultadoFinal = withContext(Dispatchers.Default) {
+                    gameRepository.finalizarAmistosoComJogador(ctx, golsCasa, golsFora)
+                }
+                _resultadoSimulado.value = resultadoFinal
+                gameDataStore.registrarAmistosoJogado(_amistosoEhJaneiro)
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "finalizarAmistoso falhou", e)
+                _mensagem.value = "Falha ao finalizar o amistoso."
+            }
+            return
+        }
+
         try {
             val save = gameDataStore.saveState.first()
+            // Ao jogar o 1º jogo OFICIAL da temporada, fecha a janela de amistosos de janeiro.
+            if (save.amistosoJaneiroAtivo) {
+                try { gameDataStore.fecharJanelaAmistosoJaneiro() } catch (_: Exception) {}
+            }
             // B/C/D avançam APENAS quando o jogador joga na sua própria liga (nunca em Copa).
             // Isso garante sincronismo exato: 1 rodada da liga do jogador = 1 rodada nos outros campeonatos.
             val ehJogoDaLiga = ctx.campeonatoId == save.campeonatoId ||
@@ -531,22 +820,28 @@ class DashboardViewModel @Inject constructor(
                     save.campeonatoDId,
                     // campeonatoArgAId excluído: gerenciado via verificarEAvancarFaseArgentina
                     save.campeonatoArgBId,
-                    save.campeonatoUruBId
+                    save.campeonatoUruBId,
+                    save.campeonatoPremierId,
+                    save.campeonatoChampionshipId,
+                    save.campeonatoLaLigaId,
+                    save.campeonatoSerieAId
                 ).filter { it > 0 && it != ctx.campeonatoId }
             } else {
                 emptyList()
             }
-            val resultadoFinal = gameRepository.finalizarPartidaComJogador(
-                ctx                  = ctx,
-                golsCasaFinal        = golsCasa,
-                golsForaFinal        = golsFora,
-                outrosCampeonatoIds  = outrosCampeonatos
-            )
+            val resultadoFinal = withContext(Dispatchers.Default) {
+                gameRepository.finalizarPartidaComJogador(
+                    ctx                  = ctx,
+                    golsCasaFinal        = golsCasa,
+                    golsForaFinal        = golsFora,
+                    outrosCampeonatoIds  = outrosCampeonatos
+                )
+            }
             _resultadoSimulado.value = resultadoFinal
 
             // ── Operações secundárias em background ────────────────────────────────
             // A tela já pode exibir o botão "Voltar ao painel" enquanto estas rodam.
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.Default) {
                 try {
                     // ── Copa do Brasil ──────────────────────────────────────────────
                     if (save.copaId > 0 && ctx.campeonatoId == save.copaId && !resultadoFinal.precisaPenaltis) {
@@ -594,27 +889,96 @@ class DashboardViewModel @Inject constructor(
                             anoAtual      = save.anoAtual
                         )
                     }
-                    // ── Supercopa Rei ──────────────────────────────────────────────
-                    if (save.supercopaId > 0 && ctx.campeonatoId == save.supercopaId) {
+                    // ── Copa da Inglaterra (jogo único + pênaltis) ──────────────────
+                    if (save.copaInglaterraId > 0 && ctx.campeonatoId == save.copaInglaterraId && !resultadoFinal.precisaPenaltis) {
+                        gameRepository.verificarEAvancarFaseCopaInglaterra(
+                            copaId        = save.copaInglaterraId,
+                            anoAtual      = save.anoAtual,
+                            timeJogadorId = save.timeIdJogador,
+                            temporadaId   = save.temporadaId
+                        )
+                    }
+                    if (save.copaInglaterraId > 0 && ctx.campeonatoId == save.copaInglaterraId && resultadoFinal.precisaPenaltis) {
+                        _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                            copaId         = save.copaInglaterraId,
+                            voltaPartidaId = resultadoFinal.partidaId,
+                            timeJogadorId  = save.timeIdJogador
+                        )
+                    }
+                    if (ctx.campeonatoId != save.copaInglaterraId && save.copaInglaterraId > 0) {
+                        gameRepository.simularProximaFaseCopaInglaterraSeJogadorEliminado(
+                            copaId        = save.copaInglaterraId,
+                            timeJogadorId = save.timeIdJogador,
+                            anoAtual      = save.anoAtual,
+                            temporadaId   = save.temporadaId
+                        )
+                    }
+                    // ── Copa Espanhola (Copa do Rei — ida/volta + pênaltis) ─────────
+                    if (save.copaEspanholaId > 0 && ctx.campeonatoId == save.copaEspanholaId && !resultadoFinal.precisaPenaltis) {
+                        gameRepository.verificarEAvancarFaseCopaEspanhola(
+                            copaId = save.copaEspanholaId, anoAtual = save.anoAtual,
+                            timeJogadorId = save.timeIdJogador, temporadaId = save.temporadaId
+                        )
+                    }
+                    if (save.copaEspanholaId > 0 && ctx.campeonatoId == save.copaEspanholaId && resultadoFinal.precisaPenaltis) {
+                        _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                            copaId = save.copaEspanholaId, voltaPartidaId = resultadoFinal.partidaId,
+                            timeJogadorId = save.timeIdJogador
+                        )
+                    }
+                    if (ctx.campeonatoId != save.copaEspanholaId && save.copaEspanholaId > 0) {
+                        gameRepository.simularProximaFaseCopaEspanholaSeJogadorEliminado(
+                            copaId = save.copaEspanholaId, timeJogadorId = save.timeIdJogador,
+                            anoAtual = save.anoAtual, temporadaId = save.temporadaId
+                        )
+                    }
+                    // ── Copa Italiana (Coppa Italia — ida/volta + pênaltis) ─────────
+                    if (save.copaItalianaId > 0 && ctx.campeonatoId == save.copaItalianaId && !resultadoFinal.precisaPenaltis) {
+                        gameRepository.verificarEAvancarFaseCopaItaliana(
+                            copaId = save.copaItalianaId, anoAtual = save.anoAtual,
+                            timeJogadorId = save.timeIdJogador, temporadaId = save.temporadaId
+                        )
+                    }
+                    if (save.copaItalianaId > 0 && ctx.campeonatoId == save.copaItalianaId && resultadoFinal.precisaPenaltis) {
+                        _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                            copaId = save.copaItalianaId, voltaPartidaId = resultadoFinal.partidaId,
+                            timeJogadorId = save.timeIdJogador
+                        )
+                    }
+                    if (ctx.campeonatoId != save.copaItalianaId && save.copaItalianaId > 0) {
+                        gameRepository.simularProximaFaseCopaItalianaSeJogadorEliminado(
+                            copaId = save.copaItalianaId, timeJogadorId = save.timeIdJogador,
+                            anoAtual = save.anoAtual, temporadaId = save.temporadaId
+                        )
+                    }
+                    // ── Supercopas (Brasil / Inglaterra / Espanha / Itália) ─────────
+                    val supercopasIds = listOf(
+                        save.supercopaId, save.supercopaInglaterraId,
+                        save.supercopaEspanholaId, save.supercopaItalianaId
+                    ).filter { it > 0 }
+                    val supercopaDoJogo = supercopasIds.firstOrNull { it == ctx.campeonatoId }
+                    if (supercopaDoJogo != null) {
                         if (resultadoFinal.precisaPenaltis) {
                             _penaltisParaSupercopa = true
+                            _supercopaAtivaId = supercopaDoJogo
                             _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
-                                copaId         = save.supercopaId,
+                                copaId         = supercopaDoJogo,
                                 voltaPartidaId = resultadoFinal.partidaId,
                                 timeJogadorId  = save.timeIdJogador
                             )
                         } else {
                             gameRepository.verificarEEncerrarSupercopa(
-                                supercopaId   = save.supercopaId,
+                                supercopaId   = supercopaDoJogo,
                                 anoAtual      = save.anoAtual,
                                 timeJogadorId = save.timeIdJogador,
                                 temporadaId   = save.temporadaId
                             )
                         }
                     }
-                    if (save.supercopaId > 0 && ctx.campeonatoId != save.supercopaId) {
+                    // Supercopas que o jogador NÃO está disputando → simula passivamente
+                    supercopasIds.filter { it != ctx.campeonatoId }.forEach { scId ->
                         gameRepository.simularSupercopaSeJogadorNaoParticipa(
-                            supercopaId   = save.supercopaId,
+                            supercopaId   = scId,
                             timeJogadorId = save.timeIdJogador,
                             anoAtual      = save.anoAtual,
                             temporadaId   = save.temporadaId
@@ -743,21 +1107,29 @@ class DashboardViewModel @Inject constructor(
                             temporadaId   = save.temporadaId
                         )
                     }
-                } catch (_: Exception) { /* ignora */ } finally {
+                } catch (e: Exception) {
+                    Log.e("DashboardViewModel", "avanço de fase pós-partida falhou", e)
+                } finally {
                     try {
                         if (save.timeIdJogador > 0) {
                             _proximaPartida.value = gameRepository.buscarProximaPartida(save.timeIdJogador)
                         }
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                        Log.e("DashboardViewModel", "atualizar proximaPartida falhou", e)
+                    }
                 }
             }
-        } catch (_: Exception) { /* ignora */ }
+        } catch (e: Exception) {
+            Log.e("DashboardViewModel", "finalizarPartidaSimulada falhou", e)
+            _mensagem.value = "Falha ao finalizar a partida. Verifique o resultado."
+        }
     }
 
     // Chamado quando o jogador fecha a tela de simulação
-    fun fecharSimulacao() = viewModelScope.launch {
+    fun fecharSimulacao() = viewModelScope.launch(Dispatchers.Default) {
         // Limpa a tela de simulação imediatamente para não bloquear o usuário
         _resultadoSimulado.value = null
+        _outrosJogosRodada.value = emptyList()
         _escalacaoSimulacao.value = null
         _escalacaoAdversarioSimulacao.value = null
         _penaltisResultado.value = null
@@ -765,13 +1137,33 @@ class DashboardViewModel @Inject constructor(
         _penaltisInterativoConcluido.value = false
         _penaltisParaSupercopa = false
 
+        // Amistoso: não processa fechamento de mês/liga; atualiza próxima partida + últimos resultados.
+        if (_ehAmistoso) {
+            _ehAmistoso = false
+            try {
+                val save = gameDataStore.saveState.first()
+                if (save.timeIdJogador > 0) {
+                    _proximaPartida.value = gameRepository.buscarProximaPartida(save.timeIdJogador)
+                    _ultimosResultados.value = gameRepository.buscarUltimosResultados(
+                        save.timeIdJogador,
+                        listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
+                            save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId,
+                            save.campeonatoAmistososId).filter { it > 0 }
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "fecharSimulacao (amistoso) falhou", e)
+            }
+            return@launch
+        }
+
         // Processamento pós-partida em background (não bloqueia mais a navegação)
         try {
             var save = gameDataStore.saveState.first()
             // Atualiza últimos resultados só agora, após a animação ter sido exibida
             _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-                save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.copaArgId, save.supercopaId,
-                    save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId).filter { it > 0 }
+                save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
+                    save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId, save.campeonatoAmistososId).filter { it > 0 }
             )
             _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(save.campeonatoId, save.timeIdJogador)
 
@@ -780,21 +1172,31 @@ class DashboardViewModel @Inject constructor(
             // do último resultado se a temporada acabou).  Se o mês derivado for
             // maior que o mesAtual persistido, processa o fechamento mensal para
             // cada mês que passou (salários, patrocínio, bilheteria, IA contratações).
-            val ordemRef = (_proximaPartida.value ?: _ultimosResultados.value.firstOrNull())?.ordemGlobal ?: 0
+            // O mês vigente é derivado do calendário real (liga/copa). Amistosos têm
+            // ordemGlobal artificial (~450 em dez, ~5 em jan) e NÃO representam o mês
+            // corrente — se usados como referência, empurram mesDerived p/ dezembro no
+            // meio da temporada e disparam avanço de ano indevido. Por isso, no fallback
+            // (temporada de liga já encerrada), ignoramos os amistosos.
+            val ultimoNaoAmistoso = _ultimosResultados.value
+                .firstOrNull { it.campeonatoId != save.campeonatoAmistososId }
+            val ordemRef = (_proximaPartida.value ?: ultimoNaoAmistoso)?.ordemGlobal ?: 0
             val mesDerived = if (ordemRef > 0) ordemGlobalParaMes(ordemRef) else save.mesAtual
 
             // Fecha todos os meses até o mês vigente inclusive (<=), garantindo que
             // patrocínio e salários do mês corrente sejam registrados ao entrar nele.
-            // O limite de 12 iterações evita loop infinito caso avancarMes() enrole o mês
-            // de 12 → 1 enquanto mesDerived ainda é >= 1 (ex.: último jogo do ano).
+            // O limite de 12 iterações evita loop infinito; e ao cruzar dez→jan (mês 12
+            // fechado → ano avança) o loop PARA — sem esse break, mesAtual voltava a 1
+            // (≤ mesDerived) e o ciclo rodava um ano inteiro, saltando o ano +2/+3.
             var iteracoesMes = 0
             while (save.mesAtual <= mesDerived && iteracoesMes < 12) {
                 iteracoesMes++
+                val mesFechando           = save.mesAtual
                 val patrocinioMensal      = save.patrocinadorValorAnual / 12L
                 val patrocinioJaCreditado = save.patrocinadorPreCreditado
-                gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, save.mesAtual, patrocinioMensal, patrocinioJaCreditado, save.anoAtual)
+                gameRepository.fecharMes(save.timeIdJogador, save.temporadaId, mesFechando, patrocinioMensal, patrocinioJaCreditado, save.anoAtual)
                 gameDataStore.avancarMes()  // também zera patrocinadorPreCreditado
                 save = gameDataStore.saveState.first()
+                if (mesFechando == 12) break  // cruzou dez→jan: fim do ano, não churna o próximo
             }
             // Após simular a rodada, a IA responde a eventuais contra-ofertas pendentes
             val savePos = gameDataStore.saveState.first()
@@ -805,25 +1207,33 @@ class DashboardViewModel @Inject constructor(
                         temporadaId  = savePos.temporadaId,
                         mes          = savePos.mesAtual
                     )
-                } catch (_: Exception) { /* não crashar o app */ }
+                } catch (e: Exception) {
+                    Log.e("DashboardViewModel", "processarRespostasIANegociacao falhou", e)
+                }
             }
-        } catch (_: Exception) { /* ignora — não crashar o app */ }
+        } catch (e: Exception) {
+            Log.e("DashboardViewModel", "fecharSimulacao falhou", e)
+            _mensagem.value = "Erro ao encerrar a partida. Estado pode ter ficado incompleto."
+        }
     }
 
     // Chamado quando o jogador conclui a disputa interativa de pênaltis
-    fun finalizarPenaltisJogador(resultado: ResultadoPenaltis) = viewModelScope.launch {
+    fun finalizarPenaltisJogador(resultado: ResultadoPenaltis) = viewModelScope.launch(Dispatchers.Default) {
         val save          = gameDataStore.saveState.first()
         val resultadoPartida = _resultadoSimulado.value ?: return@launch
         val argId = listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
             .firstOrNull { it > 0 && it == _contextoSimulacao?.campeonatoId }
         val uruIntermedId = if (save.campeonatoUruIntermedId > 0 && _contextoSimulacao?.campeonatoId == save.campeonatoUruIntermedId) save.campeonatoUruIntermedId else -1
         val uruClausuraId = if (save.campeonatoUruClausuraId > 0 && _contextoSimulacao?.campeonatoId == save.campeonatoUruClausuraId) save.campeonatoUruClausuraId else -1
+        val copaIngId = if (save.copaInglaterraId > 0 && _contextoSimulacao?.campeonatoId == save.copaInglaterraId) save.copaInglaterraId else -1
+        val copaEspId = if (save.copaEspanholaId > 0 && _contextoSimulacao?.campeonatoId == save.copaEspanholaId) save.copaEspanholaId else -1
+        val copaItaId = if (save.copaItalianaId > 0 && _contextoSimulacao?.campeonatoId == save.copaItalianaId) save.copaItalianaId else -1
         try {
             when {
                 _penaltisParaSupercopa -> {
                     gameRepository.persistirResultadoPenaltisJogadorSupercopa(
                         resultado     = resultado,
-                        supercopaId   = save.supercopaId,
+                        supercopaId   = _supercopaAtivaId,
                         anoAtual      = save.anoAtual,
                         partidaId     = resultadoPartida.partidaId,
                         timeJogadorId = save.timeIdJogador,
@@ -862,6 +1272,32 @@ class DashboardViewModel @Inject constructor(
                         temporadaId     = save.temporadaId
                     )
                 }
+                copaIngId > 0 -> {
+                    gameRepository.persistirResultadoPenaltisJogadorCopaInglaterra(
+                        resultado     = resultado,
+                        copaId        = copaIngId,
+                        anoAtual      = save.anoAtual,
+                        partidaId     = resultadoPartida.partidaId,
+                        timeJogadorId = save.timeIdJogador,
+                        temporadaId   = save.temporadaId
+                    )
+                }
+                copaEspId > 0 || copaItaId > 0 -> {
+                    val copaId = if (copaEspId > 0) copaEspId else copaItaId
+                    gameRepository.persistirResultadoPenaltisJogador(
+                        resultado         = resultado,
+                        copaId            = copaId,
+                        anoAtual          = save.anoAtual,
+                        voltaPartidaId    = resultadoPartida.partidaId,
+                        fases             = br.com.managerfoot.domain.engine.MotorCampeonato.COPA16_FASES,
+                        ordemGlobal       = br.com.managerfoot.domain.engine.MotorCampeonato.COPA16_ORDEM_GLOBAL,
+                        divisaoHallDaFama = if (copaEspId > 0) 25 else 26,
+                        premioCampeao     = 15_000_000_00L,
+                        premioVice        = 7_000_000_00L,
+                        timeJogadorId     = save.timeIdJogador,
+                        temporadaId       = save.temporadaId
+                    )
+                }
                 else -> {
                     val copaIdAtivo = if (save.copaArgId > 0 && _contextoSimulacao?.campeonatoId == save.copaArgId) save.copaArgId else save.copaId
                     gameRepository.persistirResultadoPenaltisJogador(
@@ -874,7 +1310,10 @@ class DashboardViewModel @Inject constructor(
             }
             _penaltisParaSupercopa = false
             _penaltisInterativoConcluido.value = true
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            Log.e("DashboardViewModel", "finalizarPenaltisJogador falhou", e)
+            _mensagem.value = "Falha ao registrar a disputa de pênaltis."
+        }
     }
 
     // Chamado quando o jogador confirma os cobradores de pênalti
@@ -886,11 +1325,14 @@ class DashboardViewModel @Inject constructor(
         val resultado = _resultadoSimulado.value ?: return@launch
         val argId = listOf(save.campeonatoArgAId, save.campeonatoArgClausuraId)
             .firstOrNull { it > 0 && it == _contextoSimulacao?.campeonatoId }
+        val copaIngId = if (save.copaInglaterraId > 0 && _contextoSimulacao?.campeonatoId == save.copaInglaterraId) save.copaInglaterraId else -1
+        val copaEspId = if (save.copaEspanholaId > 0 && _contextoSimulacao?.campeonatoId == save.copaEspanholaId) save.copaEspanholaId else -1
+        val copaItaId = if (save.copaItalianaId > 0 && _contextoSimulacao?.campeonatoId == save.copaItalianaId) save.copaItalianaId else -1
         try {
             val penaltis = when {
                 _penaltisParaSupercopa -> {
                     gameRepository.simularEPersistirPenaltisJogadorSupercopa(
-                        supercopaId          = save.supercopaId,
+                        supercopaId          = _supercopaAtivaId,
                         anoAtual             = save.anoAtual,
                         partidaId            = resultado.partidaId,
                         cobradoresJogador    = cobradores,
@@ -910,6 +1352,34 @@ class DashboardViewModel @Inject constructor(
                         temporadaId          = save.temporadaId
                     )
                 }
+                copaIngId > 0 -> {
+                    gameRepository.simularEPersistirPenaltisJogadorCopaInglaterra(
+                        copaId               = copaIngId,
+                        anoAtual             = save.anoAtual,
+                        partidaId            = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        temporadaId          = save.temporadaId
+                    )
+                }
+                copaEspId > 0 || copaItaId > 0 -> {
+                    val copaId = if (copaEspId > 0) copaEspId else copaItaId
+                    gameRepository.simularEPersistirPenaltisJogador(
+                        copaId               = copaId,
+                        anoAtual             = save.anoAtual,
+                        voltaPartidaId       = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        fases                = br.com.managerfoot.domain.engine.MotorCampeonato.COPA16_FASES,
+                        ordemGlobal          = br.com.managerfoot.domain.engine.MotorCampeonato.COPA16_ORDEM_GLOBAL,
+                        divisaoHallDaFama    = if (copaEspId > 0) 25 else 26,
+                        premioCampeao        = 15_000_000_00L,
+                        premioVice           = 7_000_000_00L,
+                        temporadaId          = save.temporadaId
+                    )
+                }
                 else -> {
                     val copaIdAtivo = if (save.copaArgId > 0 && _contextoSimulacao?.campeonatoId == save.copaArgId) save.copaArgId else save.copaId
                     gameRepository.simularEPersistirPenaltisJogador(
@@ -924,13 +1394,20 @@ class DashboardViewModel @Inject constructor(
             }
             _penaltisParaSupercopa = false
             _penaltisResultado.value = penaltis
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            Log.e("DashboardViewModel", "simularPenaltisJogador falhou", e)
+            _mensagem.value = "Falha na simulação da disputa de pênaltis."
+        }
     }
 
-    fun encerrarTemporada() = viewModelScope.launch {
+    fun encerrarTemporada() = viewModelScope.launch(Dispatchers.Default) {
         val save = gameDataStore.saveState.first()
         _uiState.value = DashboardUiState.Simulando
         try {
+            // Limpa os amistosos de dezembro antes da virada (não poluem a nova temporada)
+            if (save.campeonatoAmistososId > 0) {
+                try { gameRepository.limparAmistosos(save.campeonatoAmistososId) } catch (_: Exception) {}
+            }
             // fecharSimulacao() chama avancarMes() para dezembro, fazendo o ano avançar de 12→1
             // antes de encerrarTemporada ser chamada. Detectamos isso: se mesAtual==1, o ano já
             // foi incrementado antecipadamente, então usamos anoAtual-1 como o ano da temporada.
@@ -948,6 +1425,10 @@ class DashboardViewModel @Inject constructor(
                 campeonatoUruIntermedId  = save.campeonatoUruIntermedId,
                 campeonatoUruBId         = save.campeonatoUruBId,
                 campeonatoUruBCompetId    = save.campeonatoUruBCompetId,
+                campeonatoPremierId       = save.campeonatoPremierId,
+                campeonatoChampionshipId  = save.campeonatoChampionshipId,
+                campeonatoLaLigaId        = save.campeonatoLaLigaId,
+                campeonatoSerieAId        = save.campeonatoSerieAId,
                 temporadaId              = save.temporadaId,
                 ano                      = anoTemporada,
                 timeJogadorId            = save.timeIdJogador
@@ -961,6 +1442,10 @@ class DashboardViewModel @Inject constructor(
                 6 -> novaInfo.campeonatoArgBId
                 9 -> novaInfo.campeonatoUruAperturaId
                 10 -> novaInfo.campeonatoUruBId
+                11 -> novaInfo.campeonatoPremierId
+                12 -> novaInfo.campeonatoChampionshipId
+                13 -> novaInfo.campeonatoLaLigaId
+                14 -> novaInfo.campeonatoSerieAId
                 else -> novaInfo.campeonatoArgAId
             }
             gameDataStore.salvarNovaTemporada(
@@ -977,9 +1462,19 @@ class DashboardViewModel @Inject constructor(
                 campeonatoUruIntermedId  = novaInfo.campeonatoUruIntermedId,
                 campeonatoUruBId         = novaInfo.campeonatoUruBId,
                 campeonatoUruBCompetId    = novaInfo.campeonatoUruBCompetId,
+                campeonatoPremierId       = novaInfo.campeonatoPremierId,
+                campeonatoChampionshipId  = novaInfo.campeonatoChampionshipId,
+                campeonatoLaLigaId        = novaInfo.campeonatoLaLigaId,
+                campeonatoSerieAId        = novaInfo.campeonatoSerieAId,
                 copaId        = novaInfo.copaId,
                 copaArgId     = novaInfo.copaArgId,
+                copaInglaterraId = novaInfo.copaInglaterraId,
+                copaEspanholaId = novaInfo.copaEspanholaId,
+                copaItalianaId = novaInfo.copaItalianaId,
                 supercopaId   = novaInfo.supercopaId,
+                supercopaInglaterraId = novaInfo.supercopaInglaterraId,
+                supercopaEspanholaId  = novaInfo.supercopaEspanholaId,
+                supercopaItalianaId   = novaInfo.supercopaItalianaId,
                 temporadaId   = novaInfo.temporadaId,
                 ano           = novaInfo.ano
             )
@@ -998,8 +1493,11 @@ class DashboardViewModel @Inject constructor(
                     temporadaId      = save.temporadaId
                 )
             }
+            // Exibe a mensagem de cumprimento/falha da meta em Snackbar
+            novaInfo.resultadoMeta?.let { _mensagem.value = it }
         } catch (e: Exception) {
-            // Registrar erro sem travar a UI
+            Log.e("DashboardViewModel", "encerrarTemporada falhou", e)
+            _mensagem.value = "Não foi possível encerrar a temporada. Tente novamente."
         }
         _uiState.value = DashboardUiState.Pronto
     }
@@ -1228,6 +1726,28 @@ class EscalacaoViewModel @Inject constructor(
         _escalacao.value = novaEscalacao
     }
 
+    /**
+     * Re-escala automaticamente os 11 melhores + reservas para a formação ATUAL,
+     * descartando ajustes manuais. Usado pelo botão "Escalar os melhores".
+     */
+    fun escalarMelhores() = viewModelScope.launch {
+        val atual = _escalacao.value ?: return@launch
+        val todos       = _elenco.value
+        val disponiveis = todos.filter { !it.lesionado && !it.suspenso }
+        val nova = IATimeRival.gerarEscalacao(atual.time, disponiveis)
+
+        // Limpa status de escalação e persiste a nova seleção ótima
+        todos.forEach { j -> jogadorRepository.atualizarEscalacao(j.id, 0, null) }
+        nova.titulares.forEach { jne ->
+            val pos = if (jne.posicaoUsada != jne.jogador.posicao) jne.posicaoUsada else null
+            jogadorRepository.atualizarEscalacao(jne.jogador.id, 1, pos)
+        }
+        nova.reservas.forEach { jne ->
+            jogadorRepository.atualizarEscalacao(jne.jogador.id, 2, null)
+        }
+        _escalacao.value = nova
+    }
+
     // Persiste o estilo de jogo no banco e atualiza o Time em memória
     fun mudarEstilo(estilo: br.com.managerfoot.data.database.entities.EstiloJogo) = viewModelScope.launch {
         val atual = _escalacao.value ?: return@launch
@@ -1325,7 +1845,8 @@ class MercadoViewModel @Inject constructor(
     fun contratarJogador(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         val time = timeRepository.buscarPorId(timeId) ?: return@launch
-        if (time.saldo < jogador.valorMercado) {
+        val preco = CalculadoraMercado.precoCompraUsuario(jogador.valorMercado)
+        if (time.saldo < preco) {
             _mensagem.value = "Saldo insuficiente para contratar ${jogador.nomeAbreviado}"
             return@launch
         }
@@ -1334,13 +1855,13 @@ class MercadoViewModel @Inject constructor(
             _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
             return@launch
         }
-        timeRepository.debitarSaldo(timeId, jogador.valorMercado)
+        timeRepository.debitarSaldo(timeId, preco)
         jogadorRepository.realizarTransferencia(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
                 timeCompradorId = timeId,
                 timeVendedorId = null,
-                valor = jogador.valorMercado,
+                valor = preco,
                 salarioProposto = jogador.salario,
                 contratoAnos = 2
             ),
@@ -1353,10 +1874,13 @@ class MercadoViewModel @Inject constructor(
     fun venderJogador(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
 
+        // Preço recebido pelo usuário: valor de mercado com deságio de liquidez.
+        val preco = CalculadoraMercado.precoVendaUsuario(jogador.valorMercado)
+
         // Selecionar um time da IA com saldo suficiente como comprador.
         // Exclui o próprio time do jogador e prefere times com mais reputação.
         val comprador = timeRepository.buscarTodosOrdenadosPorReputacao()
-            .filter { it.id != timeId && it.saldo >= jogador.valorMercado }
+            .filter { it.id != timeId && it.saldo >= preco }
             .randomOrNull()
 
         if (comprador == null) {
@@ -1364,22 +1888,22 @@ class MercadoViewModel @Inject constructor(
             return@launch
         }
 
-        timeRepository.creditarSaldo(timeId, jogador.valorMercado)
-        timeRepository.debitarSaldo(comprador.id, jogador.valorMercado)
+        timeRepository.creditarSaldo(timeId, preco)
+        timeRepository.debitarSaldo(comprador.id, preco)
 
         jogadorRepository.realizarVenda(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
                 timeCompradorId = comprador.id,
                 timeVendedorId = timeId,
-                valor = jogador.valorMercado,
+                valor = preco,
                 salarioProposto = jogador.salario,
                 contratoAnos = 3
             ),
             temporadaId = save.temporadaId,
             mes = save.mesAtual
         )
-        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(jogador.valorMercado)}"
+        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(preco)}"
     }
 
     // ─── Propostas recebidas de times da IA ──────────────────────────────────
@@ -1465,6 +1989,10 @@ class ClubesViewModel @Inject constructor(
     private val _elencoTimeSelecionado = MutableStateFlow<List<Jogador>>(emptyList())
     val elencoTimeSelecionado: StateFlow<List<Jogador>> = _elencoTimeSelecionado.asStateFlow()
 
+    // Histórico de competições do clube selecionado (ligas + copas), por temporada.
+    private val _historicoCompeticoes = MutableStateFlow<List<HistoricoTemporada>>(emptyList())
+    val historicoCompeticoes: StateFlow<List<HistoricoTemporada>> = _historicoCompeticoes.asStateFlow()
+
     private val _saldo = MutableStateFlow(0L)
     val saldo: StateFlow<Long> = _saldo.asStateFlow()
 
@@ -1488,6 +2016,7 @@ class ClubesViewModel @Inject constructor(
 
     fun selecionarTime(time: Time) {
         _timeSelecionado.value = time
+        _historicoCompeticoes.value = emptyList()
         elencoJob?.cancel()
         elencoJob = viewModelScope.launch {
             jogadorRepository.observeElenco(time.id).collect { elenco ->
@@ -1496,19 +2025,57 @@ class ClubesViewModel @Inject constructor(
                 )
             }
         }
+        viewModelScope.launch { carregarHistoricoCompeticoes(time.id) }
+    }
+
+    /** Campanhas do clube por competição/temporada (ligas + copas + supercopa). */
+    private suspend fun carregarHistoricoCompeticoes(timeId: Int) {
+        val ligas = gameRepository.buscarHistoricoDoTime(timeId).map { h ->
+            HistoricoTemporada(
+                campeonatoId = h.campeonatoId, nomeCampeonato = h.nomeCampeonato,
+                temporadaId = h.temporadaId, tipo = h.tipo, posicao = h.posicao,
+                vitorias = h.vitorias, empates = h.empates, derrotas = h.derrotas,
+                golsPro = h.golsPro, golsContra = h.golsContra, pontos = h.pontos, jogos = h.jogos
+            )
+        }
+        val copaPartidas = gameRepository.buscarHistoricoCopaDoTime(timeId) +
+            gameRepository.buscarHistoricoSupercopaDoTime(timeId)
+        val copas = copaPartidas.groupBy { it.campeonatoId }.map { (campId, lista) ->
+            var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
+            var faseAtingida: String? = null
+            for (p in lista) {
+                val ehCasa = p.timeCasaId == timeId
+                val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
+                val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
+                gp += gf; gc += ga
+                when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
+                if (p.fase != null) faseAtingida = p.fase
+            }
+            val first = lista.first()
+            HistoricoTemporada(
+                campeonatoId = campId, nomeCampeonato = first.nomeCampeonato,
+                temporadaId = first.temporadaId, tipo = "COPA_NACIONAL", posicao = 0,
+                vitorias = v, empates = e, derrotas = d, golsPro = gp, golsContra = gc,
+                pontos = 0, jogos = lista.size, faseAtingida = faseAtingida
+            )
+        }
+        _historicoCompeticoes.value = (ligas + copas)
+            .sortedWith(compareByDescending<HistoricoTemporada> { it.temporadaId }.thenBy { it.nomeCampeonato })
     }
 
     fun limparTimeSelecionado() {
         _timeSelecionado.value = null
         elencoJob?.cancel()
         _elencoTimeSelecionado.value = emptyList()
+        _historicoCompeticoes.value = emptyList()
     }
 
     fun fazerOferta(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         val time = timeRepository.buscarPorId(timeJogadorId) ?: return@launch
-        if (time.saldo < jogador.valorMercado) {
-            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(jogador.valorMercado)}"
+        val preco = CalculadoraMercado.precoCompraUsuario(jogador.valorMercado)
+        if (time.saldo < preco) {
+            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(preco)}"
             return@launch
         }
         val qtdElenco = jogadorRepository.contarJogadores(timeJogadorId)
@@ -1516,16 +2083,16 @@ class ClubesViewModel @Inject constructor(
             _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
             return@launch
         }
-        timeRepository.debitarSaldo(timeJogadorId, jogador.valorMercado)
+        timeRepository.debitarSaldo(timeJogadorId, preco)
         jogador.timeId?.let { vendedorId ->
-            timeRepository.creditarSaldo(vendedorId, jogador.valorMercado)
+            timeRepository.creditarSaldo(vendedorId, preco)
         }
         jogadorRepository.realizarTransferencia(
             oferta = OfertaTransferencia(
                 jogadorId = jogador.id,
                 timeCompradorId = timeJogadorId,
                 timeVendedorId = jogador.timeId,
-                valor = jogador.valorMercado,
+                valor = preco,
                 salarioProposto = jogador.salario,
                 contratoAnos = 3
             ),
@@ -1536,7 +2103,7 @@ class ClubesViewModel @Inject constructor(
         if (jogador.timeId != null) {
             gameRepository.recompletarElencoEmergenciaIA(jogador.timeId, save.temporadaId, save.mesAtual)
         }
-        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(jogador.valorMercado)}!"
+        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(preco)}!"
     }
 
     fun limparMensagem() { _mensagem.value = null }
@@ -1579,6 +2146,10 @@ class TabelaViewModel @Inject constructor(
     private var campeonatoUruClausuraId: Int = -1
     private var campeonatoUruIntermedId: Int = -1
     private var campeonatoUruBCompetId: Int = -1
+    private var campeonatoPremierId: Int = -1
+    private var campeonatoChampionshipId: Int = -1
+    private var campeonatoLaLigaId: Int = -1
+    private var campeonatoSerieAId: Int = -1
     private var copaId: Int = -1
 
     // timeId do campeão da Copa do Brasil corrente (-1 enquanto não encerrada)
@@ -1592,7 +2163,7 @@ class TabelaViewModel @Inject constructor(
     // Job do collector ativo — cancelado sempre que a divisão muda
     private var coletaJob: kotlinx.coroutines.Job? = null
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -1605,18 +2176,32 @@ class TabelaViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausuraId
         campeonatoUruIntermedId = campUruIntermedId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
+        campeonatoChampionshipId = campChampionshipId
+        campeonatoLaLigaId = campLaLigaId
+        campeonatoSerieAId = campSerieAId
         copaId = copaIdBrasil
         // Busca o campeão da Copa do Brasil se já encerrada
         _copaChampeaoTimeId.value = gameRepository.buscarCampeaoCopaSeEncerrada(copaIdBrasil)
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais
         listOf(campAId, campBId, campCId, campDId, campArgAId, campArgBId, campArgClausuraId,
-               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId).filter { it > 0 }.forEach { id ->
+               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId, campChampionshipId, campLaLigaId, campSerieAId).filter { it > 0 }.forEach { id ->
             gameRepository.recalcularClassificacao(id)
         }
-        // Determina a divisão inicial pelo time do jogador; usa Série A como fallback
+        // Determina a divisão inicial pelo time do jogador; usa Série A como fallback.
+        // Times ingleses têm divisao=11 (Premier) ou 12 (Championship); espanhóis têm
+        // divisao=13 (La Liga). Traduz para os códigos de aba 20/21/22 desta tela
+        // (11/12/13 já são usados por torneios uruguaios).
         val allTimes = timeRepository.observeTodos().first { it.isNotEmpty() }
-        val divisaoJogador = if (timeJogadorId > 0) allTimes.find { it.id == timeJogadorId }?.divisao ?: 1 else 1
+        val divTime = if (timeJogadorId > 0) allTimes.find { it.id == timeJogadorId }?.divisao ?: 1 else 1
+        val divisaoJogador = when (divTime) {
+            11 -> 20
+            12 -> 21
+            13 -> 22
+            14 -> 23
+            else -> divTime
+        }
         _divisaoSelecionada.value = divisaoJogador
         when (divisaoJogador) {
             8 -> coletarTabelaGeral()
@@ -1641,6 +2226,10 @@ class TabelaViewModel @Inject constructor(
         9 -> campeonatoUruAperturaId; 10 -> campeonatoUruBId
         11 -> campeonatoUruIntermedId; 12 -> campeonatoUruClausuraId
         14 -> campeonatoUruBCompetId
+        20 -> campeonatoPremierId
+        21 -> campeonatoChampionshipId
+        22 -> campeonatoLaLigaId
+        23 -> campeonatoSerieAId
         else -> campeonatoArgAId
     }
 
@@ -1774,6 +2363,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoDId: Int = -1
     private var copaId: Int = -1
     private var copaArgId: Int = -1
+    private var copaInglaterraId: Int = -1
     private var campeonatoArgAId: Int = -1
     private var campeonatoArgBId: Int = -1
     private var campeonatoArgClausuraId: Int = -1
@@ -1782,6 +2372,11 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoUruClausuraId: Int = -1
     private var campeonatoUruBId: Int = -1
     private var campeonatoUruBCompetId: Int = -1
+    private var campeonatoPremierId: Int = -1
+    private var campeonatoChampionshipId: Int = -1
+    private var campeonatoLaLigaId: Int = -1
+    private var campeonatoSerieAId: Int = -1
+    private var campeonatoAmistososId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -1789,13 +2384,14 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
         campeonatoDId = campDId
         this@ArtilheirosViewModel.copaId = copaId
         this@ArtilheirosViewModel.copaArgId = copaArgId
+        this@ArtilheirosViewModel.copaInglaterraId = copaIng
         campeonatoArgAId = campArgAId
         campeonatoArgBId = campArgBId
         campeonatoArgClausuraId = campArgClausuraId
@@ -1804,6 +2400,11 @@ class ArtilheirosViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausId
         campeonatoUruBId = campUruBId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
+        campeonatoChampionshipId = campChampionshipId
+        campeonatoLaLigaId = campLaLigaId
+        campeonatoSerieAId = campSerieAId
+        campeonatoAmistososId = campAmistosos
         _divisaoSelecionada.value = divisaoInicial
         coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
@@ -1827,7 +2428,23 @@ class ArtilheirosViewModel @Inject constructor(
         5 -> copaId; 10 -> copaArgId; 7 -> campeonatoArgBId; 8 -> campeonatoArgAId; 9 -> campeonatoArgClausuraId
         20 -> campeonatoUruAperturaId; 21 -> campeonatoUruIntermedId; 22 -> campeonatoUruClausuraId
         23 -> campeonatoUruBId; 24 -> campeonatoUruBCompetId
+        30 -> campeonatoPremierId
+        31 -> campeonatoChampionshipId
+        32 -> campeonatoLaLigaId
+        33 -> copaInglaterraId
+        34 -> campeonatoSerieAId
         else -> -1 // div=6,25,26 (combinados) e div=0,100,200,300 (todos) tratados em coletarArtilheiros
+    }
+
+    /** País do campeonato de cada divisão do histórico (o `tipo` sozinho não separa países). */
+    private fun paisDaDivHistorico(div: Int): String? = when (div) {
+        1, 2, 3, 4          -> "Brasil"
+        6, 7, 8, 9          -> "Argentina"
+        20, 21, 22, 23, 24, 25, 26 -> "Uruguay"
+        30, 31, 33          -> "Inglaterra"
+        32                  -> "Espanha"
+        34                  -> "Italia"
+        else                -> null
     }
 
     /** Mapeia divisão → tipo(s) de campeonato para filtrar o histórico */
@@ -1841,6 +2458,11 @@ class ArtilheirosViewModel @Inject constructor(
         7, 23, 26   -> listOf("EXTRANGEIRO_DIVISAO2") // Argentina/Uruguai Segunda
         20, 21, 22  -> listOf("EXTRANGEIRO_DIVISAO1") // Uruguai Apertura/Intermed/Clausura
         24          -> listOf("EXTRANGEIRO_DIVISAO2") // Uruguai Competencia
+        30          -> listOf("NACIONAL_DIVISAO1")    // Premier League (mesmo tipo da Série A)
+        31          -> listOf("NACIONAL_DIVISAO2")    // EFL Championship
+        32          -> listOf("NACIONAL_DIVISAO1")    // La Liga
+        33          -> listOf("COPA_NACIONAL")        // Copa da Inglaterra
+        34          -> listOf("NACIONAL_DIVISAO1")    // Serie A italiana
         else -> emptyList()
     }
 
@@ -1851,7 +2473,9 @@ class ArtilheirosViewModel @Inject constructor(
             0    -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
                            campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
                            campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
-                           campeonatoUruBId, campeonatoUruBCompetId).filter { it > 0 }
+                           campeonatoUruBId, campeonatoUruBCompetId,
+                           campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId,
+                           campeonatoSerieAId, copaInglaterraId, campeonatoAmistososId).filter { it > 0 }
             // Combinados por país
             100  -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId).filter { it > 0 }
             200  -> listOf(campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, copaArgId).filter { it > 0 }
@@ -1893,8 +2517,16 @@ class ArtilheirosViewModel @Inject constructor(
             }
             else -> {
                 val tipos = tiposDaDiv(div)
-                launch { gameRepository.observarArtilheirosHistoricoFiltrado(tipos).collect { _artilheirosHistorico.value = it } }
-                launch { gameRepository.observarAssistentesHistoricoFiltrado(tipos).collect { _assistentesHistorico.value = it } }
+                val pais = paisDaDivHistorico(div)
+                if (pais != null) {
+                    // Filtra por país + tipo — evita misturar Brasil/Premier/La Liga/Serie A
+                    // (que compartilham NACIONAL_DIVISAO1) ou as copas nacionais entre países.
+                    launch { gameRepository.observarArtilheirosHistoricoPaisTipo(pais, tipos).collect { _artilheirosHistorico.value = it } }
+                    launch { gameRepository.observarAssistentesHistoricoPaisTipo(pais, tipos).collect { _assistentesHistorico.value = it } }
+                } else {
+                    launch { gameRepository.observarArtilheirosHistoricoFiltrado(tipos).collect { _artilheirosHistorico.value = it } }
+                    launch { gameRepository.observarAssistentesHistoricoFiltrado(tipos).collect { _assistentesHistorico.value = it } }
+                }
             }
         }
     }
@@ -1922,11 +2554,154 @@ class HallDaFamaViewModel @Inject constructor(
                 100  -> lista.filter { it.divisao in 1..6 }
                 200  -> lista.filter { it.divisao in 7..10 || it.divisao == 17 }
                 300  -> lista.filter { it.divisao in 11..16 }
+                400  -> lista.filter { it.divisao in 20..21 || it.divisao == 23 || it.divisao == 27 }   // Inglaterra (Premier + Championship + Copa + Supercopa)
+                500  -> lista.filter { it.divisao == 22 || it.divisao == 25 || it.divisao == 28 }       // Espanha (La Liga + Copa + Supercopa)
+                600  -> lista.filter { it.divisao == 24 || it.divisao == 26 || it.divisao == 29 }       // Italia (Serie A + Copa + Supercopa)
                 else -> lista.filter { it.divisao == div }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun selecionarDivisao(div: Int) { _divisaoSelecionada.value = div }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MetasViewModel — meta de temporada de cada time
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class MetasViewModel @Inject constructor(
+    private val timeRepository: TimeRepository,
+    private val gameDataStore: GameDataStore
+) : ViewModel() {
+    val times: StateFlow<List<Time>> = timeRepository.observeTodos()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** País do time do jogador — usado para pré-selecionar a aba de país. */
+    val paisJogador: StateFlow<String?> = combine(times, gameDataStore.saveState) { lista, save ->
+        lista.find { it.id == save.timeIdJogador }?.pais
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ConquistasViewModel — títulos conquistados por um time
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class ConquistasViewModel @Inject constructor(
+    private val gameRepository: GameRepository,
+    private val timeRepository: TimeRepository
+) : ViewModel() {
+
+    private val _timeId = MutableStateFlow(0)
+
+    private val _time = MutableStateFlow<br.com.managerfoot.domain.model.Time?>(null)
+    val time: StateFlow<br.com.managerfoot.domain.model.Time?> = _time.asStateFlow()
+
+    /**
+     * Lista de conquistas do time, ordenadas por ano DESC.
+     * Cada item é um HallDaFamaEntity onde campeaoTimeId == timeId.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val conquistas: StateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>> =
+        _timeId
+            .filter { it > 0 }
+            .flatMapLatest { id -> gameRepository.observarConquistasDoTime(id) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Vice-campeonatos do time (opcional, exibido em seção secundária). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val vices: StateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>> =
+        _timeId
+            .filter { it > 0 }
+            .flatMapLatest { id -> gameRepository.observarVicesDoTime(id) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun carregar(timeId: Int) {
+        _timeId.value = timeId
+        viewModelScope.launch {
+            _time.value = timeRepository.buscarPorId(timeId)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RankingTecnicosViewModel — ranking de técnicos por pontos
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class RankingTecnicosViewModel @Inject constructor(
+    private val tecnicoRepository: TecnicoRepository,
+    private val timeRepository: TimeRepository
+) : ViewModel() {
+
+    val ranking: StateFlow<List<br.com.managerfoot.data.database.entities.TecnicoEntity>> =
+        tecnicoRepository.observeRanking()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val livres: StateFlow<List<br.com.managerfoot.data.database.entities.TecnicoEntity>> =
+        tecnicoRepository.observeLivres()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Mapa timeId → Time (escudo + nome) para enriquecer a lista. */
+    val timesPorId: StateFlow<Map<Int, br.com.managerfoot.domain.model.Time>> =
+        timeRepository.observeTodos()
+            .map { lista -> lista.associateBy { it.id } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HistoricoTecnicoViewModel — carreira completa de um técnico
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class HistoricoTecnicoViewModel @Inject constructor(
+    private val tecnicoRepository: TecnicoRepository
+) : ViewModel() {
+
+    private val _tecnico = MutableStateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?>(null)
+    val tecnico: StateFlow<br.com.managerfoot.data.database.entities.TecnicoEntity?> = _tecnico.asStateFlow()
+
+    private val _passagens = MutableStateFlow<List<br.com.managerfoot.data.database.entities.PassagemTecnicoEntity>>(emptyList())
+    val passagens: StateFlow<List<br.com.managerfoot.data.database.entities.PassagemTecnicoEntity>> = _passagens.asStateFlow()
+
+    private val _titulos = MutableStateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>>(emptyList())
+    val titulos: StateFlow<List<br.com.managerfoot.data.database.entities.HallDaFamaEntity>> = _titulos.asStateFlow()
+
+    private val _carregando = MutableStateFlow(false)
+    val carregando: StateFlow<Boolean> = _carregando.asStateFlow()
+
+    fun carregar(tecnicoId: Int) {
+        viewModelScope.launch {
+            _carregando.value = true
+            _tecnico.value = tecnicoRepository.buscarPorId(tecnicoId)
+            _passagens.value = tecnicoRepository.buscarPassagens(tecnicoId)
+            _titulos.value = tecnicoRepository.buscarTitulos(tecnicoId)
+            _carregando.value = false
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HistoricoJogadorViewModel — carreira completa de um jogador
+// ═══════════════════════════════════════════════════════════
+@HiltViewModel
+class HistoricoJogadorViewModel @Inject constructor(
+    private val jogadorRepository: JogadorRepository
+) : ViewModel() {
+
+    private val _jogador = MutableStateFlow<br.com.managerfoot.domain.model.Jogador?>(null)
+    val jogador: StateFlow<br.com.managerfoot.domain.model.Jogador?> = _jogador.asStateFlow()
+
+    private val _historico = MutableStateFlow<HistoricoCarreira?>(null)
+    val historico: StateFlow<HistoricoCarreira?> = _historico.asStateFlow()
+
+    private val _carregando = MutableStateFlow(false)
+    val carregando: StateFlow<Boolean> = _carregando.asStateFlow()
+
+    fun carregar(jogadorId: Int) {
+        viewModelScope.launch {
+            _carregando.value = true
+            _jogador.value = jogadorRepository.buscarPorId(jogadorId)
+            _historico.value = jogadorRepository.buscarHistoricoCarreira(jogadorId)
+            _carregando.value = false
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2061,17 +2836,38 @@ class CopaChaveamentoViewModel @Inject constructor(
     private val _partidasArg = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
     val partidasArg: StateFlow<List<CopaPartidaDto>> = _partidasArg.asStateFlow()
 
+    private val _partidasIng = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasIng: StateFlow<List<CopaPartidaDto>> = _partidasIng.asStateFlow()
+
+    private val _partidasEsp = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasEsp: StateFlow<List<CopaPartidaDto>> = _partidasEsp.asStateFlow()
+
+    private val _partidasIta = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasIta: StateFlow<List<CopaPartidaDto>> = _partidasIta.asStateFlow()
+
     fun carregar(copaId: Int) = viewModelScope.launch {
         if (copaId <= 0) return@launch
         gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it }
     }
 
-    fun carregarAmbas(copaId: Int, copaArgId: Int) = viewModelScope.launch {
+    fun carregarTodas(
+        copaId: Int, copaArgId: Int, copaInglaterraId: Int,
+        copaEspanholaId: Int = -1, copaItalianaId: Int = -1
+    ) = viewModelScope.launch {
         if (copaId > 0) {
             launch { gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it } }
         }
         if (copaArgId > 0) {
             launch { gameRepository.observarCopaPartidas(copaArgId).collect { _partidasArg.value = it } }
+        }
+        if (copaInglaterraId > 0) {
+            launch { gameRepository.observarCopaPartidas(copaInglaterraId).collect { _partidasIng.value = it } }
+        }
+        if (copaEspanholaId > 0) {
+            launch { gameRepository.observarCopaPartidas(copaEspanholaId).collect { _partidasEsp.value = it } }
+        }
+        if (copaItalianaId > 0) {
+            launch { gameRepository.observarCopaPartidas(copaItalianaId).collect { _partidasIta.value = it } }
         }
     }
 }
@@ -2079,14 +2875,46 @@ class CopaChaveamentoViewModel @Inject constructor(
 // ═══════════════════════════════════════════════════════════
 //  RankingGeralViewModel
 // ═══════════════════════════════════════════════════════════
+/** Mapeia país → continente para os recortes do ranking. Delega ao domínio,
+ *  que é a mesma fonte usada para decidir o escopo das regras de pontuação. */
+fun continenteDePais(pais: String): String = Continentes.dePais(pais)
+
+/** Linha do ranking para a UI, com país e continente resolvidos. */
+data class RankingGeralUi(
+    val entry: RankingGeralEntity,
+    val pais: String,
+    val continente: String
+)
+
 @HiltViewModel
 class RankingGeralViewModel @Inject constructor(
-    private val gameRepository: GameRepository
+    gameRepository: GameRepository,
+    gameDataStore: GameDataStore,
+    private val timeRepository: TimeRepository
 ) : ViewModel() {
 
-    val ranking: StateFlow<List<RankingGeralEntity>> =
-        gameRepository.observarRankingGeral()
+    val ranking: StateFlow<List<RankingGeralUi>> =
+        gameRepository.observarRankingGeralComPais()
+            .map { lista ->
+                lista.map { RankingGeralUi(it.ranking, it.pais, continenteDePais(it.pais)) }
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // País do time do jogador — usado como recorte padrão ao abrir a tela.
+    val paisJogador: StateFlow<String?> =
+        flow {
+            val save = gameDataStore.saveState.first()
+            emit(timeRepository.buscarPorId(save.timeIdJogador)?.pais)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // ── Ranking CONMEBOL (por colocação nas competições) ──────────────
+    // A depreciação anual depende do ano corrente do save, então o flow só é
+    // montado depois de ler o ano; antes disso a lista fica vazia.
+    val rankingConmebol: StateFlow<List<RankingConmebolLinha>> =
+        flow {
+            val ano = gameDataStore.saveState.first().anoAtual
+            emitAll(gameRepository.observarRankingConmebol(ano))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2501,9 +3329,35 @@ class EstadioViewModel @Inject constructor(
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
 
+    // Projeção de público/receita por jogo em casa (adversário neutro nível 5),
+    // com os preços por setor atuais — atualiza ao carregar e ao mudar preços.
+    private val _projecao = MutableStateFlow(0 to 0L)
+    val projecao: StateFlow<Pair<Int, Long>> = _projecao.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
         _estadio.value = estadioRepository.buscarOuCriar(timeId)
         _time.value = timeRepository.buscarPorId(timeId)
+        recalcularProjecao()
+    }
+
+    private fun recalcularProjecao() {
+        val e = _estadio.value; val t = _time.value
+        _projecao.value = if (e != null && t != null) {
+            br.com.managerfoot.domain.engine.MotorFinanceiro.calcularPublicoSetorizado(
+                t, 5, null,
+                br.com.managerfoot.data.database.entities.EstadioEntity.CAPACIDADE_ARQUIBANCADA[e.nivelArquibancada],
+                br.com.managerfoot.data.database.entities.EstadioEntity.CAPACIDADE_CADEIRA[e.nivelCadeira],
+                br.com.managerfoot.data.database.entities.EstadioEntity.CAPACIDADE_CAMAROTE[e.nivelCamarote],
+                e.precoArquibancada, e.precoCadeira, e.precoCamarote
+            )
+        } else 0 to 0L
+    }
+
+    /** Salva os novos preços por setor (centavos) e atualiza a projeção. */
+    fun atualizarPrecos(timeId: Int, precoArq: Long, precoCad: Long, precoCam: Long) = viewModelScope.launch {
+        _estadio.value = estadioRepository.atualizarPrecos(timeId, precoArq, precoCad, precoCam)
+        recalcularProjecao()
+        _mensagem.value = "Preços de ingresso atualizados."
     }
 
     fun upgradeSetor(timeId: Int, setor: Int) = viewModelScope.launch {
@@ -2518,6 +3372,7 @@ class EstadioViewModel @Inject constructor(
             )
             _estadio.value = estadioRepository.buscarOuCriar(timeId)
             _time.value = timeRepository.buscarPorId(timeId)
+            recalcularProjecao()
             _mensagem.value = "Upgrade realizado com sucesso!"
         } else {
             _mensagem.value = "Saldo insuficiente ou nível máximo atingido."
@@ -2533,14 +3388,26 @@ class EstadioViewModel @Inject constructor(
 @HiltViewModel
 class JunioresViewModel @Inject constructor(
     private val jogadorRepository: br.com.managerfoot.data.repository.JogadorRepository,
+    private val timeRepository: TimeRepository,
     private val gameDataStore: GameDataStore
 ) : ViewModel() {
+
+    companion object {
+        const val CUSTO_FORMACAO = 1_000_000_00L  // R$ 1.000.000 por 2 jogadores
+        const val QTD_FORMACAO = 2
+    }
 
     private val _juniores = MutableStateFlow<List<br.com.managerfoot.domain.model.Jogador>>(emptyList())
     val juniores: StateFlow<List<br.com.managerfoot.domain.model.Jogador>> = _juniores.asStateFlow()
 
     private val _jogadorSelecionado = MutableStateFlow<br.com.managerfoot.domain.model.Jogador?>(null)
     val jogadorSelecionado: StateFlow<br.com.managerfoot.domain.model.Jogador?> = _jogadorSelecionado.asStateFlow()
+
+    private val _saldo = MutableStateFlow(0L)
+    val saldo: StateFlow<Long> = _saldo.asStateFlow()
+
+    private val _formando = MutableStateFlow(false)
+    val formando: StateFlow<Boolean> = _formando.asStateFlow()
 
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
@@ -2549,7 +3416,28 @@ class JunioresViewModel @Inject constructor(
 
     fun carregar(timeId: Int) = viewModelScope.launch {
         timeIdAtual = timeId
+        launch { _saldo.value = timeRepository.buscarPorId(timeId)?.saldo ?: 0L }
         jogadorRepository.observeJuniores(timeId).collect { _juniores.value = it }
+    }
+
+    /** Forma [QTD_FORMACAO] novos jogadores na base gastando [CUSTO_FORMACAO]. */
+    fun formarJuniores() = viewModelScope.launch {
+        if (timeIdAtual <= 0 || _formando.value) return@launch
+        _formando.value = true
+        val save = gameDataStore.saveState.first()
+        val ok = jogadorRepository.formarJuniores(
+            timeId = timeIdAtual,
+            temporadaId = save.temporadaId,
+            mes = save.mesAtual,
+            quantidade = QTD_FORMACAO,
+            custo = CUSTO_FORMACAO
+        )
+        _saldo.value = timeRepository.buscarPorId(timeIdAtual)?.saldo ?: _saldo.value
+        _mensagem.value = if (ok)
+            "$QTD_FORMACAO novos jogadores formados na base! (−R$ 1.000.000)"
+        else
+            "Saldo insuficiente para formar jogadores (custo: R$ 1.000.000)."
+        _formando.value = false
     }
 
     fun selecionarJogador(jogador: br.com.managerfoot.domain.model.Jogador?) {
@@ -2613,11 +3501,16 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoUruClausuraId = -1
     private var campeonatoUruBId = -1
     private var campeonatoUruBCompetId = -1
+    private var campeonatoPremierId = -1
+    private var campeonatoChampionshipId = -1
+    private var campeonatoLaLigaId = -1
+    private var campeonatoSerieAId = -1
 
     private var coletarJob: Job? = null
 
     fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1,
-                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1) = viewModelScope.launch {
+                 campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1,
+                 campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2630,6 +3523,10 @@ class RodadaViewModel @Inject constructor(
         campeonatoUruClausuraId = campUruClausId
         campeonatoUruBId = campUruBId
         campeonatoUruBCompetId = campUruBCompetId
+        campeonatoPremierId = campPremierId
+        campeonatoChampionshipId = campChampionshipId
+        campeonatoLaLigaId = campLaLigaId
+        campeonatoSerieAId = campSerieAId
         atualizarMaxEColetar()
     }
 
@@ -2688,6 +3585,10 @@ class RodadaViewModel @Inject constructor(
         12 -> campeonatoUruClausuraId
         13 -> campeonatoUruBId
         14 -> campeonatoUruBCompetId
+        20 -> campeonatoPremierId
+        21 -> campeonatoChampionshipId
+        22 -> campeonatoLaLigaId
+        23 -> campeonatoSerieAId
         else -> campeonatoArgAId
     }
 
@@ -2700,6 +3601,18 @@ class RodadaViewModel @Inject constructor(
 //  Tab 0 — Elenco com progressão individual
 //  Tab 1 — Pesquisa global com filtros (posição, força, idade)
 // ═══════════════════════════════════════════════════════════
+data class FiltrosPesquisaJogador(
+    val posicao: Posicao? = null,
+    val forcaMin: Int = 0,
+    val forcaMax: Int = 99,
+    val idadeMin: Int = JogadoresViewModel.IDADE_MIN_PADRAO,
+    val idadeMax: Int = JogadoresViewModel.IDADE_MAX_PADRAO,
+    val valorMin: Long = 0,
+    val valorMax: Long = JogadoresViewModel.VALOR_MAX_PADRAO,
+    val salarioMin: Long = 0,
+    val salarioMax: Long = JogadoresViewModel.SALARIO_MAX_PADRAO
+)
+
 @HiltViewModel
 class JogadoresViewModel @Inject constructor(
     private val jogadorRepository: JogadorRepository,
@@ -2708,19 +3621,23 @@ class JogadoresViewModel @Inject constructor(
     private val gameDataStore: GameDataStore
 ) : ViewModel() {
 
+    companion object {
+        const val IDADE_MIN_PADRAO = 16
+        const val IDADE_MAX_PADRAO = 40
+        const val VALOR_MAX_PADRAO = 300_000_000_00L  // R$ 300 mi (sem teto efetivo)
+        const val SALARIO_MAX_PADRAO = 2_000_000_00L  // R$ 2 mi/mês (sem teto efetivo)
+    }
+
     private var timeId = -1
 
     private val _elenco = MutableStateFlow<List<Jogador>>(emptyList())
     val elenco: StateFlow<List<Jogador>> = _elenco.asStateFlow()
 
-    private val _todosList      = MutableStateFlow<List<Jogador>>(emptyList())
-    private val _posicaoFiltro  = MutableStateFlow<Posicao?>(null)
-    private val _forcaMinFiltro = MutableStateFlow(0)
-    private val _idadeMaxFiltro = MutableStateFlow(40)
+    private val _todosList = MutableStateFlow<List<Jogador>>(emptyList())
 
-    val posicaoFiltro:  StateFlow<Posicao?> = _posicaoFiltro.asStateFlow()
-    val forcaMinFiltro: StateFlow<Int>      = _forcaMinFiltro.asStateFlow()
-    val idadeMaxFiltro: StateFlow<Int>      = _idadeMaxFiltro.asStateFlow()
+    // Filtros de pesquisa aplicados (um único objeto — aplicado ao concluir no painel).
+    private val _filtros = MutableStateFlow(FiltrosPesquisaJogador())
+    val filtros: StateFlow<FiltrosPesquisaJogador> = _filtros.asStateFlow()
 
     private val _saldo = MutableStateFlow(0L)
     val saldo: StateFlow<Long> = _saldo.asStateFlow()
@@ -2734,12 +3651,14 @@ class JogadoresViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val resultadoPesquisa: StateFlow<List<Jogador>> = combine(
-        _todosList, _posicaoFiltro, _forcaMinFiltro, _idadeMaxFiltro
-    ) { todos, posicao, forcaMin, idadeMax ->
+        _todosList, _filtros
+    ) { todos, f ->
         todos.filter { j ->
-            (posicao == null || j.posicao == posicao) &&
-            j.forca >= forcaMin &&
-            j.idade <= idadeMax
+            (f.posicao == null || j.posicao == f.posicao) &&
+            j.forca in f.forcaMin..f.forcaMax &&
+            j.idade in f.idadeMin..f.idadeMax &&
+            j.valorMercado in f.valorMin..f.valorMax &&
+            j.salario in f.salarioMin..f.salarioMax
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -2753,17 +3672,17 @@ class JogadoresViewModel @Inject constructor(
         }
     }
 
-    fun filtrarPosicao(posicao: Posicao?) { _posicaoFiltro.value = posicao }
-    fun filtrarForcaMin(min: Int)         { _forcaMinFiltro.value = min }
-    fun filtrarIdadeMax(max: Int)         { _idadeMaxFiltro.value = max }
-    fun limparFiltros()                   { _posicaoFiltro.value = null; _forcaMinFiltro.value = 0; _idadeMaxFiltro.value = 40 }
-    fun limparMensagem()                  { _mensagem.value = null }
+    /** Aplica todos os filtros de uma vez (ao concluir no painel de filtros). */
+    fun aplicarFiltros(filtros: FiltrosPesquisaJogador) { _filtros.value = filtros }
+    fun limparFiltros() { _filtros.value = FiltrosPesquisaJogador() }
+    fun limparMensagem() { _mensagem.value = null }
 
     fun fazerOferta(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
         val time = timeRepository.buscarPorId(timeId) ?: return@launch
-        if (time.saldo < jogador.valorMercado) {
-            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(jogador.valorMercado)}"
+        val preco = CalculadoraMercado.precoCompraUsuario(jogador.valorMercado)
+        if (time.saldo < preco) {
+            _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(preco)}"
             return@launch
         }
         val qtdElenco = jogadorRepository.contarJogadores(timeId)
@@ -2771,14 +3690,14 @@ class JogadoresViewModel @Inject constructor(
             _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
             return@launch
         }
-        timeRepository.debitarSaldo(timeId, jogador.valorMercado)
-        jogador.timeId?.let { vendedorId -> timeRepository.creditarSaldo(vendedorId, jogador.valorMercado) }
+        timeRepository.debitarSaldo(timeId, preco)
+        jogador.timeId?.let { vendedorId -> timeRepository.creditarSaldo(vendedorId, preco) }
         jogadorRepository.realizarTransferencia(
             oferta = OfertaTransferencia(
                 jogadorId       = jogador.id,
                 timeCompradorId = timeId,
                 timeVendedorId  = jogador.timeId,
-                valor           = jogador.valorMercado,
+                valor           = preco,
                 salarioProposto = jogador.salario,
                 contratoAnos    = 3
             ),
@@ -2789,33 +3708,34 @@ class JogadoresViewModel @Inject constructor(
         if (jogador.timeId != null) {
             gameRepository.recompletarElencoEmergenciaIA(jogador.timeId, save.temporadaId, save.mesAtual)
         }
-        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(jogador.valorMercado)}!"
+        _mensagem.value = "${jogador.nomeAbreviado} contratado por ${formatarValor(preco)}!"
     }
 
     fun venderJogador(jogador: Jogador) = viewModelScope.launch {
         val save = gameDataStore.saveState.first()
+        val preco = CalculadoraMercado.precoVendaUsuario(jogador.valorMercado)
         val comprador = timeRepository.buscarTodosOrdenadosPorReputacao()
-            .filter { it.id != timeId && it.saldo >= jogador.valorMercado }
+            .filter { it.id != timeId && it.saldo >= preco }
             .randomOrNull()
         if (comprador == null) {
             _mensagem.value = "Nenhum clube interessado em ${jogador.nomeAbreviado} no momento."
             return@launch
         }
-        timeRepository.creditarSaldo(timeId, jogador.valorMercado)
-        timeRepository.debitarSaldo(comprador.id, jogador.valorMercado)
+        timeRepository.creditarSaldo(timeId, preco)
+        timeRepository.debitarSaldo(comprador.id, preco)
         jogadorRepository.realizarVenda(
             oferta = OfertaTransferencia(
                 jogadorId       = jogador.id,
                 timeCompradorId = comprador.id,
                 timeVendedorId  = timeId,
-                valor           = jogador.valorMercado,
+                valor           = preco,
                 salarioProposto = jogador.salario,
                 contratoAnos    = 3
             ),
             temporadaId = save.temporadaId,
             mes         = save.mesAtual
         )
-        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(jogador.valorMercado)}!"
+        _mensagem.value = "${jogador.nomeAbreviado} vendido para ${comprador.nome} por ${formatarValor(preco)}!"
     }
 
     fun renovarContrato(jogador: Jogador, novoSalario: Long, novosAnos: Int) = viewModelScope.launch {
@@ -2926,8 +3846,8 @@ class TreinamentoViewModel @Inject constructor(
         val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
         if (jogador.treinouNestaCiclo) return@launch
         jogadorRepository.treinarJogador(jogadorId)
-        val novaFadiga = ((jogador.fadiga - 0.05f).coerceIn(0f, 1f) * 100).toInt()
-        _mensagem.value = "${jogador.nomeAbreviado} treinou. Fadiga: $novaFadiga%"
+        val novaEnergia = ((jogador.fadiga - 0.05f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} treinou. Energia: $novaEnergia%"
     }
 
     fun treinarTudo(timeId: Int) = viewModelScope.launch {
@@ -2944,8 +3864,8 @@ class TreinamentoViewModel @Inject constructor(
         val jogador = _elenco.value.find { it.id == jogadorId } ?: return@launch
         if (jogador.treinouNestaCiclo) return@launch
         jogadorRepository.descansarJogador(jogadorId)
-        val novaFadiga = ((jogador.fadiga + 0.10f).coerceIn(0f, 1f) * 100).toInt()
-        _mensagem.value = "${jogador.nomeAbreviado} descansou. Fadiga: $novaFadiga%"
+        val novaEnergia = ((jogador.fadiga + 0.10f).coerceIn(0f, 1f) * 100).toInt()
+        _mensagem.value = "${jogador.nomeAbreviado} descansou. Energia: $novaEnergia%"
     }
 
     fun limparMensagem() { _mensagem.value = null }

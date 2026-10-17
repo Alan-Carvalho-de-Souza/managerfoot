@@ -32,7 +32,7 @@ interface JogadorDao {
         WHERE timeId = :timeId
           AND categoriaBase = 0
           AND lesionado = 0
-          AND suspensoCicloAmarelos = 0
+          AND partidasSuspensao = 0
         ORDER BY forca DESC
     """)
     suspend fun buscarDisponiveisPorTime(timeId: Int): List<JogadorEntity>
@@ -65,6 +65,10 @@ interface JogadorDao {
 
     @Query("UPDATE jogadores SET timeId = :timeId WHERE id = :jogadorId")
     suspend fun transferirJogador(jogadorId: Int, timeId: Int?)
+
+    /** Transfere e carimba a janela da transferência (anti-revenda IA na mesma janela). */
+    @Query("UPDATE jogadores SET timeId = :timeId, janelaUltimaTransferencia = :janela WHERE id = :jogadorId")
+    suspend fun transferirJogadorComJanela(jogadorId: Int, timeId: Int?, janela: Int)
 
     @Query("UPDATE jogadores SET lesionado = :lesionado WHERE id = :jogadorId")
     suspend fun atualizarLesao(jogadorId: Int, lesionado: Boolean)

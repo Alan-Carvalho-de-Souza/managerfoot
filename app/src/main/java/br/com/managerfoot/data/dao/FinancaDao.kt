@@ -44,6 +44,15 @@ interface FinancaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirTransferencia(transferencia: TransferenciaEntity): Long
 
+    /** Todas as transferências de um jogador específico, ordenadas
+     *  cronologicamente — usado para reconstruir o histórico de carreira. */
+    @Query("""
+        SELECT * FROM transferencias
+        WHERE jogadorId = :jogadorId
+        ORDER BY temporadaId ASC, mes ASC
+    """)
+    suspend fun buscarTransferenciasDoJogador(jogadorId: Int): List<TransferenciaEntity>
+
     @Query("DELETE FROM financas")
     suspend fun deleteAll()
 

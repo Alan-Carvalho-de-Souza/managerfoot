@@ -15,7 +15,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 91,
-      "escudo_res": ""
+      "escudo_res": "escudo_nacionaluru"
     },
     {
       "id": 142,
@@ -32,7 +32,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 93,
-      "escudo_res": ""
+      "escudo_res": "escudo_penarol"
     },
     {
       "id": 143,
@@ -49,7 +49,7 @@
       "tatica": "4-3-3",
       "estilo": "DEFENSIVO",
       "reputacao": 77,
-      "escudo_res": ""
+      "escudo_res": "escudo_defensorsporting"
     },
     {
       "id": 144,
@@ -66,7 +66,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 74,
-      "escudo_res": ""
+      "escudo_res": "escudo_danubio"
     },
     {
       "id": 145,
@@ -83,7 +83,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_liverpoolfcuru"
     },
     {
       "id": 148,
@@ -100,7 +100,7 @@
       "tatica": "4-4-2",
       "estilo": "CONTRA_ATAQUE",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_cerrolargouru"
     },
     {
       "id": 149,
@@ -117,7 +117,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 68,
-      "escudo_res": ""
+      "escudo_res": "escudo_bostonriver"
     },
     {
       "id": 150,
@@ -134,7 +134,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_montevideowanderers"
     },
     {
       "id": 151,
@@ -151,7 +151,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 65,
-      "escudo_res": ""
+      "escudo_res": "escudo_centralespanol"
     },
     {
       "id": 153,
@@ -168,7 +168,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_racinguru"
     },
     {
       "id": 154,
@@ -185,7 +185,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_progresouru"
     },
     {
       "id": 155,
@@ -202,7 +202,7 @@
       "tatica": "4-3-3",
       "estilo": "CONTRA_ATAQUE",
       "reputacao": 65,
-      "escudo_res": ""
+      "escudo_res": "escudo_torqueuru"
     },
     {
       "id": 156,
@@ -219,7 +219,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_cerrouru"
     },
     {
       "id": 164,
@@ -236,7 +236,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 63,
-      "escudo_res": ""
+      "escudo_res": "escudo_juventuduru"
     },
     {
       "id": 167,
@@ -253,7 +253,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 62,
-      "escudo_res": ""
+      "escudo_res": "escudo_albionfcuru"
     },
     {
       "id": 168,
@@ -270,7 +270,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_deportivomaldonado"
     },
     {
       "id": 146,

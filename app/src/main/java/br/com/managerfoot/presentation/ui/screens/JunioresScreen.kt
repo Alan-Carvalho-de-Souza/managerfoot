@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -46,6 +48,8 @@ fun JunioresScreen(
     val juniores by vm.juniores.collectAsStateWithLifecycle()
     val selecionado by vm.jogadorSelecionado.collectAsStateWithLifecycle()
     val mensagem by vm.mensagem.collectAsStateWithLifecycle()
+    val saldo by vm.saldo.collectAsStateWithLifecycle()
+    val formando by vm.formando.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
@@ -75,7 +79,7 @@ fun JunioresScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         Column(Modifier.fillMaxSize()) {
             ScreenTopBar(
@@ -84,20 +88,30 @@ fun JunioresScreen(
                 onVoltar = onVoltar
             )
 
-            if (juniores.isEmpty()) {
-                EmptyState(
-                    "Nenhum jogador na base de juniores.\n" +
-                    "Aposente jogadores para gerar novos talentos."
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        horizontal = Spacing.md,
-                        vertical = Spacing.sm
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    horizontal = Spacing.md,
+                    vertical = Spacing.sm
+                ),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                item {
+                    FormarBaseCard(
+                        saldo = saldo,
+                        formando = formando,
+                        onFormar = { vm.formarJuniores() }
+                    )
+                }
+                if (juniores.isEmpty()) {
+                    item {
+                        Spacer(Modifier.height(Spacing.sm))
+                        EmptyState(
+                            "Nenhum jogador na base de juniores.\n" +
+                            "Forme novos talentos acima ou aposente jogadores."
+                        )
+                    }
+                } else {
                     item {
                         SecaoHeader("${juniores.size} jogador${if (juniores.size != 1) "es" else ""} na base")
                     }
@@ -107,8 +121,8 @@ fun JunioresScreen(
                             onClick = { vm.selecionarJogador(jogador) }
                         )
                     }
-                    item { Spacer(Modifier.height(Spacing.lg)) }
                 }
+                item { Spacer(Modifier.height(Spacing.lg)) }
             }
         }
 
@@ -116,6 +130,65 @@ fun JunioresScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Card de formação de base — gasta R$ 1.000.000 para formar 2 jogadores
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun FormarBaseCard(
+    saldo: Long,
+    formando: Boolean,
+    onFormar: () -> Unit
+) {
+    val custo = JunioresViewModel.CUSTO_FORMACAO
+    val podeFormar = !formando && saldo >= custo
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, GreenElectric.copy(alpha = 0.4f))
+    ) {
+        Column(
+            Modifier.padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = GreenElectric)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Formar ${JunioresViewModel.QTD_FORMACAO} novos jogadores",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Custo: ${formatarSaldo(custo)}  ·  Saldo: ${formatarSaldo(saldo)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Button(
+                onClick = onFormar,
+                enabled = podeFormar,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.sm)
+            ) {
+                Text(if (formando) "Formando…" else "Formar jogadores")
+            }
+            if (!formando && saldo < custo) {
+                Text(
+                    "Saldo insuficiente para formar novos jogadores.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RelegationRed
+                )
+            }
+        }
     }
 }
 

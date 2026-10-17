@@ -48,6 +48,16 @@ interface TimeDao {
     @Query("UPDATE times SET reputacao = :rep WHERE id = :timeId")
     suspend fun atualizarReputacao(timeId: Int, rep: Float)
 
+    /** Preenche o escudo apenas quando ainda está vazio — usado no backfill do
+     *  seed para times já existentes, sem sobrescrever nada intencionalmente. */
+    @Query("UPDATE times SET escudoRes = :escudo WHERE id = :timeId AND (escudoRes IS NULL OR escudoRes = '')")
+    suspend fun preencherEscudoSeVazio(timeId: Int, escudo: String)
+
+    /** Corrige a divisão de um time — usado apenas para clubes de divisão
+     *  invariante (ex.: Premier), conciliando bancos semeados por versão antiga. */
+    @Query("UPDATE times SET divisao = :divisao WHERE id = :timeId")
+    suspend fun atualizarDivisao(timeId: Int, divisao: Int)
+
     @Delete
     suspend fun deletar(time: TimeEntity)
 

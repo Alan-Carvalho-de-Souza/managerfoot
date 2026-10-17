@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,10 +46,13 @@ fun ConfrontoScreen(
     val timeB by vm.timeBSelecionado.collectAsState()
     val stats by vm.stats.collectAsState()
 
+    // Times ordenados alfabeticamente para os seletores (lados A e B)
+    val todosOrdenados = remember(todos) { todos.sortedBy { it.nome.lowercase() } }
+
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Confrontos",
@@ -65,7 +70,7 @@ fun ConfrontoScreen(
         ) {
             TimeDropdownMenu(
                 label = "Time A",
-                times = todos,
+                times = todosOrdenados,
                 selecionado = timeA,
                 onSelecionar = { vm.selecionarTimeA(it) },
                 modifier = Modifier.weight(1f)
@@ -79,7 +84,7 @@ fun ConfrontoScreen(
             )
             TimeDropdownMenu(
                 label = "Time B",
-                times = todos,
+                times = todosOrdenados,
                 selecionado = timeB,
                 onSelecionar = { vm.selecionarTimeB(it) },
                 modifier = Modifier.weight(1f)

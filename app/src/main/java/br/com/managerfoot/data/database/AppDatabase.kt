@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import br.com.managerfoot.data.dao.*
 import br.com.managerfoot.data.database.entities.*
 
@@ -24,11 +26,14 @@ import br.com.managerfoot.data.database.entities.*
         TransferenciaEntity::class,
         HallDaFamaEntity::class,
         RankingGeralEntity::class,
+        RankingConmebolEntity::class,
         EstadioEntity::class,
         PropostaIAEntity::class,
         PropostaClubeEntity::class,
+        TecnicoEntity::class,
+        PassagemTecnicoEntity::class,
     ],
-    version = 24,
+    version = 31,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -42,12 +47,85 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun financaDao(): FinancaDao
     abstract fun hallDaFamaDao(): HallDaFamaDao
     abstract fun rankingGeralDao(): RankingGeralDao
+    abstract fun rankingConmebolDao(): RankingConmebolDao
     abstract fun estadioDao(): EstadioDao
     abstract fun propostaIADao(): PropostaIADao
     abstract fun propostaClubeDao(): PropostaClubeDao
+    abstract fun tecnicoDao(): TecnicoDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
+
+        // 26 → 27: coluna janelaUltimaTransferencia (anti-revenda IA na mesma janela).
+        // Migração não-destrutiva para preservar saves em andamento.
+        private val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE jogadores ADD COLUMN janelaUltimaTransferencia INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        // 27 → 28: coluna despesaBase (custo de formação de juniores). Não-destrutiva.
+        private val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE financas ADD COLUMN despesaBase INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        // 28 → 29: preços de ingresso por setor no estádio. Não-destrutiva
+        // (0 = não inicializado; o EstadioRepository preenche pelo preço-base do clube).
+        private val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE estadio ADD COLUMN precoArquibancada INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE estadio ADD COLUMN precoCadeira INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE estadio ADD COLUMN precoCamarote INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        // 29 → 30: coluna potencial (teto de evolução). Não-destrutiva, com BACKFILL
+        // dos jogadores existentes: potencial = força + bônus por juventude (limitado a 99).
+        // Veteranos (25+) já atingiram o teto → potencial = força.
+        private val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jogadores ADD COLUMN potencial INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    UPDATE jogadores SET potencial = MIN(99, forca + CASE
+                        WHEN idade <= 18 THEN 12
+                        WHEN idade <= 21 THEN 8
+                        WHEN idade <= 24 THEN 4
+                        ELSE 0
+                    END)
+                    """.trimIndent()
+                )
+            }
+        }
+
+        // 30 → 31: tabela ranking_conmebol (lançamentos de pontos por ano/competição).
+        // Não-destrutiva: saves em andamento começam com o ranking vazio e passam a
+        // pontuar a partir da próxima temporada encerrada.
+        private val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS ranking_conmebol (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timeId INTEGER NOT NULL,
+                        ano INTEGER NOT NULL,
+                        competicao TEXT NOT NULL,
+                        motivo TEXT NOT NULL DEFAULT '',
+                        pontos REAL NOT NULL DEFAULT 0.0,
+                        deprecia INTEGER NOT NULL DEFAULT 1
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_conmebol_timeId ON ranking_conmebol(timeId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_conmebol_ano ON ranking_conmebol(ano)")
+            }
+        }
 
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
@@ -57,7 +135,11 @@ abstract class AppDatabase : RoomDatabase() {
                     "managerfoot.db"
                 )
                     //.createFromAsset("database/seed.db")   // dados iniciais (times, jogadores)
-                    .fallbackToDestructiveMigration()       // trocar por Migration em produção
+                    .addMigrations(
+                        MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
+                        MIGRATION_29_30, MIGRATION_30_31
+                    )
+                    .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()
                     .also { INSTANCE = it }
             }
