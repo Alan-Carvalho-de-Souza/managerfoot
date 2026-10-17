@@ -20,8 +20,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import br.com.managerfoot.data.dao.RankingBrasileiroLinha
 import br.com.managerfoot.data.dao.RankingConmebolLinha
 import br.com.managerfoot.data.database.entities.RankingGeralEntity
+import br.com.managerfoot.domain.model.Continentes
 import br.com.managerfoot.presentation.ui.components.EmptyState
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.presentation.ui.components.ScreenTopBar
@@ -44,6 +46,7 @@ fun RankingGeralScreen(
     val ranking by vm.ranking.collectAsState()
     val paisJogador by vm.paisJogador.collectAsState()
     val rankingConmebol by vm.rankingConmebol.collectAsState()
+    val rankingBrasileiro by vm.rankingBrasileiro.collectAsState()
 
     // Qual dos dois rankings está em tela: 0 = Geral (desempenho) · 1 = Colocação
     var tipoRanking by remember { mutableIntStateOf(0) }
@@ -52,9 +55,12 @@ fun RankingGeralScreen(
     var modo by remember { mutableIntStateOf(0) }
 
     // Os recortes valem para os dois rankings, então as opções são derivadas do
-    // ranking ativo: o de colocação cobre só a América do Sul, por exemplo.
-    val paisesDoRankingAtivo = remember(tipoRanking, ranking, rankingConmebol) {
-        if (tipoRanking == 1) rankingConmebol.map { it.pais } else ranking.map { it.pais }
+    // ranking ativo. Na aba Colocação cada recorte tem o seu próprio conjunto de
+    // regras, então as opções reúnem os países de todos eles — é o que faz o Brasil
+    // aparecer como recorte do RNC.
+    val paisesDoRankingAtivo = remember(tipoRanking, ranking, rankingConmebol, rankingBrasileiro) {
+        if (tipoRanking == 1) rankingConmebol.map { it.pais } + rankingBrasileiro.map { it.pais }
+        else ranking.map { it.pais }
     }
     val continentes = remember(paisesDoRankingAtivo) {
         paisesDoRankingAtivo.map { continenteDePais(it) }
@@ -91,8 +97,24 @@ fun RankingGeralScreen(
         2 -> rankingConmebol.filter { it.pais == paisSel }
         else -> rankingConmebol
     }
-    val totalVisivel = if (tipoRanking == 1) visivelConmebol.size else visivel.size
-    val rankingAtivoVazio = if (tipoRanking == 1) rankingConmebol.isEmpty() else ranking.isEmpty()
+
+    // Na aba Colocação, a REGRA segue o recorte: País = Brasil usa o Ranking
+    // Nacional de Clubes da CBF (janela de 5 anos, pesos 5/4/3/2/1); os demais
+    // recortes usam as regras CONMEBOL (janela de 10 anos, depreciação de 10%/ano).
+    // Europa e os outros países terão os seus conjuntos, que entram aqui do mesmo
+    // jeito — mais um ramo deste `usaRnc`.
+    val usaRnc = tipoRanking == 1 && modo == 2 && paisSel?.let { Continentes.ehBrasil(it) } == true
+    val visivelBrasileiro = if (modo == 2) rankingBrasileiro.filter { it.pais == paisSel }
+                            else rankingBrasileiro
+
+    val totalVisivel = when {
+        usaRnc           -> visivelBrasileiro.size
+        tipoRanking == 1 -> visivelConmebol.size
+        else             -> visivel.size
+    }
+    val rankingAtivoVazio =
+        if (tipoRanking == 1) rankingConmebol.isEmpty() && rankingBrasileiro.isEmpty()
+        else ranking.isEmpty()
 
     Column(
         Modifier
@@ -127,7 +149,7 @@ fun RankingGeralScreen(
             EmptyState(
                 if (tipoRanking == 1)
                     "Nenhum clube pontuado ainda.\n" +
-                    "Por ora só a América do Sul pontua por colocação."
+                    "A pontuação por colocação entra ao fim de cada temporada."
                 else
                     "Nenhum jogo realizado ainda.\n" +
                     "O ranking é atualizado após cada partida."
@@ -171,7 +193,21 @@ fun RankingGeralScreen(
         }
 
         if (tipoRanking == 1) {
-            RankingConmebolLista(visivelConmebol)
+            // Deixa explícito qual conjunto de regras está pontuando o recorte,
+            // já que os números não são comparáveis entre eles.
+            Text(
+                if (usaRnc) "Ranking Nacional de Clubes (CBF) · 5 anos, pesos 5/4/3/2/1"
+                else "Regras CONMEBOL · 10 anos, −10% ao ano",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                textAlign = TextAlign.Center
+            )
+            if (usaRnc) RankingBrasileiroLista(visivelBrasileiro)
+            else RankingConmebolLista(visivelConmebol)
             return@Column
         }
 
@@ -211,7 +247,7 @@ private fun ColumnScope.RankingConmebolLista(linhas: List<RankingConmebolLinha>)
         return
     }
 
-    RankingConmebolHeader()
+    RankingColocacaoHeader()
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
     LazyColumn {
@@ -230,8 +266,128 @@ private fun ColumnScope.RankingConmebolLista(linhas: List<RankingConmebolLinha>)
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Ranking de Colocação (regras do Brasil) — Ranking Nacional de Clubes da
+//  CBF. A pontuação já vem do DAO com o peso de cada ano aplicado.
+// ─────────────────────────────────────────────────────────────
 @Composable
-private fun RankingConmebolHeader() {
+private fun ColumnScope.RankingBrasileiroLista(linhas: List<RankingBrasileiroLinha>) {
+    if (linhas.isEmpty()) {
+        EmptyState("Nenhum clube pontuado neste recorte ainda.")
+        return
+    }
+
+    RankingColocacaoHeader()
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+    LazyColumn {
+        itemsIndexed(linhas) { index, linha ->
+            RankingBrasileiroRow(
+                posicao = index + 1,
+                linha = linha,
+                isOdd = index % 2 == 0
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+            )
+        }
+        item { Spacer(Modifier.height(Spacing.lg)) }
+    }
+}
+
+@Composable
+private fun RankingBrasileiroRow(posicao: Int, linha: RankingBrasileiroLinha, isOdd: Boolean) {
+    val (posBarColor, posTextColor) = when (posicao) {
+        1 -> GoldChampion to GoldChampion
+        2 -> SilverRunnerUp to SilverRunnerUp
+        3 -> BronzePlace to BronzePlace
+        else -> Color.Transparent to MaterialTheme.colorScheme.onSurface
+    }
+    val ptsBgColor = when (posicao) {
+        1 -> GoldChampion.copy(alpha = 0.18f)
+        2 -> SilverRunnerUp.copy(alpha = 0.18f)
+        3 -> BronzePlace.copy(alpha = 0.18f)
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val rowBg = if (isOdd) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                else MaterialTheme.colorScheme.surface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(56.dp)
+                .background(posBarColor)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$posicao",
+                    modifier = Modifier.width(26.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = if (posicao <= 3) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    color = posTextColor
+                )
+                TeamBadge(nome = linha.nomeTime, escudoRes = linha.escudoRes, size = 24.dp)
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    linha.nomeTime,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Surface(
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = ptsBgColor
+                ) {
+                    Text(
+                        formatarPontosRnc(linha.pontos),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (posicao <= 3) posTextColor else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            // Decomposição da pontuação: Brasileirão · Copa do Brasil, e a última
+            // campanha de liga da janela.
+            Row(modifier = Modifier.padding(start = 56.dp)) {
+                Text(
+                    buildString {
+                        append(linha.ultimaCampanha.ifBlank { linha.pais.ifBlank { "—" } })
+                        append(" · Liga ${formatarPontosRnc(linha.pontosLiga)}")
+                        append(" · Copa ${formatarPontosRnc(linha.pontosCopa)}")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** Pontos do RNC são inteiros e chegam aos milhares — separador de milhar ajuda. */
+private fun formatarPontosRnc(valor: Int): String =
+    String.format(java.util.Locale.GERMAN, "%,d", valor)
+
+@Composable
+private fun RankingColocacaoHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()

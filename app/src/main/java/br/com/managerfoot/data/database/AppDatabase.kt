@@ -27,13 +27,14 @@ import br.com.managerfoot.data.database.entities.*
         HallDaFamaEntity::class,
         RankingGeralEntity::class,
         RankingConmebolEntity::class,
+        RankingBrasileiroEntity::class,
         EstadioEntity::class,
         PropostaIAEntity::class,
         PropostaClubeEntity::class,
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 31,
+    version = 32,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -48,6 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun hallDaFamaDao(): HallDaFamaDao
     abstract fun rankingGeralDao(): RankingGeralDao
     abstract fun rankingConmebolDao(): RankingConmebolDao
+    abstract fun rankingBrasileiroDao(): RankingBrasileiroDao
     abstract fun estadioDao(): EstadioDao
     abstract fun propostaIADao(): PropostaIADao
     abstract fun propostaClubeDao(): PropostaClubeDao
@@ -127,6 +129,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // 31 → 32: tabela ranking_brasileiro (Ranking Nacional de Clubes da CBF).
+        // Não-destrutiva: saves em andamento começam com o ranking vazio e passam a
+        // pontuar a partir da próxima temporada encerrada. Como a janela do RNC é de
+        // 5 anos, o ranking fica completo após cinco temporadas.
+        private val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS ranking_brasileiro (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timeId INTEGER NOT NULL,
+                        ano INTEGER NOT NULL,
+                        competicao TEXT NOT NULL,
+                        motivo TEXT NOT NULL DEFAULT '',
+                        pontos INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_brasileiro_timeId ON ranking_brasileiro(timeId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_brasileiro_ano ON ranking_brasileiro(ano)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -137,7 +162,7 @@ abstract class AppDatabase : RoomDatabase() {
                     //.createFromAsset("database/seed.db")   // dados iniciais (times, jogadores)
                     .addMigrations(
                         MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-                        MIGRATION_29_30, MIGRATION_30_31
+                        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32
                     )
                     .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()

@@ -49,4 +49,13 @@ object Continentes {
     }
 
     fun ehAmericaDoSul(pais: String): Boolean = dePais(pais) == AMERICA_DO_SUL
+
+    // Rótulo canônico do Brasil, usado pelos recortes POR PAÍS. O conjunto de
+    // regras do ranking por colocação do Brasil é o RNC da CBF (ver
+    // ranking_brasileiro.md), independente das regras CONMEBOL.
+    const val BRASIL = "Brasil"
+
+    private val GRAFIAS_BRASIL = setOf("brasil", "brazil")
+
+    fun ehBrasil(pais: String): Boolean = pais.trim().lowercase() in GRAFIAS_BRASIL
 }

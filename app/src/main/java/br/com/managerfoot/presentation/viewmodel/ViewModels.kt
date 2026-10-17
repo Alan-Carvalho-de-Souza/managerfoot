@@ -7,6 +7,7 @@ import br.com.managerfoot.data.dao.CalendarioPartidaDto
 import br.com.managerfoot.data.dao.ConfrontoPartidaDto
 import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.PartidaDao
+import br.com.managerfoot.data.dao.RankingBrasileiroLinha
 import br.com.managerfoot.data.dao.RankingConmebolLinha
 import br.com.managerfoot.data.dao.TransferenciaDetalhe
 import kotlinx.coroutines.Dispatchers
@@ -2914,6 +2915,15 @@ class RankingGeralViewModel @Inject constructor(
         flow {
             val ano = gameDataStore.saveState.first().anoAtual
             emitAll(gameRepository.observarRankingConmebol(ano))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ── Ranking Nacional de Clubes (CBF) ──────────────────────────────
+    // Conjunto POR PAÍS do Brasil do ranking por colocação: o peso do ano (5/4/3/2/1)
+    // depende do ano corrente do save, como no CONMEBOL.
+    val rankingBrasileiro: StateFlow<List<RankingBrasileiroLinha>> =
+        flow {
+            val ano = gameDataStore.saveState.first().anoAtual
+            emitAll(gameRepository.observarRankingBrasileiro(ano))
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 

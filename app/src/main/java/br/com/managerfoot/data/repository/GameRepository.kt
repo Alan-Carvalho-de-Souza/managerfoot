@@ -9,6 +9,7 @@ import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.dao.PropostaClubeDao
 import br.com.managerfoot.data.dao.PropostaIADao
+import br.com.managerfoot.data.dao.RankingBrasileiroDao
 import br.com.managerfoot.data.dao.RankingConmebolDao
 import br.com.managerfoot.data.dao.RankingGeralDao
 import br.com.managerfoot.data.database.AppDatabase
@@ -34,6 +35,7 @@ class GameRepository @Inject constructor(
     private val hallDaFamaDao: HallDaFamaDao,
     private val rankingGeralDao: RankingGeralDao,
     private val rankingConmebolDao: RankingConmebolDao,
+    private val rankingBrasileiroDao: RankingBrasileiroDao,
     private val estadioDao: EstadioDao,
     private val propostaIADao: PropostaIADao,
     private val propostaClubeDao: PropostaClubeDao
@@ -153,6 +155,7 @@ class GameRepository @Inject constructor(
         hallDaFamaDao.deleteAll()
         rankingGeralDao.deleteAll()
         rankingConmebolDao.deleteAll()
+        rankingBrasileiroDao.deleteAll()
         estadioDao.deleteAll()
         propostaIADao.limparTodas()
         propostaClubeDao.limparTodas()
@@ -1283,19 +1286,10 @@ class GameRepository @Inject constructor(
         atualizarRankingGeral(campeonatoLaLigaId)
         atualizarRankingGeral(campeonatoSerieAId)
 
-        // ── Ranking CONMEBOL: bônus de campeão de liga nacional (1ª divisão) ──
-        // Brasileirão Série A é a única liga sul-americana de campeão único aqui;
-        // Argentina (Apertura/Clausura) e Uruguai pontuam nos seus próprios fluxos.
-        if (campeonatoAId > 0) {
-            classificacaoDao.buscarTabelaOrdenada(campeonatoAId).firstOrNull()?.let { campeao ->
-                registrarPontosConmebol(
-                    timeId = campeao.timeId,
-                    ano = ano,
-                    competicao = CompeticaoConmebol.LIGA_NACIONAL,
-                    pontos = RankingConmebol.PONTOS_LIGA_NACIONAL
-                )
-            }
-        }
+        // ── Rankings por colocação (CONMEBOL + RNC da CBF) ────────────
+        registrarRankingsPorColocacaoDaTemporada(
+            campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, temporadaId, ano
+        )
 
         // ── Títulos dos campeões do Apertura e Clausura ────────────
         // Centralizado aqui para garantir que ambos campeões sejam contabilizados,
@@ -4090,6 +4084,207 @@ class GameRepository @Inject constructor(
     }
 
     fun observarRankingConmebol(anoAtual: Int) = rankingConmebolDao.observeRanking(anoAtual)
+
+    // ── Ranking Nacional de Clubes (CBF) ────────────────────────────
+    // Conjunto POR PAÍS do Brasil do ranking por colocação (ver ranking_brasileiro.md).
+    // Independente do CONMEBOL: janela de 5 anos com pesos inteiros 5/4/3/2/1, e só
+    // pontuam o Campeonato Brasileiro (na série disputada) e a Copa do Brasil.
+
+    // O escopo é o PAÍS, não o continente: um clube argentino na Copa do Brasil
+    // (hipótese futura) não entraria no RNC.
+    private suspend fun ehClubeBrasileiro(timeId: Int): Boolean {
+        val time = timeRepository.buscarEntityPorId(timeId) ?: return false
+        return Continentes.ehBrasil(time.pais)
+    }
+
+    /** Lança pontos do RNC, ignorando clubes de fora do Brasil. */
+    private suspend fun registrarPontosBrasileiro(
+        timeId: Int,
+        ano: Int,
+        competicao: CompeticaoRnc,
+        pontos: Int,
+        motivo: String
+    ) {
+        if (timeId <= 0 || pontos <= 0) return
+        if (!ehClubeBrasileiro(timeId)) return
+        rankingBrasileiroDao.inserir(
+            RankingBrasileiroEntity(
+                timeId = timeId, ano = ano, competicao = competicao.name,
+                motivo = motivo, pontos = pontos
+            )
+        )
+    }
+
+    /**
+     * Pontua uma série do Campeonato Brasileiro no RNC, pela posição final de cada
+     * clube na tabela. A escala percentual é a mesma nas quatro séries; muda a base
+     * (800/400/200/100).
+     *
+     * Apaga os lançamentos daquele ano/série antes de inserir, para que reencerrar
+     * a mesma temporada não duplique a pontuação.
+     */
+    suspend fun registrarColocacaoBrasileirao(campeonatoId: Int, ano: Int, divisao: Int) {
+        if (campeonatoId <= 0) return
+        val serie = RankingBrasileiro.serieDaDivisao(divisao) ?: return
+        rankingBrasileiroDao.apagarLancamentos(ano, serie.name)
+        val classificacoes = classificacaoDao.buscarTabelaOrdenada(campeonatoId)
+        classificacoes.forEachIndexed { indice, cls ->
+            val posicao = indice + 1
+            registrarPontosBrasileiro(
+                timeId     = cls.timeId,
+                ano        = ano,
+                competicao = serie,
+                pontos     = RankingBrasileiro.pontosPorPosicao(serie, posicao),
+                motivo     = "${serie.rotulo} · ${posicao}º"
+            )
+        }
+    }
+
+    /**
+     * Pontua a Copa do Brasil no RNC, estritamente pela fase máxima que cada clube
+     * alcançou: todos os eliminados na mesma fase recebem a mesma pontuação.
+     *
+     * A fase máxima não está registrada em lugar nenhum — o Hall da Fama guarda só
+     * campeão e vice — então é derivada de PartidaEntity.fase: para cada clube, a
+     * fase mais avançada em que ele entrou em campo. Quem disputou a Final é campeão
+     * ou vice conforme o resultado da decisão.
+     */
+    suspend fun registrarCampanhaCopaDoBrasil(copaId: Int, ano: Int) {
+        if (copaId <= 0) return
+        rankingBrasileiroDao.apagarLancamentos(ano, CompeticaoRnc.COPA_DO_BRASIL.name)
+
+        val partidas = partidaDao.buscarTodasPorCampeonato(copaId).filter { it.jogada }
+        if (partidas.isEmpty()) return
+
+        // Fase mais avançada por clube, pela ordem de MotorCampeonato.COPA_FASES.
+        val faseMaxima = mutableMapOf<Int, Int>()
+        for (p in partidas) {
+            val nomeFase = p.fase ?: continue
+            val indice = MotorCampeonato.COPA_FASES.indexOf(nomeFase)
+            if (indice < 0) continue
+            for (timeId in listOf(p.timeCasaId, p.timeForaId)) {
+                if ((faseMaxima[timeId] ?: -1) < indice) faseMaxima[timeId] = indice
+            }
+        }
+        if (faseMaxima.isEmpty()) return
+
+        val campeaoId = determinarCampeaoCopa(copaId)
+
+        for ((timeId, indice) in faseMaxima) {
+            val nomeFase = MotorCampeonato.COPA_FASES.getOrNull(indice) ?: continue
+            // faseDaCopaPorNome devolve VICE para a Final; o campeão é promovido aqui.
+            val fase = RankingBrasileiro.faseDaCopaPorNome(nomeFase) ?: continue
+            val faseFinal = if (fase == FaseCopaDoBrasil.VICE && timeId == campeaoId)
+                FaseCopaDoBrasil.CAMPEAO else fase
+            registrarPontosBrasileiro(
+                timeId     = timeId,
+                ano        = ano,
+                competicao = CompeticaoRnc.COPA_DO_BRASIL,
+                pontos     = RankingBrasileiro.pontosCopaDoBrasil(faseFinal),
+                motivo     = "Copa do Brasil · ${faseFinal.rotulo}"
+            )
+        }
+    }
+
+    /**
+     * Campeão de uma copa ida/volta a partir das partidas da Final, sem exigir que a
+     * competição já esteja marcada como encerrada — diferente de
+     * [buscarCampeaoCopaSeEncerrada], que é usada pela UI da tabela.
+     */
+    private suspend fun determinarCampeaoCopa(copaId: Int): Int {
+        val finais = partidaDao.buscarTodasPorCampeonato(copaId)
+            .filter { it.fase == "Final" && it.jogada }
+        if (finais.isEmpty()) return -1
+        val ida   = finais.minByOrNull { it.rodada } ?: return -1
+        val volta = finais.maxByOrNull { it.rodada } ?: return -1
+        if (ida.id == volta.id) {
+            val gC = ida.golsCasa ?: return -1
+            val gF = ida.golsFora ?: return -1
+            return when {
+                gC > gF -> ida.timeCasaId
+                gF > gC -> ida.timeForaId
+                (ida.penaltisCasa ?: 0) > (ida.penaltisForaId ?: 0) -> ida.timeCasaId
+                (ida.penaltisForaId ?: 0) > (ida.penaltisCasa ?: 0) -> ida.timeForaId
+                else -> -1
+            }
+        }
+        MotorCampeonato.determinarVencedorTie(
+            timeCasaIdaId = ida.timeCasaId,
+            timeForaIdaId = ida.timeForaId,
+            golsCasaIda   = ida.golsCasa   ?: 0,
+            golsForaIda   = ida.golsFora   ?: 0,
+            golsCasaVolta = volta.golsCasa ?: 0,
+            golsForaVolta = volta.golsFora ?: 0
+        )?.let { return it }
+        val pCasa = volta.penaltisCasa ?: return -1
+        val pFora = volta.penaltisForaId ?: return -1
+        return if (pCasa > pFora) volta.timeCasaId else volta.timeForaId
+    }
+
+    /**
+     * Lança no fim da temporada tudo o que os dois conjuntos de regras do ranking
+     * por colocação pontuam a partir das competições brasileiras:
+     *
+     *  - CONMEBOL (continente): bônus de campeão de liga nacional da Série A. O
+     *    Brasileirão é a única liga sul-americana de campeão único aqui; Argentina
+     *    (Apertura/Clausura) e Uruguai pontuam nos seus próprios fluxos.
+     *  - RNC da CBF (país): colocação nas quatro séries + campanha na Copa do Brasil.
+     *
+     * Extraído em helper porque [encerrarTemporadaComHallDaFama] vive no limite de
+     * bytecode do método da JVM.
+     */
+    private suspend fun registrarRankingsPorColocacaoDaTemporada(
+        campeonatoAId: Int,
+        campeonatoBId: Int,
+        campeonatoCId: Int,
+        campeonatoDId: Int,
+        temporadaId: Int,
+        ano: Int
+    ) {
+        if (campeonatoAId > 0) {
+            classificacaoDao.buscarTabelaOrdenada(campeonatoAId).firstOrNull()?.let { campeao ->
+                registrarPontosConmebol(
+                    timeId = campeao.timeId,
+                    ano = ano,
+                    competicao = CompeticaoConmebol.LIGA_NACIONAL,
+                    pontos = RankingConmebol.PONTOS_LIGA_NACIONAL
+                )
+            }
+        }
+        registrarTemporadaNoRankingBrasileiro(
+            campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, temporadaId, ano
+        )
+    }
+
+    /**
+     * Pontua no RNC tudo o que a temporada que está terminando rendeu: as quatro
+     * séries do Brasileirão e a Copa do Brasil.
+     *
+     * A Copa do Brasil não é parâmetro de [encerrarTemporadaComHallDaFama], então é
+     * localizada pela temporada: o único COPA_NACIONAL sem país próprio, cujo nome
+     * começa com "Copa do Brasil" (as copas estrangeiras gravam `pais`).
+     */
+    private suspend fun registrarTemporadaNoRankingBrasileiro(
+        campeonatoAId: Int,
+        campeonatoBId: Int,
+        campeonatoCId: Int,
+        campeonatoDId: Int,
+        temporadaId: Int,
+        ano: Int
+    ) {
+        registrarColocacaoBrasileirao(campeonatoAId, ano, 1)
+        registrarColocacaoBrasileirao(campeonatoBId, ano, 2)
+        registrarColocacaoBrasileirao(campeonatoCId, ano, 3)
+        registrarColocacaoBrasileirao(campeonatoDId, ano, 4)
+
+        val copaDoBrasil = campeonatoDao.buscarPorTemporadaId(temporadaId)
+            .firstOrNull {
+                it.tipo == TipoCampeonato.COPA_NACIONAL && it.nome.startsWith("Copa do Brasil")
+            }
+        if (copaDoBrasil != null) registrarCampanhaCopaDoBrasil(copaDoBrasil.id, ano)
+    }
+
+    fun observarRankingBrasileiro(anoAtual: Int) = rankingBrasileiroDao.observeRanking(anoAtual)
 
     // ── Determina participantes da Copa ─────────────────────────────
     suspend fun determinarParticipantesCopa(
