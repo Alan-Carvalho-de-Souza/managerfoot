@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -40,22 +42,12 @@ fun ConquistasScreen(
     val vices by vm.vices.collectAsState()
     val time by vm.time.collectAsState()
 
-    // Agrupa conquistas por (nomeCampeonato, divisao) preservando o nome real
-    // do troféu (resolvido via Trofeus.resolver).
-    val agrupadas = remember(conquistas) {
-        conquistas
-            .groupBy { Trofeus.resolver(it.nomeCampeonato, it.divisao) }
-            .toList()
-            .sortedByDescending { (_, lista) -> lista.size }  // mais conquistados primeiro
-    }
-
     val totalTitulos = conquistas.size
-    val totalVices = vices.size
 
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = time?.nome ?: "Conquistas",
@@ -64,96 +56,113 @@ fun ConquistasScreen(
             onVoltar = onVoltar
         )
 
-        if (conquistas.isEmpty()) {
-            // Empty state com escudo do time
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(Spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                time?.let {
-                    TeamBadge(nome = it.nome, escudoRes = it.escudoRes, size = 80.dp)
-                    Spacer(Modifier.height(Spacing.md))
-                }
-                Text(
-                    "Nenhum título conquistado ainda",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(Spacing.xs))
-                Text(
-                    "Os troféus aparecem aqui ao final de cada campeonato vencido pelo clube.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
-            return@Column
-        }
+        ConquistasConteudo(
+            conquistas = conquistas,
+            vices = vices,
+            nomeTime = time?.nome,
+            escudoTime = time?.escudoRes
+        )
+    }
+}
 
-        LazyColumn(
-            contentPadding = PaddingValues(
-                horizontal = Spacing.md,
-                vertical = Spacing.sm
-            ),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+/**
+ * Corpo da galeria de troféus (sem TopBar). Reutilizado pela [ConquistasScreen]
+ * e pela aba "Conquistas" do detalhe do clube (ClubesScreen).
+ */
+@Composable
+internal fun ConquistasConteudo(
+    conquistas: List<HallDaFamaEntity>,
+    vices: List<HallDaFamaEntity>,
+    nomeTime: String?,
+    escudoTime: String?
+) {
+    // Agrupa conquistas por (nomeCampeonato, divisao) preservando o nome real
+    // do troféu (resolvido via Trofeus.resolver).
+    val agrupadas = remember(conquistas) {
+        conquistas
+            .groupBy { Trofeus.resolver(it.nomeCampeonato, it.divisao) }
+            .toList()
+            .sortedByDescending { (_, lista) -> lista.size }
+    }
+    val totalTitulos = conquistas.size
+    val totalVices = vices.size
+
+    if (conquistas.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(Spacing.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            // KPI: total de troféus
-            item {
-                ResumoConquistasCard(
-                    nomeTime = time?.nome ?: "—",
-                    escudoRes = time?.escudoRes ?: "",
-                    totalTitulos = totalTitulos,
-                    totalVices = totalVices,
-                    diferentesCampeonatos = agrupadas.size
-                )
+            if (nomeTime != null) {
+                TeamBadge(nome = nomeTime, escudoRes = escudoTime ?: "", size = 80.dp)
+                Spacer(Modifier.height(Spacing.md))
             }
-
-            // Galeria de troféus em grid 2 colunas
-            item {
-                Spacer(Modifier.height(Spacing.xs))
-                SectionTitle("Galeria de Troféus")
-            }
-
-            // Como estamos dentro de LazyColumn, usamos uma estrutura manual
-            // de Row de 2 colunas em vez de LazyVerticalGrid (que conflita).
-            val pares = agrupadas.chunked(2)
-            items(pares) { par ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    par.forEach { (info, listaConq) ->
-                        TrofeuCard(
-                            iconRes = info.drawable,
-                            nomeCampeonato = info.nomeCurto,
-                            tier = info.tier,
-                            quantidade = listaConq.size,
-                            anos = listaConq.map { it.ano },
-                            tintable = info.tintable,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    repeat(2 - par.size) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-
-            // Vice-campeonatos (opcional, só se houver)
-            if (vices.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(Spacing.sm))
-                    SectionTitle("Vice-campeonatos · ${vices.size}")
-                }
-                item { ViceList(vices = vices) }
-            }
-
-            item { Spacer(Modifier.height(Spacing.lg)) }
+            Text(
+                "Nenhum título conquistado ainda",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                "Os troféus aparecem aqui ao final de cada campeonato vencido pelo clube.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
         }
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        item {
+            ResumoConquistasCard(
+                nomeTime = nomeTime ?: "—",
+                escudoRes = escudoTime ?: "",
+                totalTitulos = totalTitulos,
+                totalVices = totalVices,
+                diferentesCampeonatos = agrupadas.size
+            )
+        }
+        item {
+            Spacer(Modifier.height(Spacing.xs))
+            SectionTitle("Galeria de Troféus")
+        }
+        val pares = agrupadas.chunked(2)
+        items(pares) { par ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                par.forEach { (info, listaConq) ->
+                    TrofeuCard(
+                        iconRes = info.drawable,
+                        nomeCampeonato = info.nomeCurto,
+                        tier = info.tier,
+                        quantidade = listaConq.size,
+                        anos = listaConq.map { it.ano },
+                        tintable = info.tintable,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                repeat(2 - par.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+        if (vices.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(Spacing.sm))
+                SectionTitle("Vice-campeonatos · ${vices.size}")
+            }
+            item { ViceList(vices = vices) }
+        }
+        item { Spacer(Modifier.height(Spacing.lg)) }
     }
 }
 

@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -32,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Posicao
@@ -41,6 +45,7 @@ import br.com.managerfoot.data.database.entities.TipoProposta
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.domain.model.PropostaIATransferencia
 import br.com.managerfoot.domain.engine.CalculadoraForca
+import br.com.managerfoot.domain.engine.CalculadoraMercado
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.ui.theme.*
@@ -73,8 +78,10 @@ fun EscalacaoScreen(
         if (adversarioId > 0) vm.carregarAdversario(adversarioId)
     }
 
-    // Em modo pré-jogo, começa na aba Tática (3) para o jogador definir o esquema
-    var abaAtiva by remember { mutableIntStateOf(if (modoPreJogo) 3 else 0) }
+    // Abre sempre em Titulares (0): o jogador confirma primeiro quem entra em campo.
+    var abaAtiva by remember { mutableIntStateOf(0) }
+    // Painel de confirmação "pré-apito" (resumo tático + comparativo de forças)
+    var mostrarConfirmacao by remember { mutableStateOf(false) }
     val abas = if (modoPreJogo) listOf("Titulares", "Reservas", "Elenco", "Tática", "Adversário")
                else listOf("Titulares", "Reservas", "Elenco", "Tática")
     var titularParaTroca by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
@@ -82,7 +89,7 @@ fun EscalacaoScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Banner pré-jogo: comparativo dos dois times
         if (modoPreJogo) {
@@ -144,6 +151,35 @@ fun EscalacaoScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
+                        // ── Mini-campo (visão da formação) ─────────────
+                        item(key = "gramado") {
+                            GramadoTatico(
+                                titulares = escalacao!!.titulares,
+                                formacao  = escalacao!!.formacaoEfetiva,
+                                onJogadorClick = { jne ->
+                                    if (titularParaTroca == null) vm.selecionarJogador(jne.jogador)
+                                }
+                            )
+                        }
+                        // ── Ação: escalar os melhores + validação ──────
+                        item(key = "acoes") {
+                            EscalacaoAcoesRow(
+                                escalacao = escalacao!!,
+                                onEscalarMelhores = { vm.escalarMelhores() }
+                            )
+                        }
+                        // ── Comparativo de forças vs adversário (pré-jogo) ──
+                        if (modoPreJogo) {
+                            val escAdv = escalacaoAdversario
+                            if (escAdv != null) {
+                                item(key = "comparativo") {
+                                    ComparativoForcasCard(
+                                        meu = escalacao!!.forcaPorSetor(),
+                                        adversario = escAdv.forcaPorSetor()
+                                    )
+                                }
+                            }
+                        }
                         items(titularesOrdenados, key = { it.jogador.id }) { jne ->
                             val ehSelecionado = titularParaTroca?.jogador?.id == jne.jogador.id
                             val ehImproviso = jne.jogador.ehImproviso(jne.posicaoUsada)
@@ -406,7 +442,7 @@ fun EscalacaoScreen(
                         )
                     }
                     Button(
-                        onClick = onIniciarPartida,
+                        onClick = { mostrarConfirmacao = true },
                         enabled = escalacaoCompleta,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(Radius.md),
@@ -424,6 +460,21 @@ fun EscalacaoScreen(
                 }
             }
         }
+    }
+
+    // Painel de confirmação pré-apito: resumo tático + comparativo + ajuste de estilo
+    if (mostrarConfirmacao && modoPreJogo && onIniciarPartida != null) {
+        PreApitoConfirmacao(
+            escalacao = escalacao,
+            adversario = adversario,
+            escalacaoAdversario = escalacaoAdversario,
+            onMudarEstilo = { vm.mudarEstilo(it) },
+            onApitar = {
+                mostrarConfirmacao = false
+                onIniciarPartida()
+            },
+            onDismiss = { mostrarConfirmacao = false }
+        )
     }
 
     // Dialog de detalhe do jogador selecionado
@@ -569,6 +620,340 @@ private fun FormacaoInfoCard(
                 )
             }
             ForcaBadge(forcaMedia)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Força por setor + comparativo vs adversário (item D)
+// ─────────────────────────────────────────────────────────────
+private data class ForcaSetores(
+    val defesa: Int,
+    val meio: Int,
+    val ataque: Int,
+    val geral: Int
+)
+
+private fun br.com.managerfoot.domain.model.Escalacao.forcaPorSetor(): ForcaSetores {
+    fun media(setor: Setor): Int =
+        titulares.filter { it.posicaoUsada.setor == setor }
+            .map { it.jogador.forcaEfetiva(it.posicaoUsada) }
+            .takeIf { it.isNotEmpty() }?.average()?.toInt() ?: 0
+    val geral = titulares
+        .map { it.jogador.forcaEfetiva(it.posicaoUsada) }
+        .takeIf { it.isNotEmpty() }?.average()?.toInt() ?: 0
+    return ForcaSetores(media(Setor.DEFESA), media(Setor.MEIO), media(Setor.ATAQUE), geral)
+}
+
+@Composable
+private fun ComparativoForcasCard(
+    meu: ForcaSetores,
+    adversario: ForcaSetores,
+    modifier: Modifier = Modifier
+) {
+    val diff = meu.geral - adversario.geral
+    val (veredito, corVeredito) = when {
+        diff >= 4  -> "Favorito"     to MaterialTheme.colorScheme.primary
+        diff <= -4 -> "Azarão"       to MaterialTheme.colorScheme.error
+        else       -> "Equilibrado"  to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(
+            Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Comparativo de forças",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    veredito,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = corVeredito
+                )
+            }
+            ComparativoLinha("DEF",   meu.defesa, adversario.defesa)
+            ComparativoLinha("MEI",   meu.meio,   adversario.meio)
+            ComparativoLinha("ATA",   meu.ataque, adversario.ataque)
+            ComparativoLinha("Geral", meu.geral,  adversario.geral, destaque = true)
+        }
+    }
+}
+
+@Composable
+private fun ComparativoLinha(
+    setor: String,
+    meu: Int,
+    adv: Int,
+    destaque: Boolean = false
+) {
+    val corMeu = if (meu >= adv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val corAdv = if (adv >= meu) MaterialTheme.colorScheme.error   else MaterialTheme.colorScheme.onSurfaceVariant
+    val total = (meu + adv).coerceAtLeast(1)
+    val peso = if (destaque) FontWeight.Bold else FontWeight.SemiBold
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            setor,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.width(34.dp)
+        )
+        Text(
+            "$meu",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = peso,
+            color = corMeu,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(22.dp)
+        )
+        Row(
+            Modifier
+                .weight(1f)
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp))
+        ) {
+            Box(
+                Modifier
+                    .weight(meu.toFloat() / total)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Box(
+                Modifier
+                    .weight(adv.toFloat() / total)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
+            )
+        }
+        Text(
+            "$adv",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = peso,
+            color = corAdv,
+            modifier = Modifier.width(22.dp)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Ações de escalação: escalar melhores (C) + validação (E)
+// ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EscalacaoAcoesRow(
+    escalacao: br.com.managerfoot.domain.model.Escalacao,
+    onEscalarMelhores: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val titulares = escalacao.titulares
+    val temGoleiro = titulares.any { it.posicaoUsada.setor == Setor.GOLEIRO }
+    val improvisados = titulares.count { it.jogador.ehImproviso(it.posicaoUsada) }
+    val faltam = (11 - titulares.size).coerceAtLeast(0)
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(
+            Modifier.padding(Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            OutlinedButton(
+                onClick = onEscalarMelhores,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.md)
+            ) {
+                Text("⚡ Escalar os melhores", style = MaterialTheme.typography.labelLarge)
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
+            ) {
+                if (faltam > 0) {
+                    StatusChip(
+                        texto = "Faltam $faltam titular${if (faltam > 1) "es" else ""}",
+                        cor = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (!temGoleiro) {
+                    StatusChip(texto = "Sem goleiro", cor = MaterialTheme.colorScheme.error)
+                }
+                if (improvisados > 0) {
+                    StatusChip(
+                        texto = "$improvisados improvisado${if (improvisados > 1) "s" else ""}",
+                        cor = Color(0xFFF9A825)
+                    )
+                }
+                if (faltam == 0 && temGoleiro && improvisados == 0) {
+                    StatusChip(texto = "Escalação pronta", cor = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Painel de confirmação pré-apito (itens F + G)
+// ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PreApitoConfirmacao(
+    escalacao: br.com.managerfoot.domain.model.Escalacao?,
+    adversario: br.com.managerfoot.domain.model.Time?,
+    escalacaoAdversario: br.com.managerfoot.domain.model.Escalacao?,
+    onMudarEstilo: (EstiloJogo) -> Unit,
+    onApitar: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            shape = RoundedCornerShape(Radius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, GreenMid),
+            shadowElevation = Elev.floating
+        ) {
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Text(
+                    "PRÉ-JOGO",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = GreenElectric,
+                    letterSpacing = 1.sp
+                )
+
+                // Confronto
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    escalacao?.let { esc ->
+                        TimeColumnPreJogo(
+                            nome = esc.time.nome,
+                            escudoRes = esc.time.escudoRes,
+                            formacao = esc.formacaoEfetiva,
+                            estilo = esc.time.estiloJogo,
+                            accent = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Text(
+                        "vs",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (adversario != null) {
+                        TimeColumnPreJogo(
+                            nome = adversario.nome,
+                            escudoRes = adversario.escudoRes,
+                            formacao = adversario.taticaFormacao,
+                            estilo = adversario.estiloJogo,
+                            accent = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Comparativo de forças
+                if (escalacao != null && escalacaoAdversario != null) {
+                    ComparativoForcasCard(
+                        meu = escalacao.forcaPorSetor(),
+                        adversario = escalacaoAdversario.forcaPorSetor()
+                    )
+                }
+
+                // Ajuste de estilo de última hora (afeta a simulação — ainda não iniciou)
+                val estiloAtual = escalacao?.time?.estiloJogo ?: EstiloJogo.EQUILIBRADO
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    SectionTitle("Estilo de jogo")
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        EstiloJogo.entries.forEach { estilo ->
+                            val label = when (estilo) {
+                                EstiloJogo.OFENSIVO      -> "Ofensivo"
+                                EstiloJogo.EQUILIBRADO   -> "Equilibrado"
+                                EstiloJogo.DEFENSIVO     -> "Defensivo"
+                                EstiloJogo.CONTRA_ATAQUE -> "Contra-ataque"
+                            }
+                            FilterChipPill(
+                                label = label,
+                                selected = estilo == estiloAtual,
+                                onClick = { onMudarEstilo(estilo) }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    "Os placares dos outros jogos da rodada aparecem ao vivo durante a partida.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Ações
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(Radius.md)
+                    ) {
+                        Text("Voltar")
+                    }
+                    Button(
+                        onClick = onApitar,
+                        modifier = Modifier.weight(1.6f),
+                        shape = RoundedCornerShape(Radius.md),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            "▶ Apitar início",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -879,6 +1264,7 @@ private fun TaticaTab(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
@@ -920,6 +1306,7 @@ private fun TaticaTab(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
@@ -951,7 +1338,8 @@ private fun TaticaTab(
 internal fun GramadoTatico(
     titulares: List<JogadorNaEscalacao>,
     formacao: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onJogadorClick: ((JogadorNaEscalacao) -> Unit)? = null
 ) {
     val linhas = remember(formacao) {
         try { listOf(1) + formacao.split("-").map { it.toInt() } }
@@ -1030,6 +1418,11 @@ internal fun GramadoTatico(
                 modifier = Modifier
                     .offset(x = xOff, y = yOff)
                     .width(chipW)
+                    .then(
+                        if (onJogadorClick != null)
+                            Modifier.clickable { onJogadorClick(jne) }
+                        else Modifier
+                    )
             )
         }
     }
@@ -1357,8 +1750,10 @@ private fun AtributoRow(label: String, valor: Int) {
 @Composable
 fun MercadoScreen(
     timeId: Int,
+    abaInicial: Int = 0,
     onVoltar: () -> Unit = {},
     onIrParaClubes: () -> Unit = {},
+    onIrParaHistorico: ((Int) -> Unit)? = null,
     vm: MercadoViewModel = hiltViewModel()
 ) {
     val livres    by vm.jogadoresLivres.collectAsState()
@@ -1372,7 +1767,7 @@ fun MercadoScreen(
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
-    var abaAtiva by remember { mutableIntStateOf(0) }
+    var abaAtiva by remember { mutableIntStateOf(abaInicial.coerceIn(0, 3)) }
     val pendentesCount = propostas.count { it.status == StatusProposta.PENDENTE }
     val abas = remember(pendentesCount) {
         listOf(
@@ -1395,7 +1790,7 @@ fun MercadoScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Top bar com saldo e ação Ver Clubes
         ScreenTopBar(
@@ -1504,7 +1899,8 @@ fun MercadoScreen(
                                 selecionado = false,
                                 onClick = { },
                                 trailing = {
-                                    val podeContratar = saldo >= jogador.valorMercado
+                                    val preco = CalculadoraMercado.precoCompraUsuario(jogador.valorMercado)
+                                    val podeContratar = saldo >= preco
                                     Button(
                                         onClick = { vm.contratarJogador(jogador) },
                                         enabled = podeContratar,
@@ -1512,7 +1908,7 @@ fun MercadoScreen(
                                         modifier = Modifier.height(32.dp)
                                     ) {
                                         Text(
-                                            formatarSaldo(jogador.valorMercado),
+                                            formatarSaldo(preco),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -1625,7 +2021,8 @@ fun MercadoScreen(
                     propostas = propostas,
                     onAceitar  = { vm.aceitarProposta(it) },
                     onRecusar  = { vm.recusarProposta(it.id) },
-                    onNegociar = { proposta, valor -> vm.negociarProposta(proposta.id, valor) }
+                    onNegociar = { proposta, valor -> vm.negociarProposta(proposta.id, valor) },
+                    onVerJogador = { proposta -> onIrParaHistorico?.invoke(proposta.jogadorId) }
                 )
             }
         }
@@ -1642,7 +2039,8 @@ private fun PropostasTab(
     propostas: List<PropostaIATransferencia>,
     onAceitar:  (PropostaIATransferencia) -> Unit,
     onRecusar:  (PropostaIATransferencia) -> Unit,
-    onNegociar: (PropostaIATransferencia, Long) -> Unit
+    onNegociar: (PropostaIATransferencia, Long) -> Unit,
+    onVerJogador: (PropostaIATransferencia) -> Unit = {}
 ) {
     if (propostas.isEmpty()) {
         EmptyState("Nenhuma proposta recebida no momento")
@@ -1656,14 +2054,15 @@ private fun PropostasTab(
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
         item {
-            SecaoHeader("${propostas.size} proposta${if (propostas.size != 1) "s" else ""} recebida${if (propostas.size != 1) "s" else ""}")
+            SecaoHeader("${propostas.size} proposta${if (propostas.size != 1) "s" else ""} recebida${if (propostas.size != 1) "s" else ""} · toque para ver o jogador")
         }
         items(propostas) { proposta ->
             PropostaCard(
                 proposta   = proposta,
                 onAceitar  = { onAceitar(proposta) },
                 onRecusar  = { onRecusar(proposta) },
-                onNegociar = { valor -> onNegociar(proposta, valor) }
+                onNegociar = { valor -> onNegociar(proposta, valor) },
+                onVerJogador = { onVerJogador(proposta) }
             )
         }
     }
@@ -1674,7 +2073,8 @@ private fun PropostaCard(
     proposta:   PropostaIATransferencia,
     onAceitar:  () -> Unit,
     onRecusar:  () -> Unit,
-    onNegociar: (Long) -> Unit
+    onNegociar: (Long) -> Unit,
+    onVerJogador: () -> Unit = {}
 ) {
     var mostrarDialogoNegociacao by remember { mutableStateOf(false) }
 
@@ -1685,6 +2085,7 @@ private fun PropostaCard(
     }
 
     Card(
+        onClick = onVerJogador,   // toque no card → perfil do jogador
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radius.md),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

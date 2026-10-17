@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -21,7 +22,9 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -66,6 +69,7 @@ import br.com.managerfoot.data.repository.InfoPropostaClube
 import br.com.managerfoot.data.repository.ResultadoTemporadaClube
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.ui.theme.GoldChampion
+import br.com.managerfoot.presentation.ui.theme.fundoApp
 import br.com.managerfoot.presentation.ui.theme.MoneyNegative
 import br.com.managerfoot.presentation.ui.theme.MoneyPositive
 import br.com.managerfoot.presentation.ui.theme.Radius
@@ -79,6 +83,7 @@ fun DashboardScreen(
     onIrParaEscalacao: () -> Unit,
     onIrParaPreJogo: (campeonatoId: Int, rodada: Int, adversarioId: Int) -> Unit,
     onIrParaMercado: () -> Unit,
+    onIrParaPropostas: () -> Unit = {},
     onIrParaTabela: () -> Unit,
     onIrParaArtilheiros: () -> Unit,
     onIrParaFinancas: () -> Unit,
@@ -97,6 +102,8 @@ fun DashboardScreen(
     onIrParaTreinamento: () -> Unit = {},
     onIrParaConquistas: () -> Unit = {},
     onIrParaRankingTecnicos: () -> Unit = {},
+    onIrParaMetas: () -> Unit = {},
+    onIrParaAmistosos: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val time by vm.timeJogador.collectAsStateWithLifecycle()
@@ -106,6 +113,7 @@ fun DashboardScreen(
     val proximaPartida by vm.proximaPartida.collectAsStateWithLifecycle()
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val resultadoSimulado by vm.resultadoSimulado.collectAsStateWithLifecycle()
+    val outrosJogosRodada by vm.outrosJogosRodada.collectAsStateWithLifecycle()
     val saveState by vm.saveState.collectAsStateWithLifecycle()
     val escalacaoSimulacao by vm.escalacaoSimulacao.collectAsStateWithLifecycle()
     val escalacaoAdversarioSimulacao by vm.escalacaoAdversarioSimulacao.collectAsStateWithLifecycle()
@@ -119,6 +127,8 @@ fun DashboardScreen(
     val propostasClube by vm.propostasClube.collectAsStateWithLifecycle()
     val infoPropostaClubeSelecionada by vm.infoPropostaClubeSelecionada.collectAsStateWithLifecycle()
     val mensagem by vm.mensagem.collectAsStateWithLifecycle()
+    val metaTemporada by vm.metaTemporada.collectAsStateWithLifecycle()
+    val amistosoJanela by vm.amistosoJanela.collectAsStateWithLifecycle()
 
     var abaAtual by rememberSaveable { mutableIntStateOf(0) }
 
@@ -139,6 +149,13 @@ fun DashboardScreen(
         }
     }
 
+    // Onboarding — na primeira execução do save, mostra o tutorial de 4 slides
+    // antes de qualquer outra tela. Pular ou concluir marca a flag no DataStore.
+    if (saveState?.onboardingConcluido == false) {
+        OnboardingScreen(onConcluir = { vm.concluirOnboarding() })
+        return
+    }
+
     // Quando há resultado simulado, abre a tela de simulação em tempo real
     resultadoSimulado?.let { resultado ->
         val timeCasaSim = todosOsTimes.find { it.id == resultado.timeCasaId }
@@ -156,6 +173,8 @@ fun DashboardScreen(
             escalacaoJogador = escalacaoSimulacao,
             escalacaoAdversario = escalacaoAdversarioSimulacao,
             isTimeCasaOJogador = isTimeCasaOJogador,
+            outrosJogos = outrosJogosRodada,
+            timeJogadorId = saveState?.timeIdJogador ?: -1,
             penaltisResultado = penaltisResultado,
             dadosPenaltisAdversario = dadosPenaltisAdversario,
             penaltisInterativoConcluido = penaltisInterativoConcluido,
@@ -172,6 +191,8 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fundoApp(),
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             DashboardBottomBar(
@@ -192,6 +213,11 @@ fun DashboardScreen(
                 saveState = saveState,
                 uiState = uiState,
                 posicaoNaTabela = posicaoNaTabela,
+                metaTemporada = metaTemporada,
+                amistosoJanelaAtiva = amistosoJanela.ativa,
+                amistososRestantes = amistosoJanela.restantes,
+                amistosoEhJaneiro = amistosoJanela.ehJaneiro,
+                onIrParaAmistosos = onIrParaAmistosos,
                 onSimular = { campId, rodada, advId ->
                     onIrParaPreJogo(campId, rodada, advId)
                 },
@@ -219,7 +245,8 @@ fun DashboardScreen(
                 onMarcarLidaClube = { vm.marcarPropostaClubeComoLida(it) },
                 onMarcarTodas = { vm.marcarTodasNotificacoesLidas() },
                 onVerPropostaClube = { proposta -> vm.carregarInfoPropostaClube(proposta.timeOfertanteId) },
-                onRecusarPropostaClube = { vm.recusarPropostaClube(it) }
+                onRecusarPropostaClube = { vm.recusarPropostaClube(it) },
+                onIrParaMercado = onIrParaPropostas
             )
             else -> MenuAba(
                 padding = ip,
@@ -241,7 +268,9 @@ fun DashboardScreen(
                 onIrParaPatrocinadores = onIrParaPatrocinadores,
                 onIrParaTreinamento = onIrParaTreinamento,
                 onIrParaConquistas = onIrParaConquistas,
-                onIrParaRankingTecnicos = onIrParaRankingTecnicos
+                onIrParaRankingTecnicos = onIrParaRankingTecnicos,
+                onIrParaMetas = onIrParaMetas,
+                onReiniciarTutorial = { vm.reiniciarOnboarding() }
             )
         }
     }
@@ -277,6 +306,11 @@ private fun AbaInicio(
     saveState: br.com.managerfoot.data.datasource.SaveState?,
     uiState: DashboardUiState,
     posicaoNaTabela: Int,
+    metaTemporada: br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada? = null,
+    amistosoJanelaAtiva: Boolean = false,
+    amistososRestantes: Int = 0,
+    amistosoEhJaneiro: Boolean = false,
+    onIrParaAmistosos: () -> Unit = {},
     onSimular: (campId: Int, rodada: Int, advId: Int) -> Unit,
     onEscalacao: () -> Unit,
     onEncerrarTemporada: () -> Unit,
@@ -378,6 +412,16 @@ private fun AbaInicio(
             }
         }
 
+        // ── Meta da temporada — expectativa da diretoria para o técnico ──
+        metaTemporada?.let { meta ->
+            item {
+                MetaTemporadaCard(
+                    meta = meta,
+                    modifier = Modifier.padding(horizontal = Spacing.lg)
+                )
+            }
+        }
+
         // ── Próxima partida ou encerramento de temporada ──
         item {
             SectionTitle(titulo = "Próxima partida")
@@ -430,6 +474,18 @@ private fun AbaInicio(
             }
         }
 
+        // ── Amistosos de entressafra (dezembro / janeiro) ──
+        if (amistosoJanelaAtiva) {
+            item {
+                AmistosoEntradaCard(
+                    ehJaneiro = amistosoEhJaneiro,
+                    restantes = amistososRestantes,
+                    onClick = onIrParaAmistosos,
+                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs)
+                )
+            }
+        }
+
         // ── Últimos resultados ──
         if (ultimosResultados.isNotEmpty()) {
             item {
@@ -448,9 +504,12 @@ private fun AbaInicio(
 
                 val ehCopaPartida = snap != null && snap.copaId > 0 && partida.campeonatoId == snap.copaId
                 val ehCopaArgPartida = snap != null && snap.copaArgId > 0 && partida.campeonatoId == snap.copaArgId
-                val ehSupercopaPartida = snap != null && snap.supercopaId > 0 && partida.campeonatoId == snap.supercopaId
+                val ehSupercopaPartida = snap != null && partida.campeonatoId > 0 &&
+                    partida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId)
+                val ehAmistosoPartida = snap != null && snap.campeonatoAmistososId > 0 && partida.campeonatoId == snap.campeonatoAmistososId
                 val resultLabel = when {
-                    ehSupercopaPartida -> "Supercopa Rei"
+                    ehAmistosoPartida -> "Amistoso"
+                    ehSupercopaPartida -> if (partida.campeonatoId == snap?.supercopaId) "Supercopa Rei" else "Supercopa"
                     ehCopaPartida -> "Copa do Brasil — ${partida.fase ?: "Copa"}"
                     ehCopaArgPartida -> "Copa Argentina — ${partida.fase ?: "Copa"}"
                     partida.campeonatoId == snap?.campeonatoAId -> "Série A · R${partida.rodada}"
@@ -568,7 +627,7 @@ private fun ManagementGrid(
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             ManagementTile(
                 icon = Icons.Filled.Groups,
-                label = "Elenco",
+                label = "Jogadores",
                 onClick = onIrParaJogadores,
                 modifier = Modifier.weight(1f)
             )
@@ -603,6 +662,54 @@ private fun ManagementGrid(
                 label = "Patrocínio",
                 onClick = onIrParaPatrocinadores,
                 modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AmistosoEntradaCard(
+    ehJaneiro: Boolean,
+    restantes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Card(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(Radius.lg),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(Spacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Text("🤝", style = MaterialTheme.typography.headlineSmall)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "AMISTOSOS · ${if (ehJaneiro) "JANEIRO" else "DEZEMBRO"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    "Marcar amistoso de entressafra",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "$restantes amistoso${if (restantes != 1) "s" else ""} restante${if (restantes != 1) "s" else ""} nesta janela",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = accent
             )
         }
     }
@@ -748,7 +855,9 @@ private fun MenuAba(
     onIrParaPatrocinadores: () -> Unit,
     onIrParaTreinamento: () -> Unit,
     onIrParaConquistas: () -> Unit = {},
-    onIrParaRankingTecnicos: () -> Unit = {}
+    onIrParaRankingTecnicos: () -> Unit = {},
+    onIrParaMetas: () -> Unit = {},
+    onReiniciarTutorial: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -767,13 +876,14 @@ private fun MenuAba(
                 MenuTileItem(Icons.Filled.EmojiEvents, "Copas", onIrParaCopaChaveamento),
                 MenuTileItem(Icons.Filled.Public, "Ranking", onIrParaRankingGeral),
                 MenuTileItem(Icons.Filled.Star, "Artilheiros", onIrParaArtilheiros),
+                MenuTileItem(Icons.Filled.Flag, "Metas", onIrParaMetas),
             ))
         }
 
         item { SectionTitle("Clube") }
         item {
             MenuTileGrid(listOf(
-                MenuTileItem(Icons.Filled.Groups, "Elenco", onIrParaJogadores),
+                MenuTileItem(Icons.Filled.Groups, "Jogadores", onIrParaJogadores),
                 MenuTileItem(Icons.Filled.School, "Juniores", onIrParaJuniores),
                 MenuTileItem(Icons.Filled.FitnessCenter, "Treino", onIrParaTreinamento),
                 MenuTileItem(Icons.Filled.Storefront, "Mercado", onIrParaMercado),
@@ -792,6 +902,13 @@ private fun MenuAba(
                 MenuTileItem(Icons.Filled.AutoAwesome, "Hall da Fama", onIrParaHallDaFama),
                 MenuTileItem(Icons.AutoMirrored.Filled.MenuBook, "Clubes", onIrParaClubes),
                 MenuTileItem(Icons.Filled.Leaderboard, "Ranking Técnicos", onIrParaRankingTecnicos),
+            ))
+        }
+
+        item { SectionTitle("Ajuda") }
+        item {
+            MenuTileGrid(listOf(
+                MenuTileItem(Icons.AutoMirrored.Filled.HelpOutline, "Ver tutorial", onReiniciarTutorial),
             ))
         }
     }
@@ -839,7 +956,8 @@ private fun NotificacoesAba(
     onMarcarLidaClube: (Int) -> Unit,
     onMarcarTodas: () -> Unit,
     onVerPropostaClube: (PropostaClubeEntity) -> Unit,
-    onRecusarPropostaClube: (Int) -> Unit
+    onRecusarPropostaClube: (Int) -> Unit,
+    onIrParaMercado: () -> Unit = {}
 ) {
     val temEncerradasTransf = notificacoes.any {
         (it.status == StatusProposta.ACEITA || it.status == StatusProposta.RECUSADA) && !it.lida
@@ -912,6 +1030,7 @@ private fun NotificacoesAba(
                     nomeTime = nomeTime,
                     escudo = escudo,
                     onMarcarLida = { onMarcarLida(notif.id) },
+                    onAcessarMercado = onIrParaMercado,
                     modifier = Modifier.padding(horizontal = Spacing.lg)
                 )
             }
@@ -1038,6 +1157,7 @@ private fun PropostaTransferenciaCard(
     nomeTime: String,
     escudo: String,
     onMarcarLida: () -> Unit,
+    onAcessarMercado: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val (accent, icon) = when (notif.status) {
@@ -1074,6 +1194,7 @@ private fun PropostaTransferenciaCard(
     val ehEncerrada = notif.status == StatusProposta.ACEITA || notif.status == StatusProposta.RECUSADA
 
     Card(
+        onClick = onAcessarMercado,   // toque na notificação → Mercado (aba Propostas)
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radius.md),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1284,6 +1405,9 @@ private fun nomeDivisaoClube(divisao: Int): String = when (divisao) {
     5 -> "Primeira Div. Argentina (Apertura)"; 6 -> "Segunda Div. Argentina"
     9 -> "Primeira Div. Uruguai"; 10 -> "Segunda Div. Uruguai"
     11 -> "Premier League"
+    12 -> "EFL Championship"
+    13 -> "La Liga"
+    14 -> "Serie A"
     else -> "Div. $divisao"
 }
 
@@ -1301,7 +1425,7 @@ private fun nomeCampeonatoParaData(
     val ref = proximaPartida ?: ultimosResultados.firstOrNull() ?: return "Brasileirao"
     val snap = saveState ?: return "Brasileirao"
     return when {
-        snap.supercopaId > 0 && ref.campeonatoId == snap.supercopaId -> "Supercopa"
+        ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId) -> "Supercopa"
         snap.copaId > 0 && ref.campeonatoId == snap.copaId -> "Copa"
         ref.campeonatoId == snap.campeonatoArgAId ||
         ref.campeonatoId == snap.campeonatoArgBId ||
@@ -1320,9 +1444,10 @@ private fun competitionLabelFor(
 ): String {
     val snap = saveState ?: return "Brasileirão"
     val ehCopa = snap.copaId > 0 && proximaPartida.campeonatoId == snap.copaId
-    val ehSupercopa = snap.supercopaId > 0 && proximaPartida.campeonatoId == snap.supercopaId
+    val ehSupercopa = proximaPartida.campeonatoId > 0 &&
+        proximaPartida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId)
     return when {
-        ehSupercopa -> "Supercopa Rei"
+        ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
         ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"
         else -> when (proximaPartida.campeonatoId) {
             snap.campeonatoAId -> "Série A"
@@ -1363,4 +1488,61 @@ private fun dashOrdemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): P
         dashDiaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 410).coerceIn(1, 365))
     else ->
         dashDiaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
+}
+
+// ─── Card de meta da temporada ──────────────────────────────
+@Composable
+private fun MetaTemporadaCard(
+    meta: br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada,
+    modifier: Modifier = Modifier
+) {
+    val (icone, cor) = when (meta) {
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.TITULO ->
+            "🏆" to br.com.managerfoot.presentation.ui.theme.GoldChampion
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.G4 ->
+            "🥇" to br.com.managerfoot.presentation.ui.theme.PromotionGreen
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.ACESSO ->
+            "⬆️" to br.com.managerfoot.presentation.ui.theme.PromotionGreen
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.TOP_10 ->
+            "🔟" to br.com.managerfoot.presentation.ui.theme.GreenElectric
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.MEIO_TABELA ->
+            "🎯" to br.com.managerfoot.presentation.ui.theme.GreenElectric
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.FUGIR_REBAIXAMENTO ->
+            "⚠️" to br.com.managerfoot.presentation.ui.theme.AmberAccent
+        br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada.SOBREVIVER ->
+            "🛡️" to br.com.managerfoot.presentation.ui.theme.SilverRunnerUp
+    }
+    androidx.compose.material3.Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, cor.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icone, style = MaterialTheme.typography.headlineSmall)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "META DA TEMPORADA",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    meta.titulo,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = cor
+                )
+                Text(
+                    meta.descricao,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

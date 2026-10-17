@@ -2,6 +2,7 @@ package br.com.managerfoot.data.datasource
 
 import android.content.Context
 import br.com.managerfoot.data.database.entities.*
+import br.com.managerfoot.domain.engine.CalculadoraMercado
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -86,6 +87,10 @@ class SeedDataSource @Inject constructor(
                 finalizacao     = o.getInt("finalizacao"),
                 defesa          = o.getInt("defesa"),
                 fisico          = o.getInt("fisico"),
+                potencial       = o.optInt(
+                    "potencial",
+                    CalculadoraMercado.derivarPotencial(o.getInt("forca"), o.getInt("idade"))
+                ),
                 salario         = o.getLong("salario"),
                 contratoAnos    = if (o.has("contrato")) o.getInt("contrato") else o.optInt("contrato_restante", 2),
                 valorMercado    = o.getLong("valor_mercado")

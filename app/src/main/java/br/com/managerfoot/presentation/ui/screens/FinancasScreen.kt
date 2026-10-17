@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,7 +75,8 @@ fun FinancasScreen(
     val despesasMes = (ultimaFinanca?.despesaSalarios ?: 0L) +
             (ultimaFinanca?.despesaTransferencias ?: 0L) +
             (ultimaFinanca?.despesaInfraestrutura ?: 0L) +
-            (ultimaFinanca?.despesaAmpliacaoEstadio ?: 0L)
+            (ultimaFinanca?.despesaAmpliacaoEstadio ?: 0L) +
+            (ultimaFinanca?.despesaBase ?: 0L)
 
     var tabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Salários", "Receitas", "Despesas", "Saldo")
@@ -81,7 +84,7 @@ fun FinancasScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Finanças",
@@ -293,10 +296,12 @@ private fun DespesasTab(
 ) {
     val fechamentos = historico.filter { it.despesaSalarios > 0 }
     val upgrades = historico.filter { it.despesaAmpliacaoEstadio > 0 }
+    val formacoes = historico.filter { it.despesaBase > 0 }
     val totalSalarios = fechamentos.sumOf { it.despesaSalarios }
     val totalAmpliacoes = upgrades.sumOf { it.despesaAmpliacaoEstadio }
+    val totalBase = formacoes.sumOf { it.despesaBase }
     val totalCompras = compras.sumOf { it.valor }
-    val totalGeral = totalSalarios + totalAmpliacoes + totalCompras
+    val totalGeral = totalSalarios + totalAmpliacoes + totalBase + totalCompras
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -309,6 +314,7 @@ private fun DespesasTab(
                 linhas = listOf(
                     "Salários pagos" to totalSalarios,
                     "Reformas no estádio" to totalAmpliacoes,
+                    "Formação de base" to totalBase,
                     "Contratações" to totalCompras
                 ),
                 total = totalGeral,
@@ -323,6 +329,10 @@ private fun DespesasTab(
         if (upgrades.isNotEmpty()) {
             item { SectionTitle("Reformas no estádio") }
             items(upgrades) { f -> SimpleFinancaRow("Reforma", NOMES_MESES_FIN.getOrElse(f.mes) { "—" }, f.despesaAmpliacaoEstadio, positivo = false) }
+        }
+        if (formacoes.isNotEmpty()) {
+            item { SectionTitle("Formação de base") }
+            items(formacoes) { f -> SimpleFinancaRow("Base", NOMES_MESES_FIN.getOrElse(f.mes) { "—" }, f.despesaBase, positivo = false) }
         }
         if (compras.isNotEmpty()) {
             item { SectionTitle("Contratações de jogadores") }

@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,6 +47,9 @@ fun RodadaScreen(
     campeonatoUruBId: Int = -1,
     campeonatoUruBCompetId: Int = -1,
     campeonatoPremierId: Int = -1,
+    campeonatoChampionshipId: Int = -1,
+    campeonatoLaLigaId: Int = -1,
+    campeonatoSerieAId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -58,13 +63,18 @@ fun RodadaScreen(
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
-        campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId
+        campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId,
+        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
             campArgClausuraId = campeonatoArgClausuraId,
             campUruApertId = campeonatoUruAperturaId, campUruIntermedId = campeonatoUruIntermedId, campUruClausId = campeonatoUruClausuraId,
-            campUruBId = campeonatoUruBId, campUruBCompetId = campeonatoUruBCompetId, campPremierId = campeonatoPremierId
+            campUruBId = campeonatoUruBId, campUruBCompetId = campeonatoUruBCompetId,
+            campPremierId = campeonatoPremierId,
+            campChampionshipId = campeonatoChampionshipId,
+            campLaLigaId = campeonatoLaLigaId,
+            campSerieAId = campeonatoSerieAId
         )
     }
 
@@ -103,36 +113,51 @@ fun RodadaScreen(
     }
     val opcoesInglaterra = buildList {
         if (campeonatoPremierId > 0) add(20 to "Premier League")
+        if (campeonatoChampionshipId > 0) add(21 to "EFL Championship")
+    }
+    val opcoesEspanha = buildList {
+        if (campeonatoLaLigaId > 0) add(22 to "La Liga")
+    }
+    val opcoesItalia = buildList {
+        if (campeonatoSerieAId > 0) add(23 to "Serie A")
     }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
     val temInglaterra = opcoesInglaterra.isNotEmpty()
-    val temOutrosPaises = temArgentina || temUruguai || temInglaterra
+    val temEspanha = opcoesEspanha.isNotEmpty()
+    val temItalia = opcoesItalia.isNotEmpty()
+    val temOutrosPaises = temArgentina || temUruguai || temInglaterra || temEspanha || temItalia
 
     var paisSelecionado by remember {
         mutableStateOf(
             when {
-                divisaoSelecionada in 5..9   -> "Argentina"
-                divisaoSelecionada in 10..14 -> "Uruguai"
-                divisaoSelecionada == 20     -> "Inglaterra"
+                divisaoSelecionada in 5..9    -> "Argentina"
+                divisaoSelecionada in 10..14  -> "Uruguai"
+                divisaoSelecionada in 20..21  -> "Inglaterra"
+                divisaoSelecionada == 22      -> "Espanha"
+                divisaoSelecionada == 23      -> "Italia"
                 else -> "Brasil"
             }
         )
     }
     LaunchedEffect(divisaoSelecionada) {
         paisSelecionado = when {
-            divisaoSelecionada in 5..9   -> "Argentina"
-            divisaoSelecionada in 10..14 -> "Uruguai"
-            divisaoSelecionada == 20     -> "Inglaterra"
+            divisaoSelecionada in 5..9    -> "Argentina"
+            divisaoSelecionada in 10..14  -> "Uruguai"
+            divisaoSelecionada in 20..21  -> "Inglaterra"
+            divisaoSelecionada == 22      -> "Espanha"
+            divisaoSelecionada == 23      -> "Italia"
             else -> "Brasil"
         }
     }
 
     val opcoesDivisaoAtual = when (paisSelecionado) {
-        "Argentina" -> opcoesArgentina
-        "Uruguai"   -> opcoesUruguai
+        "Argentina"  -> opcoesArgentina
+        "Uruguai"    -> opcoesUruguai
         "Inglaterra" -> opcoesInglaterra
-        else        -> opcoesBrasil
+        "Espanha"    -> opcoesEspanha
+        "Italia"     -> opcoesItalia
+        else         -> opcoesBrasil
     }
 
     var expandidoPais   by remember { mutableStateOf(false) }
@@ -146,7 +171,7 @@ fun RodadaScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Rodadas",
@@ -172,6 +197,8 @@ fun RodadaScreen(
                         if (temArgentina) add("Argentina")
                         if (temUruguai)   add("Uruguai")
                         if (temInglaterra) add("Inglaterra")
+                        if (temEspanha)   add("Espanha")
+                        if (temItalia)    add("Italia")
                     },
                     onSelect = { pais ->
                         paisSelecionado = pais
@@ -180,6 +207,8 @@ fun RodadaScreen(
                             "Argentina"  -> opcoesArgentina
                             "Uruguai"    -> opcoesUruguai
                             "Inglaterra" -> opcoesInglaterra
+                            "Espanha"    -> opcoesEspanha
+                            "Italia"     -> opcoesItalia
                             else         -> opcoesBrasil
                         }
                         primeiraOpcao.firstOrNull()?.let { vm.selecionarDivisao(it.first) }

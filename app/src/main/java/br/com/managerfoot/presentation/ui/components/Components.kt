@@ -40,6 +40,10 @@ import br.com.managerfoot.presentation.ui.theme.SetorGoleiro
 import br.com.managerfoot.presentation.ui.theme.SetorMeio
 import br.com.managerfoot.presentation.ui.theme.Radius
 import br.com.managerfoot.presentation.ui.theme.Spacing
+import br.com.managerfoot.presentation.ui.theme.Motion
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
 
 // ─── Escudo do time ─────────────────────────────────────────
 // Carrega o drawable cujo nome está em escudoRes.
@@ -1292,13 +1296,22 @@ fun TabRowPill(
         ) {
             abas.forEachIndexed { idx, label ->
                 val sel = idx == selecionada
+                // Pilar 7 (motion): transição suave da aba selecionada.
+                val bg by animateColorAsState(
+                    targetValue = if (sel) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    animationSpec = tween(Motion.medium),
+                    label = "tabBg"
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (sel) MaterialTheme.colorScheme.onPrimary
+                                  else MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = tween(Motion.medium),
+                    label = "tabFg"
+                )
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(Radius.pill))
-                        .background(
-                            if (sel) MaterialTheme.colorScheme.primary
-                            else Color.Transparent
-                        )
+                        .background(bg)
                         .clickable { onSelecionar(idx) }
                         .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
                     contentAlignment = Alignment.Center
@@ -1307,8 +1320,7 @@ fun TabRowPill(
                         text = label,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
-                        color = if (sel) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = fg
                     )
                 }
             }
@@ -1453,9 +1465,28 @@ fun TrofeuCard(
     }
 }
 
+private val MESES_ABREV = arrayOf(
+    "", "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"
+)
+
+/**
+ * Período de uma passagem no formato "mês/ano". Cai para só anos quando o mês é
+ * desconhecido (saves antigos / passagem sem eventos) e para um traço quando o ano
+ * também é desconhecido.
+ */
+private fun formatarPeriodoPassagem(anoInicio: Int, anoFim: Int, mesInicio: Int, mesFim: Int): String {
+    if (anoInicio <= 0 && anoFim <= 0) return "Período indisponível"
+    if (mesInicio !in 1..12 || mesFim !in 1..12) {
+        return if (anoInicio == anoFim) "$anoInicio" else "$anoInicio – $anoFim"
+    }
+    val ini = "${MESES_ABREV[mesInicio]}/$anoInicio"
+    val fim = "${MESES_ABREV[mesFim]}/$anoFim"
+    return if (ini == fim) ini else "$ini – $fim"
+}
+
 /**
  * Card de passagem por clube — usado em HistoricoJogadorScreen.
- * Mostra um período de carreira com escudo, anos, gols, assistências,
+ * Mostra um período de carreira com escudo, mês/ano, gols, assistências,
  * partidas e nota média.
  */
 @Composable
@@ -1467,6 +1498,8 @@ fun PassagemClubeCard(
     gols: Int,
     assistencias: Int,
     partidas: Int,
+    mesInicio: Int = 0,
+    mesFim: Int = 0,
     notaMedia: Float? = null,
     destaque: Boolean = false,
     modifier: Modifier = Modifier
@@ -1508,8 +1541,7 @@ fun PassagemClubeCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            if (anoInicio == anoFim) "$anoInicio"
-                            else "$anoInicio – $anoFim",
+                            formatarPeriodoPassagem(anoInicio, anoFim, mesInicio, mesFim),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

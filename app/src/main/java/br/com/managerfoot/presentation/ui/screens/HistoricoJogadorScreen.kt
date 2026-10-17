@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.presentation.ui.components.EmptyState
 import br.com.managerfoot.presentation.ui.components.ForcaBadge
+import br.com.managerfoot.presentation.ui.components.formatarSaldo
 import br.com.managerfoot.presentation.ui.components.KpiCard
 import br.com.managerfoot.presentation.ui.components.PassagemClubeCard
 import br.com.managerfoot.presentation.ui.components.PosicaoBadge
@@ -45,7 +48,7 @@ fun HistoricoJogadorScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = jogador?.nome ?: "Carreira",
@@ -102,6 +105,8 @@ fun HistoricoJogadorScreen(
                                 escudoRes = passagem.escudoRes,
                                 anoInicio = passagem.anoInicio,
                                 anoFim = passagem.anoFim,
+                                mesInicio = passagem.mesInicio,
+                                mesFim = passagem.mesFim,
                                 gols = passagem.gols,
                                 assistencias = passagem.assistencias,
                                 partidas = passagem.partidas,
@@ -175,6 +180,60 @@ private fun JogadorHeaderCard(
                 ForcaBadge(jogador.forca)
             }
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+            // Valor de mercado
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "VALOR DE MERCADO",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    formatarSaldo(jogador.valorMercado),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MoneyPositive
+                )
+            }
+
+            // Potencial (teto de evolução)
+            val pot = if (jogador.potencial in 1..99) jogador.potencial else jogador.forca
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "POTENCIAL",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (pot > jogador.forca) "$pot · pode evoluir" else "$pot · no auge",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (pot > jogador.forca) MoneyPositive else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Atributos técnicos
+            Text(
+                "ATRIBUTOS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                AtributoMini("TÉC", jogador.tecnica)
+                AtributoMini("PAS", jogador.passe)
+                AtributoMini("VEL", jogador.velocidade)
+                AtributoMini("FIN", jogador.finalizacao)
+                AtributoMini("DEF", jogador.defesa)
+                AtributoMini("FÍS", jogador.fisico)
+            }
+
             // Linha de info: estreia → último ano
             if (historico.anoEstreia != null && historico.anoUltimo != null) {
                 Row(
@@ -234,6 +293,20 @@ private fun JogadorHeaderCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AtributoMini(label: String, valor: Int) {
+    val cor = when {
+        valor >= 80 -> GreenElectric
+        valor >= 65 -> PromotionGreen
+        valor >= 50 -> AmberAccent
+        else        -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("$valor", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = cor)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

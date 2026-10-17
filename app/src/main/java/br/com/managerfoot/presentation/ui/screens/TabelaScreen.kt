@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -49,6 +51,9 @@ fun TabelaScreen(
     campeonatoUruBCompetId: Int = -1,
     copaId: Int = -1,
     campeonatoPremierId: Int = -1,
+    campeonatoChampionshipId: Int = -1,
+    campeonatoLaLigaId: Int = -1,
+    campeonatoSerieAId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -69,7 +74,8 @@ fun TabelaScreen(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
         campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
-        campeonatoUruIntermedId, campeonatoUruBCompetId, copaId, campeonatoPremierId
+        campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
+        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -82,6 +88,9 @@ fun TabelaScreen(
             campUruBCompetId = campeonatoUruBCompetId,
             copaIdBrasil = copaId,
             campPremierId = campeonatoPremierId,
+            campChampionshipId = campeonatoChampionshipId,
+            campLaLigaId = campeonatoLaLigaId,
+            campSerieAId = campeonatoSerieAId,
             timeJogadorId = timeJogadorId
         )
     }
@@ -109,6 +118,13 @@ fun TabelaScreen(
     }
     val opcoesInglaterra = buildList {
         if (campeonatoPremierId > 0) add(20 to "Premier League")
+        if (campeonatoChampionshipId > 0) add(21 to "EFL Championship")
+    }
+    val opcoesEspanha = buildList {
+        if (campeonatoLaLigaId > 0) add(22 to "La Liga")
+    }
+    val opcoesItalia = buildList {
+        if (campeonatoSerieAId > 0) add(23 to "Serie A")
     }
 
     val paises = buildList {
@@ -116,6 +132,8 @@ fun TabelaScreen(
         if (opcoesArgentina.isNotEmpty()) add("Argentina")
         if (opcoesUruguai.isNotEmpty()) add("Uruguai")
         if (opcoesInglaterra.isNotEmpty()) add("Inglaterra")
+        if (opcoesEspanha.isNotEmpty()) add("Espanha")
+        if (opcoesItalia.isNotEmpty()) add("Italia")
     }
 
     // País selecionado: derivado da divisão atual
@@ -123,7 +141,9 @@ fun TabelaScreen(
         when (divisaoSelecionada) {
             in 5..8 -> "Argentina"
             in 9..14 -> "Uruguai"
-            20 -> "Inglaterra"
+            in 20..21 -> "Inglaterra"
+            22 -> "Espanha"
+            23 -> "Italia"
             else -> "Brasil"
         }
     }
@@ -131,6 +151,8 @@ fun TabelaScreen(
         "Argentina" -> opcoesArgentina
         "Uruguai" -> opcoesUruguai
         "Inglaterra" -> opcoesInglaterra
+        "Espanha" -> opcoesEspanha
+        "Italia" -> opcoesItalia
         else -> opcoesBrasil
     }
     val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
@@ -149,7 +171,7 @@ fun TabelaScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Classificação",
@@ -179,6 +201,8 @@ fun TabelaScreen(
                                 "Argentina" -> opcoesArgentina.firstOrNull()?.first ?: 5
                                 "Uruguai" -> opcoesUruguai.firstOrNull()?.first ?: 9
                                 "Inglaterra" -> opcoesInglaterra.firstOrNull()?.first ?: 20
+                                "Espanha" -> opcoesEspanha.firstOrNull()?.first ?: 22
+                                "Italia" -> opcoesItalia.firstOrNull()?.first ?: 23
                                 else -> opcoesBrasil.firstOrNull()?.first ?: 1
                             }
                             vm.selecionarDivisao(primeiraDivisao)
@@ -492,5 +516,7 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Argentina" -> "🇦🇷"
     "Uruguai" -> "🇺🇾"
     "Inglaterra" -> "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+    "Espanha" -> "🇪🇸"
+    "Italia" -> "🇮🇹"
     else -> ""
 }

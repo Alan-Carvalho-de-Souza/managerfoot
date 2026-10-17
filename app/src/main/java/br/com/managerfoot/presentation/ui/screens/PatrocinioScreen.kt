@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -51,7 +53,7 @@ fun PatrocinioScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         Column(Modifier.fillMaxSize()) {
             ScreenTopBar(
@@ -103,7 +105,11 @@ fun PatrocinioScreen(
                         }
                     }
                 } else {
-                    items(ofertas) { oferta ->
+                    // Mostra a oferta da faixa do clube (disponível) e as faixas SUPERIORES
+                    // como metas bloqueadas; oculta faixas abaixo do patamar do clube.
+                    val ordinalElegivel = ofertas.firstOrNull { it.disponivel }?.tier?.ordinal ?: 0
+                    val visiveis = ofertas.filter { it.tier.ordinal >= ordinalElegivel }
+                    items(visiveis) { oferta ->
                         OfertaPatrocinioCard(
                             oferta = oferta,
                             isSelecionado = tipoAtual == oferta.tipo,

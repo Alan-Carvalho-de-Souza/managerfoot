@@ -37,6 +37,10 @@ data class JogadorEntity(
     val defesa: Int,
     val fisico: Int,
 
+    // Teto de evolução: força máxima atingível pelo jogador ao longo da carreira.
+    // 0 = desconhecido (tratado como "sem teto" na lógica de evolução/valor).
+    val potencial: Int = 0,
+
     // Contrato
     val salario: Long,                  // por mês, em centavos
     val contratoAnos: Int,              // anos restantes de contrato
@@ -89,7 +93,12 @@ data class JogadorEntity(
     // Empréstimo ativo: preenchido quando o jogador está emprestado para outro clube
     val timeOrigemEmprestimo: Int? = null,   // ID do clube de origem (quem emprestou)
     val anoRetornoEmprestimo: Int? = null,   // Ano calendário do retorno
-    val mesRetornoEmprestimo: Int? = null    // Mês (1–12) do retorno
+    val mesRetornoEmprestimo: Int? = null,   // Mês (1–12) do retorno
+
+    // Janela de transferências em que o jogador foi transferido pela última vez
+    // (monotônica: 2 por temporada). Usada para impedir que a IA revenda um jogador
+    // recém-contratado na mesma janela; só libera na PRÓXIMA. 0 = seed/nunca.
+    val janelaUltimaTransferencia: Int = 0
 )
 
 enum class Posicao(val abreviacao: String, val setor: Setor) {

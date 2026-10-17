@@ -41,6 +41,7 @@ data class Jogador(
     val finalizacao: Int,
     val defesa: Int,
     val fisico: Int,
+    val potencial: Int = 0,             // teto de evolução (força máxima atingível)
     val salario: Long,
     val contratoAnos: Int,
     val valorMercado: Long,
@@ -64,7 +65,8 @@ data class Jogador(
     val disponívelParaEmprestimo: Boolean = false, // listado para empréstimo pelo usuário
     val timeOrigemEmprestimo: Int? = null,         // ID do clube de origem quando emprestado
     val anoRetornoEmprestimo: Int? = null,         // Ano do retorno ao clube de origem
-    val mesRetornoEmprestimo: Int? = null          // Mês (1–12) do retorno ao clube de origem
+    val mesRetornoEmprestimo: Int? = null,         // Mês (1–12) do retorno ao clube de origem
+    val janelaUltimaTransferencia: Int = 0         // janela da última transferência (anti-revenda IA)
 ) {
     /** Derivado de [partidasSuspensao] — true enquanto o jogador tiver suspensão a cumprir. */
     val suspenso: Boolean get() = partidasSuspensao > 0
@@ -168,6 +170,18 @@ data class DadosPenaltiAdversario(
     val finalizacoes: List<Int>
 )
 
+/**
+ * Condições climáticas/de campo sorteadas por partida.
+ * Cada condição altera sutilmente estatísticas da simulação e é exibida no feed.
+ */
+enum class CondicaoPartida(val descricao: String, val emoji: String) {
+    ENSOLARADO ("Ensolarado",  "☀️"),
+    CHUVOSO    ("Chuvoso",     "🌧️"),
+    CALOR      ("Calor forte", "🥵"),
+    FRIO       ("Frio",        "❄️"),
+    ALTITUDE   ("Altitude",    "⛰️")
+}
+
 data class ResultadoPartida(
     val partidaId: Int,
     val timeCasaId: Int,
@@ -184,7 +198,8 @@ data class ResultadoPartida(
     val torcedores: Int = 0,          // público presente na partida
     val receitaPartida: Long = 0L,    // receita de bilheteria (centavos)
     val gkCasaId: Int = -1,           // id do goleiro da casa
-    val gkForaId: Int = -1            // id do goleiro do visitante
+    val gkForaId: Int = -1,           // id do goleiro do visitante
+    val condicaoPartida: CondicaoPartida = CondicaoPartida.ENSOLARADO
 )
 
 data class EventoSimulado(
@@ -204,7 +219,8 @@ data class EstatisticasTime(
     val cartaoAmarelo: Int,
     val cartaoVermelho: Int,
     val defesasGoleiro: Int = 0,   // defesas realizadas pelo goleiro
-    val passesErrados: Int = 0     // passes errados estimados
+    val passesErrados: Int = 0,    // passes errados estimados (legado; não exibido)
+    val precisaoPasse: Int = 0     // precisão de passe estimada, 0-100 (%)
 )
 
 /**

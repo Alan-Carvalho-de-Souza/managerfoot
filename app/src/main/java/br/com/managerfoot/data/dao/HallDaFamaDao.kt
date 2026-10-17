@@ -24,6 +24,10 @@ interface HallDaFamaDao {
     @Query("SELECT * FROM hall_da_fama WHERE ano = :ano AND divisao = :divisao LIMIT 1")
     suspend fun buscarCampeaoPorAnoEDivisao(ano: Int, divisao: Int): HallDaFamaEntity?
 
+    /** Títulos conquistados por um técnico específico — mais recentes primeiro. */
+    @Query("SELECT * FROM hall_da_fama WHERE tecnicoId = :tecnicoId ORDER BY ano DESC")
+    suspend fun buscarTitulosPorTecnico(tecnicoId: Int): List<HallDaFamaEntity>
+
     @Query("DELETE FROM hall_da_fama")
     suspend fun deleteAll()
 }

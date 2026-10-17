@@ -59,6 +59,46 @@ object MotorCampeonato {
     //   Final         ─ após Clausura R20 (OG 420)
     val COPA_ARG_ORDEM_GLOBAL = intArrayOf(25, 45, 85, 115, 145, 175, 205, 215, 415, 425)
 
+    // ── Fases da Copa da Inglaterra (FA Cup) — 32 times, JOGO ÚNICO ──
+    // Primeira Fase (32→16), Oitavas (16→8), Quartas (8→4), Semi (4→2), Final (2→1)
+    val COPA_ING_FASES = listOf(
+        "Primeira Fase",
+        "Oitavas",
+        "Quartas",
+        "Semi",
+        "Final"
+    )
+
+    // ordemGlobal de cada fase (jogo único: 1 valor por fase). A Premier usa
+    // ordemGlobal = rodada*10 (10..380); as fases da copa se encaixam entre as
+    // rodadas do campeonato, distribuídas ao longo da temporada.
+    //   Primeira Fase ─ após R3  (35)
+    //   Oitavas       ─ após R9  (95)
+    //   Quartas       ─ após R16 (165)
+    //   Semifinal     ─ após R25 (255)
+    //   Final         ─ após R33 (335)
+    val COPA_ING_ORDEM_GLOBAL = intArrayOf(35, 95, 165, 255, 335)
+
+    // ── Fases das copas de 16 times (Copa do Rei / Coppa Italia) — IDA/VOLTA ──
+    // Começam nas Oitavas: Oitavas (16→8), Quartas (8→4), Semi (4→2), Final (2→1).
+    // Mesmo modelo ida/volta da Copa do Brasil.
+    val COPA16_FASES = listOf(
+        "Oitavas",
+        "Quartas",
+        "Semi",
+        "Final"
+    )
+
+    // ordemGlobal de cada jogo (4 fases × ida/volta = 8 valores). La Liga e Serie A
+    // usam ordemGlobal = rodada*10 (10..380); as fases encaixam entre as rodadas.
+    // Um clube só disputa a copa do seu país, então Espanha e Itália podem
+    // compartilhar os mesmos slots (não há colisão entre times).
+    //   Oitavas ─ ida após R9 (95),  volta após R11 (115)
+    //   Quartas ─ ida após R16 (165), volta após R18 (185)
+    //   Semi    ─ ida após R24 (245), volta após R26 (265)
+    //   Final   ─ ida após R32 (325), volta após R34 (345)
+    val COPA16_ORDEM_GLOBAL = intArrayOf(95, 115, 165, 185, 245, 265, 325, 345)
+
     fun proximaFaseCopa(faseAtual: String, fases: List<String> = COPA_FASES): String? {
         val idx = fases.indexOf(faseAtual)
         return if (idx >= 0 && idx < fases.size - 1) fases[idx + 1] else null
@@ -103,6 +143,27 @@ object MotorCampeonato {
             )
         }
         return partidas
+    }
+
+    // ── Geração de fase mata-mata JOGO ÚNICO ──────────────────────
+    // Uma partida por confronto; empate é decidido nos pênaltis (fora da engine).
+    fun gerarFaseJogoUnico(
+        campeonatoId: Int,
+        pares: List<Pair<Int, Int>>,
+        fase: String,
+        rodada: Int,
+        confrontoIdInicio: Int,
+        ordemGlobal: Int = 0
+    ): List<PartidaEntity> = pares.mapIndexed { i, (casa, fora) ->
+        PartidaEntity(
+            campeonatoId = campeonatoId,
+            rodada = rodada,
+            timeCasaId = casa,
+            timeForaId = fora,
+            fase = fase,
+            confrontoId = confrontoIdInicio + i,
+            ordemGlobal = ordemGlobal
+        )
     }
 
     // ── Sorteia pares para uma fase mata-mata ─────────────────────

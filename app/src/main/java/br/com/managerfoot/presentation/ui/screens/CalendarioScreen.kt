@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -60,7 +62,7 @@ fun CalendarioScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Calendário",
@@ -154,14 +156,17 @@ private fun CalendarioCard(
         else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
     }
 
-    Card(
+    val corCasa = if (isJogadorCasa) GreenElectric else MaterialTheme.colorScheme.onSurface
+    val corFora = if (isJogadorFora) GreenElectric else MaterialTheme.colorScheme.onSurface
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radius.md),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        color = if (envolvido) GreenElectric.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface,
         border = BorderStroke(if (envolvido) 1.5.dp else 1.dp, borderColor)
     ) {
-        Column(modifier = Modifier.padding(Spacing.md)) {
-            // Cabeçalho: competição + data · rodada/fase
+        Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs)) {
+            // Cabeçalho enxuto: competição + data · rodada/fase
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -169,78 +174,60 @@ private fun CalendarioCard(
             ) {
                 Text(
                     text = partida.nomeCampeonato,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (envolvido) GreenElectric
-                            else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (envolvido) GreenElectric else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                Surface(
-                    shape = RoundedCornerShape(Radius.sm),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text(
-                        text = "$dataCurta · ${partida.fase ?: "Rod. ${partida.rodada}"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
-                    )
-                }
+                Text(
+                    text = "$dataCurta · ${partida.fase ?: "R${partida.rodada}"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
             }
 
-            Spacer(Modifier.height(Spacing.sm))
-
-            // Times + placar
+            // Linha compacta do confronto (estilo "placares ao vivo")
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CalendarioTimeColuna(
-                    nome = partida.nomeCasa,
-                    escudoRes = partida.escudoCasa,
-                    destaque = isJogadorCasa,
-                    modifier = Modifier.weight(1f)
+                Text(
+                    partida.nomeCasa,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.End,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (isJogadorCasa) FontWeight.Bold else FontWeight.SemiBold,
+                    color = corCasa
                 )
-                Box(
-                    modifier = Modifier.width(72.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (partida.jogada && partida.golsCasa != null && partida.golsFora != null) {
-                        Text(
-                            text = "${partida.golsCasa} × ${partida.golsFora}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    } else {
-                        Text(
-                            text = "vs",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                CalendarioTimeColuna(
-                    nome = partida.nomeFora,
-                    escudoRes = partida.escudoFora,
-                    destaque = isJogadorFora,
-                    modifier = Modifier.weight(1f)
+                Spacer(Modifier.width(Spacing.xs))
+                TeamBadge(nome = partida.nomeCasa, escudoRes = partida.escudoCasa, size = 22.dp)
+                Text(
+                    text = if (partida.jogada && partida.golsCasa != null && partida.golsFora != null)
+                        "  ${partida.golsCasa} × ${partida.golsFora}  " else "  vs  ",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                TeamBadge(nome = partida.nomeFora, escudoRes = partida.escudoFora, size = 22.dp)
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    partida.nomeFora,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (isJogadorFora) FontWeight.Bold else FontWeight.SemiBold,
+                    color = corFora
                 )
             }
 
-            // Público e receita (apenas para partidas jogadas pelo clube do jogador)
+            // Público e receita — só nos jogos JÁ disputados pelo clube do jogador
             if (partida.jogada && envolvido && partida.torcedores != null && partida.torcedores > 0) {
-                Spacer(Modifier.height(Spacing.sm))
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                    thickness = 0.5.dp
-                )
-                Spacer(Modifier.height(Spacing.xs))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -251,41 +238,15 @@ private fun CalendarioCard(
                     )
                     if (partida.receitaPartida != null) {
                         Text(
-                            text = "Bilheteria: ${formatarSaldo(partida.receitaPartida)}",
+                            text = formatarSaldo(partida.receitaPartida),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isJogadorCasa) MoneyPositive
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isJogadorCasa) MoneyPositive else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CalendarioTimeColuna(
-    nome: String,
-    escudoRes: String,
-    destaque: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
-    ) {
-        TeamBadge(nome = nome, escudoRes = escudoRes, size = 40.dp)
-        Text(
-            text = nome,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (destaque) FontWeight.Bold else FontWeight.Normal,
-            color = if (destaque) GreenElectric else MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -369,6 +330,9 @@ private fun diaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {
 
 /** Retorna (mês, dia) para uma partida baseado em ordemGlobal e nome do campeonato. */
 private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> = when {
+    // Amistosos de entressafra: OG ~450 (dezembro) ou ~5 (janeiro).
+    nomeCampeonato.contains("Amistoso", ignoreCase = true) ->
+        if (ordemGlobal >= 400) 12 to 20 else 1 to 15
     ordemGlobal == 1 -> 1 to 25   // Supercopa Rei: 25 de Janeiro
     // Troféu dos Campeões (ARG): jogo único em mid-Dezembro do mesmo ano
     ordemGlobal == 620 || (nomeCampeonato.contains("Troféu", ignoreCase = true) && nomeCampeonato.contains("Campe", ignoreCase = true)) -> 12 to 15

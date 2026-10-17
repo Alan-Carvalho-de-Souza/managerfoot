@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -40,6 +42,7 @@ fun EstadioScreen(
     val estadio  by vm.estadio.collectAsState()
     val time     by vm.time.collectAsState()
     val mensagem by vm.mensagem.collectAsState()
+    val projecao by vm.projecao.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -55,7 +58,7 @@ fun EstadioScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         Column(Modifier.fillMaxSize()) {
             ScreenTopBar(
@@ -78,6 +81,20 @@ fun EstadioScreen(
                         EstadioHeroCard(
                             nome = nomeEstadio,
                             capacidadeTotal = est.capacidadeTotal
+                        )
+                    }
+                }
+
+                // Preços de ingresso por setor (ajustáveis antes de cada jogo em casa)
+                item {
+                    estadio?.let { est ->
+                        PrecosIngressoCard(
+                            estadio   = est,
+                            precoBase = time?.precoIngresso ?: 1L,
+                            refFator  = br.com.managerfoot.domain.engine.MotorFinanceiro
+                                .fatorReferenciaBilheteria(time?.reputacao ?: 50f),
+                            projecao  = projecao,
+                            onSalvar  = { a, c, m -> vm.atualizarPrecos(timeId, a, c, m) }
                         )
                     }
                 }
@@ -265,6 +282,92 @@ private fun EstadioHeroCard(nome: String, capacidadeTotal: Int) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Card de preços de ingresso por setor (ajuste pré-jogo)
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun PrecosIngressoCard(
+    estadio: EstadioEntity,
+    precoBase: Long,
+    refFator: Double,
+    projecao: Pair<Int, Long>,
+    onSalvar: (Long, Long, Long) -> Unit
+) {
+    var arq by remember(estadio.precoArquibancada) { mutableStateOf(estadio.precoArquibancada) }
+    var cad by remember(estadio.precoCadeira) { mutableStateOf(estadio.precoCadeira) }
+    var cam by remember(estadio.precoCamarote) { mutableStateOf(estadio.precoCamarote) }
+    val alterado = arq != estadio.precoArquibancada ||
+        cad != estadio.precoCadeira || cam != estadio.precoCamarote
+    val base = precoBase.coerceAtLeast(1)
+    // Referência escala com a reputação (clube maior sustenta ingresso mais caro).
+    fun ref(mult: Int): Long = (base * mult * refFator).toLong().coerceAtLeast(1)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, GreenMid)
+    ) {
+        Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Text(
+                "Preços de ingresso por setor",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "Ajuste antes de cada jogo em casa. Cobrar perto do preço de referência maximiza a receita — barato lota mas rende menos, caro esvazia. A referência sobe com a reputação do clube.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            PrecoSetorRow("🪑 Arquibancada", arq, ref(EstadioEntity.MULT_ARQUIBANCADA)) { arq = it }
+            PrecoSetorRow("💺 Cadeira", cad, ref(EstadioEntity.MULT_CADEIRA)) { cad = it }
+            PrecoSetorRow("👑 Camarote", cam, ref(EstadioEntity.MULT_CAMAROTE)) { cam = it }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "Estimativa por jogo em casa",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "${projecao.first.formatarCapacidade()} · ${formatarSaldo(projecao.second)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = GreenElectric
+                )
+            }
+            Button(
+                onClick = { onSalvar(arq, cad, cam) },
+                enabled = alterado,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(Radius.sm)
+            ) { Text("Salvar preços") }
+        }
+    }
+}
+
+@Composable
+private fun PrecoSetorRow(label: String, valor: Long, ref: Long, onChange: (Long) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                "${formatarSaldo(valor)}  (ref ${formatarSaldo(ref)})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Slider(
+            value = valor.toFloat(),
+            onValueChange = { onChange((it / 100).toLong() * 100) },  // passos de R$1
+            valueRange = 0f..(ref.coerceAtLeast(1) * 3).toFloat(),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

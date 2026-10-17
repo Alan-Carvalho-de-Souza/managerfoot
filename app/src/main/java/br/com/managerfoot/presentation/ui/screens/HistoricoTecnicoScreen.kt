@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,6 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.data.database.entities.PassagemTecnicoEntity
 import br.com.managerfoot.data.database.entities.TecnicoEntity
 import br.com.managerfoot.presentation.ui.components.EmptyState
@@ -39,12 +42,16 @@ fun HistoricoTecnicoScreen(
 
     val tecnico by vm.tecnico.collectAsState()
     val passagens by vm.passagens.collectAsState()
+    val titulos by vm.titulos.collectAsState()
     val carregando by vm.carregando.collectAsState()
+
+    // 0 = Passagens nos clubes · 1 = Títulos conquistados
+    var abaSelecionada by remember { mutableIntStateOf(0) }
 
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = tecnico?.nome ?: "Carreira",
@@ -79,21 +86,37 @@ fun HistoricoTecnicoScreen(
                     }
                     item { KpiTotaisRow(t) }
 
-                    if (passagens.isNotEmpty()) {
-                        item {
-                            Spacer(Modifier.height(Spacing.xs))
-                            SectionTitle("Passagens · ${passagens.size} clube${if (passagens.size != 1) "s" else ""}")
-                        }
-                        items(passagens.reversed()) { passagem ->
-                            PassagemTecnicoCard(passagem)
+                    item {
+                        Spacer(Modifier.height(Spacing.xs))
+                        AbaHistoricoSelector(
+                            abaSelecionada = abaSelecionada,
+                            qtdPassagens = passagens.size,
+                            qtdTitulos = titulos.size,
+                            onSelect = { abaSelecionada = it }
+                        )
+                    }
+
+                    if (abaSelecionada == 0) {
+                        // ── Passagens nos clubes ──
+                        if (passagens.isNotEmpty()) {
+                            items(passagens.reversed(), key = { "p${it.id}" }) { passagem ->
+                                PassagemTecnicoCard(passagem)
+                            }
+                        } else {
+                            item {
+                                EmptyState("Sem passagens registradas. As passagens aparecem aqui após a primeira contratação.")
+                            }
                         }
                     } else {
-                        item {
-                            Spacer(Modifier.height(Spacing.xs))
-                            SectionTitle("Passagens")
-                        }
-                        item {
-                            EmptyState("Sem passagens registradas. As passagens aparecem aqui após a primeira contratação.")
+                        // ── Títulos conquistados ──
+                        if (titulos.isNotEmpty()) {
+                            items(titulos, key = { "t${it.id}" }) { titulo ->
+                                TituloTecnicoCard(titulo)
+                            }
+                        } else {
+                            item {
+                                EmptyState("Nenhum título conquistado ainda.")
+                            }
                         }
                     }
                     item { Spacer(Modifier.height(Spacing.lg)) }
@@ -237,6 +260,70 @@ private fun KpiTotaisRow(t: TecnicoEntity) {
                 accent = GreenElectric,
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+private fun AbaHistoricoSelector(
+    abaSelecionada: Int,
+    qtdPassagens: Int,
+    qtdTitulos: Int,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        FilterChip(
+            selected = abaSelecionada == 0,
+            onClick = { onSelect(0) },
+            label = { Text("Passagens · $qtdPassagens") },
+            modifier = Modifier.weight(1f)
+        )
+        FilterChip(
+            selected = abaSelecionada == 1,
+            onClick = { onSelect(1) },
+            label = { Text("Títulos · $qtdTitulos") },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun TituloTecnicoCard(h: HallDaFamaEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, GoldChampion.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text("🏆", fontSize = 24.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    h.nomeCampeonato,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Temporada ${h.ano}${if (h.campeaoNome.isNotEmpty()) " · ${h.campeaoNome}" else ""}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (h.campeaoEscudo.isNotEmpty()) {
+                TeamBadge(nome = h.campeaoNome, escudoRes = h.campeaoEscudo, size = 32.dp)
+            }
         }
     }
 }

@@ -75,6 +75,114 @@ NOMES_UR_SOBRENOMES = [
 ]
 
 
+# ── Overrides de tecnicos REAIS por time_id ────────────────────────────────
+# Chave = time_id; valor = (nome, idade, nacionalidade).
+# Usado para forcar tecnicos reais em times cujo elenco tambem eh real. Sem
+# override, o gerador cai no sorteio aleatorio por pais (com fallback BR).
+#
+# Brasileirao 2025 (Serie A): tecnicos ativos em ~meados/fim de 2025.
+# Alguns clubes tiveram trocas — usamos o tecnico mais notavel do ano.
+OVERRIDES = {
+    # ── Serie A 2025 ─────────────────────────────────────────
+    1:  ("Filipe Luis",         40, "Brasil"),      # Flamengo
+    2:  ("Abel Ferreira",       47, "Portugal"),    # Palmeiras
+    3:  ("Cuca",                62, "Brasil"),      # Atletico-MG
+    4:  ("Hernan Crespo",       50, "Argentina"),   # Sao Paulo
+    5:  ("Dorival Junior",      63, "Brasil"),      # Corinthians
+    6:  ("Renato Gaucho",       63, "Brasil"),      # Fluminense
+    7:  ("Davide Ancelotti",    36, "Italia"),      # Botafogo
+    8:  ("Roger Machado",       51, "Brasil"),      # Internacional
+    9:  ("Mano Menezes",        63, "Brasil"),      # Gremio
+    10: ("Leonardo Jardim",     51, "Portugal"),    # Cruzeiro
+    11: ("Odair Hellmann",      52, "Brasil"),      # Athletico-PR
+    12: ("Fernando Diniz",      51, "Brasil"),      # Vasco da Gama
+    14: ("Rogerio Ceni",        52, "Brasil"),      # Bahia
+    15: ("Fernando Seabra",     41, "Brasil"),      # RB Bragantino
+    20: ("Fabio Carille",       52, "Brasil"),      # Vitoria
+    21: ("Juan Pablo Vojvoda",  50, "Argentina"),   # Santos
+    23: ("Mozart Santos",       61, "Brasil"),      # Coritiba
+    28: ("Emerson Avila",       47, "Brasil"),      # Chapecoense
+    40: ("Rafael Guanaes",      44, "Brasil"),      # Mirassol
+    48: ("Guto Ferreira",       60, "Brasil"),      # Remo
+
+    # ── Serie B 2025 (subset com conhecimento confiavel) ─────
+    13: ("Martin Palermo",      51, "Argentina"),   # Fortaleza (assumiu meados/2025)
+    22: ("Pepa",                53, "Portugal"),    # Sport Recife
+    25: ("Leo Conde",           47, "Brasil"),      # Ceara
+    26: ("Vagner Mancini",      59, "Brasil"),      # Goias
+    27: ("Eduardo Barroca",     46, "Brasil"),      # CRB
+    33: ("Eduardo Baptista",    55, "Brasil"),      # Novorizontino
+    56: ("Enderson Moreira",    55, "Brasil"),      # Avai
+
+
+    # Real Madrid
+    501: ("Xabi Alonso",        43, "Espanha"),
+    # Barcelona
+    502: ("Hansi Flick",        60, "Alemanha"),
+    # Atletico de Madrid
+    503: ("Diego Simeone",      55, "Argentina"),
+    # Athletic Bilbao
+    504: ("Ernesto Valverde",   61, "Espanha"),
+    # Real Sociedad
+    505: ("Sergio Francisco",   40, "Espanha"),
+    # Real Betis
+    506: ("Manuel Pellegrini",  71, "Chile"),
+    # Villarreal
+    507: ("Marcelino Garcia Toral", 60, "Espanha"),
+    # Sevilla
+    508: ("Matias Almeyda",     51, "Argentina"),
+    # Valencia
+    509: ("Carlos Corberan",    42, "Espanha"),
+    # Celta Vigo
+    510: ("Claudio Giraldez",   37, "Espanha"),
+    # Osasuna
+    511: ("Alessio Lisci",      39, "Italia"),
+    # Getafe
+    512: ("Jose Bordalas",      61, "Espanha"),
+    # Rayo Vallecano
+    513: ("Inigo Perez",        37, "Espanha"),
+    # Mallorca
+    514: ("Jagoba Arrasate",    47, "Espanha"),
+    # Girona
+    515: ("Michel",             50, "Espanha"),
+    # Espanyol
+    516: ("Manolo Gonzalez",    53, "Espanha"),
+    # Alaves
+    517: ("Eduardo Coudet",     50, "Argentina"),
+    # Elche
+    518: ("Eder Sarabia",       45, "Espanha"),
+    # Levante
+    519: ("Julian Calero",      55, "Espanha"),
+    # Real Oviedo
+    520: ("Veljko Paunovic",    48, "Servia"),
+
+    # ── Serie A italiana 2025/26 ─────────────────────────────
+    521: ("Cristian Chivu",     45, "Romenia"),     # Inter
+    522: ("Antonio Conte",      56, "Italia"),      # Napoli
+    523: ("Igor Tudor",         47, "Croacia"),     # Juventus
+    524: ("Massimiliano Allegri", 58, "Italia"),    # Milan
+    525: ("Ivan Juric",         50, "Croacia"),     # Atalanta
+    526: ("Gian Piero Gasperini", 67, "Italia"),    # Roma
+    527: ("Maurizio Sarri",     66, "Italia"),      # Lazio
+    528: ("Stefano Pioli",      60, "Italia"),      # Fiorentina
+    529: ("Vincenzo Italiano",  48, "Italia"),      # Bologna
+    530: ("Cesc Fabregas",      38, "Espanha"),     # Como
+    531: ("Marco Baroni",       62, "Italia"),      # Torino
+    532: ("Kosta Runjaic",      54, "Alemanha"),    # Udinese
+    533: ("Patrick Vieira",     49, "Franca"),      # Genoa
+    534: ("Fabio Pisacane",     39, "Italia"),      # Cagliari
+    535: ("Carlos Cuesta",      30, "Espanha"),     # Parma
+    536: ("Eusebio Di Francesco", 56, "Italia"),    # Lecce
+    537: ("Fabio Grosso",       48, "Italia"),      # Sassuolo
+    538: ("Paolo Zanetti",      42, "Italia"),      # Hellas Verona
+    539: ("Davide Nicola",      52, "Italia"),      # Cremonese
+    540: ("Alberto Gilardino",  43, "Italia"),      # Pisa
+
+    # ── Outros times (pool intercontinental) ─────────────────
+    601: ("Javier Mascherano",  41, "Argentina"),   # Inter Miami
+}
+
+
 def gen_nome(pais: str) -> tuple[str, str]:
     if pais == "Brasil":
         prenome = random.choice(NOMES_BR_PRENOMES)
@@ -96,8 +204,14 @@ def gen_nome(pais: str) -> tuple[str, str]:
 def gen_tecnico(time, tecnico_id: int):
     pais = time.get("pais", "Brasil")
     nacionalidade = "Uruguai" if pais in ("Uruguay", "Uruguai") else pais
-    nome, nome_abrev = gen_nome(pais)
-    idade = random.randint(38, 65)
+    override = OVERRIDES.get(time["id"])
+    if override is not None:
+        nome, idade, nacionalidade = override
+        parts = nome.split()
+        nome_abrev = f"{parts[0][0]}. {parts[-1]}" if len(parts) >= 2 else nome
+    else:
+        nome, nome_abrev = gen_nome(pais)
+        idade = random.randint(38, 65)
     rep_base = float(time.get("reputacao", 50))
     # Reputacao do tecnico: ~70% da reputacao do time, com variacao
     reputacao = max(30.0, min(90.0, rep_base * 0.75 + random.uniform(-8, 8)))

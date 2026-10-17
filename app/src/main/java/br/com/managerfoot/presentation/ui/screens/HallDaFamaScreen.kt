@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -62,11 +64,27 @@ fun HallDaFamaScreen(
         11 to "Apertura", 12 to "Intermediário", 13 to "Clausura",
         15 to "Segunda Divisão", 16 to "Competencia"
     )
+    val opcoesInglaterra = listOf(
+        400 to "Todas",
+        20 to "Premier League", 21 to "EFL Championship",
+        23 to "Copa da Inglaterra", 27 to "Supercopa da Inglaterra"
+    )
+    val opcoesEspanha = listOf(
+        500 to "Todas",
+        22 to "La Liga", 25 to "Copa Espanhola", 28 to "Supercopa da Espanha"
+    )
+    val opcoesItalia = listOf(
+        600 to "Todas",
+        24 to "Serie A", 26 to "Copa Italiana", 29 to "Supercopa da Itália"
+    )
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
             in 7..10, 17, 200 -> "Argentina"
             in 11..16, 300 -> "Uruguai"
+            20, 21, 23, 27, 400 -> "Inglaterra"
+            22, 25, 28, 500 -> "Espanha"
+            24, 26, 29, 600 -> "Italia"
             0 -> "Todos"
             else -> "Brasil"
         }
@@ -76,6 +94,9 @@ fun HallDaFamaScreen(
     val opcoesDaDiv = when (paisSelecionado) {
         "Argentina" -> opcoesArgentina
         "Uruguai" -> opcoesUruguai
+        "Inglaterra" -> opcoesInglaterra
+        "Espanha" -> opcoesEspanha
+        "Italia" -> opcoesItalia
         "Brasil" -> opcoesBrasil
         else -> emptyList()
     }
@@ -83,7 +104,7 @@ fun HallDaFamaScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Hall da Fama",
@@ -93,7 +114,7 @@ fun HallDaFamaScreen(
         )
 
         // Filtro de país (chips horizontais)
-        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai")
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia")
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -111,6 +132,9 @@ fun HallDaFamaScreen(
                             "Argentina" -> 200
                             "Brasil" -> 100
                             "Uruguai" -> 300
+                            "Inglaterra" -> 400
+                            "Espanha" -> 500
+                            "Italia" -> 600
                             else -> 0
                         }
                         vm.selecionarDivisao(div)
@@ -368,13 +392,9 @@ private fun CampeaoLinha(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // Avatar circular dourado/prata com escudo dentro
+        // Escudo do time (sem anel/círculo em volta)
         Box(
-            modifier = Modifier
-                .size(if (forte) 56.dp else 44.dp)
-                .clip(CircleShape)
-                .background(cor.copy(alpha = 0.20f))
-                .border(if (forte) 2.dp else 1.5.dp, cor, CircleShape),
+            modifier = Modifier.size(if (forte) 56.dp else 44.dp),
             contentAlignment = Alignment.Center
         ) {
             TeamBadge(
@@ -471,5 +491,8 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Brasil" -> "🇧🇷"
     "Argentina" -> "🇦🇷"
     "Uruguai" -> "🇺🇾"
+    "Inglaterra" -> "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+    "Espanha" -> "🇪🇸"
+    "Italia" -> "🇮🇹"
     else -> ""
 }

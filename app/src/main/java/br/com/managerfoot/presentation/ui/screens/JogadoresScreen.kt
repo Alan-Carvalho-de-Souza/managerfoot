@@ -1,5 +1,7 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.theme.fundoApp
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.database.entities.Posicao
+import br.com.managerfoot.domain.engine.CalculadoraMercado
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.presentation.ui.components.ForcaBadge
@@ -46,7 +50,11 @@ import br.com.managerfoot.presentation.ui.theme.MoneyNegative
 import br.com.managerfoot.presentation.ui.theme.MoneyPositive
 import br.com.managerfoot.presentation.ui.theme.Radius
 import br.com.managerfoot.presentation.ui.theme.Spacing
+import br.com.managerfoot.presentation.viewmodel.FiltrosPesquisaJogador
 import br.com.managerfoot.presentation.viewmodel.JogadoresViewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import kotlin.math.roundToInt
 
 // ═══════════════════════════════════════════════════════════
 //  JogadoresScreen
@@ -62,9 +70,7 @@ fun JogadoresScreen(
 ) {
     val elenco            by vm.elenco.collectAsState()
     val resultadoPesquisa by vm.resultadoPesquisa.collectAsState()
-    val posicaoFiltro     by vm.posicaoFiltro.collectAsState()
-    val forcaMinFiltro    by vm.forcaMinFiltro.collectAsState()
-    val idadeMaxFiltro    by vm.idadeMaxFiltro.collectAsState()
+    val filtros           by vm.filtros.collectAsState()
     val saldo             by vm.saldo.collectAsState()
     val mensagem          by vm.mensagem.collectAsState()
     val nomesPorTime      by vm.nomesPorTime.collectAsState()
@@ -129,7 +135,7 @@ fun JogadoresScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         ScreenTopBar(
             titulo = "Jogadores",
@@ -158,15 +164,10 @@ fun JogadoresScreen(
                 )
                 1 -> PesquisaTab(
                     jogadores = resultadoPesquisa,
-                    posicaoFiltro = posicaoFiltro,
-                    forcaMin = forcaMinFiltro,
-                    idadeMax = idadeMaxFiltro,
+                    filtros = filtros,
                     saldo = saldo,
                     nomesPorTime = nomesPorTime,
-                    onFiltrarPosicao = vm::filtrarPosicao,
-                    onFiltrarForcaMin = vm::filtrarForcaMin,
-                    onFiltrarIdadeMax = vm::filtrarIdadeMax,
-                    onLimparFiltros = vm::limparFiltros,
+                    onAplicarFiltros = vm::aplicarFiltros,
                     onClicarJogador = { jogadorParaOfertar = it }
                 )
             }
@@ -565,145 +566,52 @@ private fun ProgressoEvolucaoBar(progresso: Float) {
 //  Tab 1 — Pesquisa global
 // ─────────────────────────────────────────────────────────
 
+private fun contarFiltrosAtivos(f: FiltrosPesquisaJogador): Int {
+    var n = 0
+    if (f.posicao != null) n++
+    if (f.forcaMin > 0 || f.forcaMax < 99) n++
+    if (f.idadeMin > JogadoresViewModel.IDADE_MIN_PADRAO || f.idadeMax < JogadoresViewModel.IDADE_MAX_PADRAO) n++
+    if (f.valorMin > 0 || f.valorMax < JogadoresViewModel.VALOR_MAX_PADRAO) n++
+    if (f.salarioMin > 0 || f.salarioMax < JogadoresViewModel.SALARIO_MAX_PADRAO) n++
+    return n
+}
+
 @Composable
 private fun PesquisaTab(
     jogadores: List<Jogador>,
-    posicaoFiltro: Posicao?,
-    forcaMin: Int,
-    idadeMax: Int,
+    filtros: FiltrosPesquisaJogador,
     saldo: Long,
     nomesPorTime: Map<Int, String>,
-    onFiltrarPosicao: (Posicao?) -> Unit,
-    onFiltrarForcaMin: (Int) -> Unit,
-    onFiltrarIdadeMax: (Int) -> Unit,
-    onLimparFiltros: () -> Unit,
+    onAplicarFiltros: (FiltrosPesquisaJogador) -> Unit,
     onClicarJogador: (Jogador) -> Unit
 ) {
-    val filtroAtivo = posicaoFiltro != null || forcaMin > 0 || idadeMax < 40
+    var mostrarFiltros by remember { mutableStateOf(false) }
+    val qtdFiltros = contarFiltrosAtivos(filtros)
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Painel de filtros
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-            tonalElevation = 0.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                // Header de filtros
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.lg),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.xs))
-                    Text(
-                        "FILTROS",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (filtroAtivo) {
-                        TextButton(
-                            onClick = onLimparFiltros,
-                            contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(Spacing.xxs))
-                            Text("Limpar", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-
-                // Chips de posição (scrollable)
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = Spacing.lg),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    item {
-                        FilterChipPill(
-                            label = "Todas",
-                            selected = posicaoFiltro == null,
-                            onClick = { onFiltrarPosicao(null) }
-                        )
-                    }
-                    items(Posicao.entries) { pos ->
-                        FilterChipPill(
-                            label = pos.abreviacao,
-                            selected = pos == posicaoFiltro,
-                            onClick = { onFiltrarPosicao(pos) }
-                        )
-                    }
-                }
-
-                // Slider força
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.lg),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Força ≥ $forcaMin",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(96.dp)
-                    )
-                    Slider(
-                        value = forcaMin.toFloat(),
-                        onValueChange = { onFiltrarForcaMin(it.toInt()) },
-                        valueRange = 0f..99f,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Slider idade
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.lg),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Idade ≤ $idadeMax",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(96.dp)
-                    )
-                    Slider(
-                        value = idadeMax.toFloat(),
-                        onValueChange = { onFiltrarIdadeMax(it.toInt()) },
-                        valueRange = 16f..45f,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        // Contador de resultados
-        Text(
-            text = "${jogadores.size} jogador${if (jogadores.size != 1) "es" else ""} encontrado${if (jogadores.size != 1) "s" else ""}",
+        // Barra: contador + botão que abre o painel de filtros
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "${jogadores.size} jogador${if (jogadores.size != 1) "es" else ""} encontrado${if (jogadores.size != 1) "s" else ""}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FilledTonalButton(
+                onClick = { mostrarFiltros = true },
+                shape = RoundedCornerShape(Radius.md),
+                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs)
+            ) {
+                Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(Spacing.xs))
+                Text(if (qtdFiltros > 0) "Filtros ($qtdFiltros)" else "Filtros")
+            }
+        }
 
         if (jogadores.isEmpty()) {
             Box(
@@ -733,6 +641,170 @@ private fun PesquisaTab(
                 item { Spacer(Modifier.height(Spacing.lg)) }
             }
         }
+    }
+
+    if (mostrarFiltros) {
+        FiltrosBottomSheet(
+            filtrosIniciais = filtros,
+            onFiltrar = { onAplicarFiltros(it); mostrarFiltros = false },
+            onDismiss = { mostrarFiltros = false }
+        )
+    }
+}
+
+// ── Painel de filtros em bottom sheet (aplicação adiada via botão "Filtrar") ──
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FiltrosBottomSheet(
+    filtrosIniciais: FiltrosPesquisaJogador,
+    onFiltrar: (FiltrosPesquisaJogador) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var posicao    by remember { mutableStateOf(filtrosIniciais.posicao) }
+    var forcaMin   by remember { mutableIntStateOf(filtrosIniciais.forcaMin) }
+    var forcaMax   by remember { mutableIntStateOf(filtrosIniciais.forcaMax) }
+    var idadeMin   by remember { mutableIntStateOf(filtrosIniciais.idadeMin) }
+    var idadeMax   by remember { mutableIntStateOf(filtrosIniciais.idadeMax) }
+    var valorMin   by remember { mutableStateOf(filtrosIniciais.valorMin) }
+    var valorMax   by remember { mutableStateOf(filtrosIniciais.valorMax) }
+    var salarioMin by remember { mutableStateOf(filtrosIniciais.salarioMin) }
+    var salarioMax by remember { mutableStateOf(filtrosIniciais.salarioMax) }
+
+    fun montar() = FiltrosPesquisaJogador(
+        posicao, forcaMin, forcaMax, idadeMin, idadeMax, valorMin, valorMax, salarioMin, salarioMax
+    )
+    val qtd = contarFiltrosAtivos(montar())
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.lg)
+                .padding(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Text(
+                "Filtrar jogadores",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // Posição — lista suspensa
+            var menuPosAberto by remember { mutableStateOf(false) }
+            val labelPosicao = posicao
+                ?.let { "${it.abreviacao} · ${it.name.replace("_", " ")}" }
+                ?: "Todas as posições"
+            ExposedDropdownMenuBox(
+                expanded = menuPosAberto,
+                onExpandedChange = { menuPosAberto = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = labelPosicao,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Posição") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuPosAberto) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    shape = RoundedCornerShape(Radius.md)
+                )
+                ExposedDropdownMenu(
+                    expanded = menuPosAberto,
+                    onDismissRequest = { menuPosAberto = false },
+                    modifier = Modifier.heightIn(max = 360.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Todas as posições") },
+                        onClick = { posicao = null; menuPosAberto = false }
+                    )
+                    Posicao.entries.forEach { pos ->
+                        DropdownMenuItem(
+                            text = { Text("${pos.abreviacao} · ${pos.name.replace("_", " ")}") },
+                            onClick = { posicao = pos; menuPosAberto = false }
+                        )
+                    }
+                }
+            }
+
+            // Força — faixa (mín/máx)
+            FiltroRangeSlider("Força", "$forcaMin — $forcaMax", forcaMin.toFloat()..forcaMax.toFloat(), 0f..99f) { r ->
+                forcaMin = r.start.roundToInt().coerceIn(0, 99)
+                forcaMax = r.endInclusive.roundToInt().coerceIn(0, 99)
+            }
+
+            // Idade — faixa (mín/máx)
+            FiltroRangeSlider("Idade", "$idadeMin — $idadeMax", idadeMin.toFloat()..idadeMax.toFloat(), 16f..45f) { r ->
+                idadeMin = r.start.roundToInt().coerceIn(16, 45)
+                idadeMax = r.endInclusive.roundToInt().coerceIn(16, 45)
+            }
+
+            // Valor de mercado — faixa (mín/máx), em milhões de reais
+            FiltroRangeSlider(
+                "Valor de mercado",
+                "${formatarSaldo(valorMin)} — ${formatarSaldo(valorMax)}",
+                (valorMin / 1_000_000_00L).toFloat()..(valorMax / 1_000_000_00L).toFloat(),
+                0f..300f
+            ) { r ->
+                valorMin = r.start.toLong() * 1_000_000_00L
+                valorMax = r.endInclusive.toLong() * 1_000_000_00L
+            }
+
+            // Salário (mês) — faixa (mín/máx), em milhares de reais (passo R$ 1.000)
+            FiltroRangeSlider(
+                "Salário (mês)",
+                "${formatarSaldo(salarioMin)} — ${formatarSaldo(salarioMax)}",
+                (salarioMin / 100_000L).toFloat()..(salarioMax / 100_000L).toFloat(),
+                0f..2000f
+            ) { r ->
+                salarioMin = r.start.toLong() * 100_000L
+                salarioMax = r.endInclusive.toLong() * 100_000L
+            }
+
+            // Ações: Limpar (reseta o painel) + Filtrar (aplica e fecha)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        val d = FiltrosPesquisaJogador()
+                        posicao = d.posicao; forcaMin = d.forcaMin; forcaMax = d.forcaMax
+                        idadeMin = d.idadeMin; idadeMax = d.idadeMax
+                        valorMin = d.valorMin; valorMax = d.valorMax
+                        salarioMin = d.salarioMin; salarioMax = d.salarioMax
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(Radius.md)
+                ) { Text("Limpar") }
+                Button(
+                    onClick = { onFiltrar(montar()) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(Radius.md)
+                ) { Text(if (qtd > 0) "Filtrar ($qtd)" else "Filtrar") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FiltroRangeSlider(
+    label: String,
+    texto: String,
+    valor: ClosedFloatingPointRange<Float>,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onChange: (ClosedFloatingPointRange<Float>) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(texto, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
+        RangeSlider(value = valor, onValueChange = onChange, valueRange = valueRange)
     }
 }
 
@@ -856,10 +928,12 @@ private fun OfertaDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
+                val preco = CalculadoraMercado.precoCompraUsuario(jogador.valorMercado)
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     DialogDataRow("Posição", jogador.posicao.name.replace("_", " "))
                     DialogDataRow("Idade", "${jogador.idade} anos")
                     DialogDataRow("Status", if (jogador.timeId != null) "Com clube" else "Livre")
+                    DialogDataRow("Valor de mercado", formatarSaldo(jogador.valorMercado))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -867,18 +941,18 @@ private fun OfertaDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Valor",
+                            "Preço (com prêmio)",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            formatarSaldo(jogador.valorMercado),
+                            formatarSaldo(preco),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (saldo >= jogador.valorMercado) MoneyPositive else MoneyNegative
+                            color = if (saldo >= preco) MoneyPositive else MoneyNegative
                         )
                     }
-                    if (saldo < jogador.valorMercado) {
+                    if (saldo < preco) {
                         Surface(
                             shape = RoundedCornerShape(Radius.sm),
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
@@ -913,7 +987,7 @@ private fun OfertaDialog(
             if (!jaNoElenco) {
                 Button(
                     onClick = onContratar,
-                    enabled = saldo >= jogador.valorMercado,
+                    enabled = saldo >= CalculadoraMercado.precoCompraUsuario(jogador.valorMercado),
                     shape = RoundedCornerShape(Radius.sm)
                 ) {
                     Text("Contratar", fontWeight = FontWeight.SemiBold)
@@ -972,9 +1046,11 @@ private fun VenderDialog(
             }
         },
         text = {
+            val preco = CalculadoraMercado.precoVendaUsuario(jogador.valorMercado)
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 DialogDataRow("Posição", jogador.posicao.name.replace("_", " "))
                 DialogDataRow("Idade", "${jogador.idade} anos")
+                DialogDataRow("Valor de mercado", formatarSaldo(jogador.valorMercado))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -982,12 +1058,12 @@ private fun VenderDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Valor de mercado",
+                        "Você recebe (com deságio)",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        formatarSaldo(jogador.valorMercado),
+                        formatarSaldo(preco),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MoneyPositive

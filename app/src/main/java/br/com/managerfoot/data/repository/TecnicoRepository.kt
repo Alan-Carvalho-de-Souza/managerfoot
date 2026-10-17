@@ -1,7 +1,9 @@
 package br.com.managerfoot.data.repository
 
+import br.com.managerfoot.data.dao.HallDaFamaDao
 import br.com.managerfoot.data.dao.TecnicoDao
 import br.com.managerfoot.data.dao.TimeDao
+import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.data.database.entities.PassagemTecnicoEntity
 import br.com.managerfoot.data.database.entities.TecnicoEntity
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +17,8 @@ import javax.inject.Singleton
 @Singleton
 class TecnicoRepository @Inject constructor(
     private val tecnicoDao: TecnicoDao,
-    private val timeDao: TimeDao
+    private val timeDao: TimeDao,
+    private val hallDaFamaDao: HallDaFamaDao
 ) {
 
     // ── Observers ────────────────────────────────────────────
@@ -24,6 +27,17 @@ class TecnicoRepository @Inject constructor(
     fun observePorTime(timeId: Int): Flow<TecnicoEntity?> = tecnicoDao.observePorTime(timeId)
     fun observeTodos(): Flow<List<TecnicoEntity>> = tecnicoDao.observeTodos()
 
+    // ── Ajustes ──────────────────────────────────────────────
+    /**
+     * Aplica um delta à reputação do técnico atual do time (cumprimento/falha de meta,
+     * bônus de título etc.). Se não houver técnico no time, é no-op.
+     */
+    suspend fun ajustarReputacaoTecnicoDoTime(timeId: Int, delta: Float) {
+        val t = tecnicoDao.buscarPorTime(timeId) ?: return
+        val nova = (t.reputacao + delta).coerceIn(0f, 100f)
+        tecnicoDao.atualizarReputacao(t.id, nova)
+    }
+
     // ── Suspend lookups ──────────────────────────────────────
     suspend fun buscarPorId(id: Int): TecnicoEntity? = tecnicoDao.buscarPorId(id)
     suspend fun buscarPorTime(timeId: Int): TecnicoEntity? = tecnicoDao.buscarPorTime(timeId)
@@ -31,6 +45,10 @@ class TecnicoRepository @Inject constructor(
     suspend fun buscarTodos(): List<TecnicoEntity> = tecnicoDao.buscarTodos()
     suspend fun buscarPassagens(tecnicoId: Int): List<PassagemTecnicoEntity> =
         tecnicoDao.buscarPassagens(tecnicoId)
+
+    /** Títulos conquistados pelo técnico (Hall da Fama), com campeonato e temporada. */
+    suspend fun buscarTitulos(tecnicoId: Int): List<HallDaFamaEntity> =
+        hallDaFamaDao.buscarTitulosPorTecnico(tecnicoId)
 
     // ─────────────────────────────────────────────────────────
     //  Cadastro / liberação / contratação
@@ -93,6 +111,35 @@ class TecnicoRepository @Inject constructor(
         )
 
         return novoId
+    }
+
+    /**
+     * Cria a passagem ATIVA inicial de cada técnico já empregado (timeId != null)
+     * que ainda não tenha passagem ativa. Serve para que o Ranking/Histórico
+     * exiba as passagens dos técnicos da IA desde os primeiros jogos — do mesmo
+     * modo que o técnico do usuário já ganha a sua em [cadastrarTecnicoUsuario].
+     *
+     * Idempotente: técnicos com passagem ativa (ex.: o do usuário) são ignorados,
+     * então pode ser chamado com segurança no início do jogo.
+     */
+    suspend fun criarPassagensIniciaisEmClubes(anoInicial: Int) {
+        val tecnicos = tecnicoDao.buscarTodos()
+        for (t in tecnicos) {
+            val timeId = t.timeId ?: continue
+            if (tecnicoDao.buscarPassagemAtiva(t.id) != null) continue
+            val time = timeDao.buscarPorId(timeId)
+            tecnicoDao.inserirPassagem(
+                PassagemTecnicoEntity(
+                    tecnicoId  = t.id,
+                    timeId     = timeId,
+                    timeNome   = time?.nome ?: "",
+                    timeEscudo = time?.escudoRes ?: "",
+                    anoInicio  = anoInicial,
+                    anoFim     = anoInicial,
+                    ativa      = true
+                )
+            )
+        }
     }
 
     /** Libera técnico de um time (vira free agent). Encerra a passagem ativa. */
@@ -243,6 +290,72 @@ class TecnicoRepository @Inject constructor(
     // ─────────────────────────────────────────────────────────
     //  IA: contrata técnicos livres para times sem técnico
     // ─────────────────────────────────────────────────────────
+
+    /**
+     * Troca o técnico de um time no meio da temporada por crise de resultados
+     * (usado quando o clube está na zona de risco com aproveitamento ruim).
+     * Escolhe um substituto livre realista — preferindo mesma nacionalidade e
+     * reputação compatível com o clube. Se não houver substituto adequado,
+     * mantém o técnico atual (não demite "no vácuo"). Nunca mexe no time do
+     * usuário. Retorna true se houve troca.
+     */
+    suspend fun trocarTecnicoPorCrise(timeId: Int, anoAtual: Int): Boolean {
+        val atual = tecnicoDao.buscarPorTime(timeId)
+        if (atual?.controladoPorJogador == true) return false
+        val time = timeDao.buscarPorId(timeId) ?: return false
+        val nac = if (time.pais in listOf("Uruguay", "Uruguai")) "Uruguai" else time.pais
+
+        // Livres, excluindo o técnico atual (que ainda tem timeId até a troca)
+        val livres = tecnicoDao.buscarTodos().filter { it.timeId == null && it.id != atual?.id }
+        if (livres.isEmpty()) return false
+
+        val compat = livres.filter { it.reputacao <= time.reputacao + 15f }
+        val substituto = compat.filter { it.nacionalidade == nac }.maxByOrNull { it.reputacao }
+            ?: compat.maxByOrNull { it.reputacao }
+            ?: return false
+
+        val rep = time.reputacao.toLong()
+        val salario = (150_000L + (rep - 30L) * 50_000L).coerceAtLeast(150_000L)
+        // contratar() já demite o atual (vira livre) e cria a nova passagem.
+        contratar(substituto.id, timeId, salario, 2, anoAtual)
+        return true
+    }
+
+    /**
+     * Movimento natural do mercado de técnicos ao FINAL da temporada: clubes de
+     * maior reputação, iterados dos melhores para os piores, podem contratar um
+     * técnico livre de destaque quando o atual é claramente inferior ao patamar
+     * do clube. O técnico substituído volta ao mercado e pode "descer" para um
+     * clube menor mais adiante no laço — gerando um efeito cascata realista.
+     *
+     * Deve rodar APÓS [demitirPorDesempenho] e [preencherVagasComTecnicosLivres],
+     * quando os recém-demitidos já estão no pool de livres.
+     */
+    suspend fun movimentarMercadoTecnicosFimTemporada(anoAtual: Int) {
+        val times = timeDao.buscarTodos().sortedByDescending { it.reputacao }
+        for (time in times) {
+            val atual = tecnicoDao.buscarPorTime(time.id)
+            if (atual?.controladoPorJogador == true) continue
+
+            val livres = tecnicoDao.buscarTodos().filter { it.timeId == null }
+            if (livres.isEmpty()) break
+
+            val nac = if (time.pais in listOf("Uruguay", "Uruguai")) "Uruguai" else time.pais
+            val repAtual = atual?.reputacao ?: 0f
+            val compat = livres.filter { it.reputacao <= time.reputacao + 10f }
+                .filter { it.reputacao > repAtual + 8f }   // só troca se for upgrade claro
+            val alvo = compat.filter { it.nacionalidade == nac }.maxByOrNull { it.reputacao }
+                ?: compat.maxByOrNull { it.reputacao }
+                ?: continue
+
+            // Probabilidade moderada de o clube se mexer (nem todo ano há troca).
+            if (kotlin.random.Random.nextFloat() > 0.35f) continue
+
+            val rep = time.reputacao.toLong()
+            val salario = (150_000L + (rep - 30L) * 50_000L).coerceAtLeast(150_000L)
+            contratar(alvo.id, time.id, salario, 2, anoAtual)  // libera o atual → volta ao pool
+        }
+    }
 
     /**
      * Para cada time sem técnico, contrata um técnico livre — preferindo

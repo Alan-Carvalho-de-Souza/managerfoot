@@ -53,6 +53,7 @@ data class FinancaEntity(
     val despesaTransferencias: Long = 0,
     val despesaInfraestrutura: Long = 0,
     val despesaAmpliacaoEstadio: Long = 0, // custo de expansão do estádio
+    val despesaBase: Long = 0,             // custo de formação de jogadores na base de juniores
     val saldoFinal: Long = 0            // calculado no fechamento do mês
 )
 

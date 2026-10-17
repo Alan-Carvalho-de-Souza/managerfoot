@@ -35,7 +35,11 @@ BASE = os.path.join(ASSETS, "seed_data.json")
 # dos ids que contem. Ligas sem arquivo aqui vivem apenas no seed_data.json.
 AUX_FILES = [
     "seed_premier.json",
+    "seed_championship.json",
+    "seed_laliga.json",
+    "seed_serie_a.json",
     "seed_uruguay.json",
+    "seed_outros.json",
 ]
 
 

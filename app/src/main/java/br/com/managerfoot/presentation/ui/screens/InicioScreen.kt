@@ -23,7 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import br.com.managerfoot.presentation.ui.theme.fundoApp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,10 +35,8 @@ import br.com.managerfoot.domain.model.Time
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.presentation.ui.components.TeamBadge
 import br.com.managerfoot.presentation.ui.components.formatarSaldo
-import br.com.managerfoot.presentation.ui.theme.BgPrimary
 import br.com.managerfoot.presentation.ui.theme.Radius
 import br.com.managerfoot.presentation.ui.theme.Spacing
-import br.com.managerfoot.presentation.ui.theme.SurfaceCard
 import br.com.managerfoot.presentation.viewmodel.InicioUiState
 import br.com.managerfoot.presentation.viewmodel.InicioViewModel
 
@@ -88,11 +86,7 @@ fun InicioScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(BgPrimary, SurfaceCard, BgPrimary)
-                )
-            )
+            .fundoApp()
     ) {
         when (uiState) {
             is InicioUiState.Carregando -> {
@@ -456,7 +450,7 @@ fun SelecionarTimeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fundoApp()
     ) {
         // Header com título
         Row(
@@ -661,7 +655,10 @@ private fun serieLabelDe(divisao: Int): String = when (divisao) {
     6 -> "Segunda Div."        // Argentina B
     9 -> "Primera Div."        // Uruguai A
     10 -> "Segunda Div."       // Uruguai B
-    11 -> "Premier League"     // Inglaterra
+    11 -> "Premier League"     // Inglaterra 1ª
+    12 -> "EFL Championship"   // Inglaterra 2ª
+    13 -> "La Liga"            // Espanha 1ª
+    14 -> "Serie A"            // Itália 1ª
     else -> "Série $divisao"
 }
 
@@ -675,12 +672,16 @@ private fun corDivisao(divisao: Int): Color = when (divisao) {
     9 -> Color(0xFF26A69A)   // verde-azulado — Uruguai A
     10 -> Color(0xFF00897B)  // teal — Uruguai B
     11 -> Color(0xFF7C3AED)  // roxo Premier — Inglaterra
+    12 -> Color(0xFF5B21B6)  // roxo escuro Championship — Inglaterra 2ª
+    13 -> Color(0xFFE53935)  // vermelho — La Liga — Espanha
+    14 -> Color(0xFF0EA5A0)  // teal — Serie A — Itália
     else -> Color(0xFF7B8394)
 }
 
 // ═══════════════════════════════════════════════════════════
 //  Formulário do Técnico (após seleção do time)
 // ═══════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FormularioTecnicoUsuario(
     time: Time?,
@@ -688,22 +689,17 @@ private fun FormularioTecnicoUsuario(
     onVoltar: () -> Unit
 ) {
     var nome by remember { mutableStateOf("") }
-    val nacionalidades = listOf("Brasil", "Argentina", "Uruguai", "Outro")
-    val defaultNac = when (time?.pais) {
-        "Argentina" -> "Argentina"
-        "Uruguay", "Uruguai" -> "Uruguai"
-        else -> "Brasil"
-    }
+    val nacionalidades = br.com.managerfoot.domain.model.Nacionalidades.TODAS
+    val defaultNac = br.com.managerfoot.domain.model.Nacionalidades.padraoParaPais(time?.pais)
     var nacionalidade by remember { mutableStateOf(defaultNac) }
+    var menuNacAberto by remember { mutableStateOf(false) }
 
     val nomeValido = nome.trim().length in 2..30
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(colors = listOf(BgPrimary, SurfaceCard, BgPrimary))
-            )
+            .fundoApp()
     ) {
         Column(
             modifier = Modifier
@@ -760,17 +756,36 @@ private fun FormularioTecnicoUsuario(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth().padding(start = Spacing.xs)
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ExposedDropdownMenuBox(
+                expanded = menuNacAberto,
+                onExpandedChange = { menuNacAberto = it },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                nacionalidades.forEach { nac ->
-                    FilterChipPill(
-                        label = nac,
-                        selected = nacionalidade == nac,
-                        onClick = { nacionalidade = nac },
-                        modifier = Modifier.weight(1f)
-                    )
+                OutlinedTextField(
+                    value = nacionalidade,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("País") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuNacAberto) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    shape = RoundedCornerShape(Radius.md)
+                )
+                ExposedDropdownMenu(
+                    expanded = menuNacAberto,
+                    onDismissRequest = { menuNacAberto = false },
+                    modifier = Modifier.heightIn(max = 360.dp)
+                ) {
+                    nacionalidades.forEach { nac ->
+                        DropdownMenuItem(
+                            text = { Text(nac) },
+                            onClick = {
+                                nacionalidade = nac
+                                menuNacAberto = false
+                            }
+                        )
+                    }
                 }
             }
 

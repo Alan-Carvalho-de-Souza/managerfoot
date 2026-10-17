@@ -163,6 +163,17 @@ object MotorFinanceiro {
         else             -> 0.35
     }
 
+    /**
+     * Fator do PREÇO DE REFERÊNCIA da bilheteria conforme a reputação do clube.
+     * O preço de referência é aquele em que a elasticidade fica neutra (fatorPreço≈1):
+     * clubes grandes sustentam ingressos mais caros sem esvaziar; pequenos são
+     * penalizados se cobrarem caro. Escala linear de 0,8 (reputação 30) a 2,0 (rep 99).
+     */
+    fun fatorReferenciaBilheteria(reputacao: Float): Double {
+        val t = ((reputacao - 30f) / 69f).coerceIn(0f, 1f)
+        return 0.8 + (2.0 - 0.8) * t
+    }
+
     // Fator de rivalidade baseado no nível do adversário
     private fun fatorRivalidade(adversarioNivel: Int): Double = when {
         adversarioNivel >= 8 -> 1.25  // clássico / rival forte
@@ -172,16 +183,39 @@ object MotorFinanceiro {
     }
 
     /**
+     * Bônus de público para clássicos regionais — mesma cidade tem impacto maior
+     * que mesmo estado. Fla-Flu, Grenal, Choque-Rei, Superclásico argentino etc.
+     */
+    private fun fatorRivalidadeRegional(mandante: Time, visitante: Time?): Double {
+        if (visitante == null || visitante.id == mandante.id) return 1.0
+        return when {
+            mandante.cidade.isNotBlank() &&
+                mandante.cidade.equals(visitante.cidade, ignoreCase = true) -> 1.35  // clássico municipal
+            mandante.estado.isNotBlank() &&
+                mandante.estado.equals(visitante.estado, ignoreCase = true) -> 1.15  // clássico estadual
+            else -> 1.0
+        }
+    }
+
+    /** Retorna true quando o confronto é clássico regional (mesma cidade ou estado). */
+    fun ehClassicoRegional(mandante: Time, visitante: Time): Boolean =
+        fatorRivalidadeRegional(mandante, visitante) > 1.0
+
+    /**
      * Calcula público e receita de bilheteria para uma partida em casa,
      * dividindo o estádio em três setores:
      *  - Arquibancada (60% dos assentos): preço base
      *  - Cadeira     (30% dos assentos): 2× preço base
      *  - Camarote    (10% dos assentos): 5× preço base
      *
+     * @param adversario opcional — quando informado, aplica bônus regional se for
+     *                   um clássico da mesma cidade/estado do mandante.
      * @return Pair(torcedores, receita em centavos)
      */
-    fun calcularPublico(time: Time, adversarioNivel: Int): Pair<Int, Long> {
-        val fatorOcup  = fatorReputacao(time.reputacao) * fatorRivalidade(adversarioNivel)
+    fun calcularPublico(time: Time, adversarioNivel: Int, adversario: Time? = null): Pair<Int, Long> {
+        val fatorOcup  = fatorReputacao(time.reputacao) *
+                         fatorRivalidade(adversarioNivel) *
+                         fatorRivalidadeRegional(time, adversario)
         val publico    = (time.estadioCapacidade * fatorOcup).toInt().coerceAtLeast(0)
 
         val arquibancada = (publico * 0.60).toLong()
@@ -201,6 +235,45 @@ object MotorFinanceiro {
         calcularPublico(time, adversarioNivel).second
 
     /**
+     * Bilheteria SETORIZADA (jogos em casa do jogador): usa a capacidade real de cada
+     * setor do estádio e o preço definido pelo usuário, com **elasticidade de preço**.
+     *
+     * Para cada setor: ocupação = capacidade × fatorDemanda × fatorPreço, onde
+     *  - fatorDemanda = reputação × rivalidade × rivalidade regional (mesmo da versão flat);
+     *  - fatorPreço   = (2 − preço/precoReferência) limitado a [0.10, 1.30].
+     * O preço de referência do setor é o preço-base do clube (`time.precoIngresso`)
+     * multiplicado por 1× (arquibancada), 2× (cadeira) e 5× (camarote). Assim, cobrar
+     * no preço de referência maximiza a receita; barato lota mas rende menos; caro esvazia.
+     */
+    fun calcularPublicoSetorizado(
+        time: Time,
+        adversarioNivel: Int,
+        adversario: Time?,
+        capArquibancada: Int, capCadeira: Int, capCamarote: Int,
+        precoArquibancada: Long, precoCadeira: Long, precoCamarote: Long
+    ): Pair<Int, Long> {
+        val fatorDemanda = fatorReputacao(time.reputacao) *
+                           fatorRivalidade(adversarioNivel) *
+                           fatorRivalidadeRegional(time, adversario)
+        val base = time.precoIngresso.coerceAtLeast(1)
+        // Preço de referência escala com a reputação: clube grande sustenta ingresso mais caro.
+        val fatorRef = fatorReferenciaBilheteria(time.reputacao)
+
+        fun setor(cap: Int, preco: Long, refMult: Int): Pair<Int, Long> {
+            if (cap <= 0) return 0 to 0L
+            val ref = (base * refMult * fatorRef).toLong().coerceAtLeast(1)
+            val fatorPreco = (2.0 - preco.coerceAtLeast(0).toDouble() / ref).coerceIn(0.10, 1.30)
+            val ocup = (cap * fatorDemanda * fatorPreco).toInt().coerceIn(0, cap)
+            return ocup to ocup.toLong() * preco
+        }
+
+        val (oA, rA) = setor(capArquibancada, precoArquibancada, 1)
+        val (oC, rC) = setor(capCadeira,      precoCadeira,      2)
+        val (oM, rM) = setor(capCamarote,     precoCamarote,     5)
+        return (oA + oC + oM) to (rA + rC + rM)
+    }
+
+    /**
      * Deriva o nível do clube (1..10) a partir da sua reputação (0..100).
      * Usado em [GameRepository.recalcularNiveisGlobais] ao final de cada
      * temporada para que clubes que conquistam títulos / sobem de divisão
@@ -218,14 +291,22 @@ object MotorFinanceiro {
     // Patrocínio mensal baseado na reputação do clube
     fun calcularPatrocinioMensal(time: Time): Long {
         val base = when {
-            time.reputacao >= 90f -> 50_000_000_00L  // R$ 5.000.000
+            time.reputacao >= 90f -> 50_000_000_00L  // R$ 50.000.000
             time.reputacao >= 70f -> 20_000_000_00L
             time.reputacao >= 50f -> 8_000_000_00L
             time.reputacao >= 30f -> 3_000_000_00L
             else                  -> 1_000_000_00L
         }
-        return base + (time.divisao - 1) * -500_000_00L // divisões menores = menos patrocínio
+        return (base - penalidadeDivisaoPatrocinio(time.divisao)).coerceAtLeast(500_000_00L)
     }
+
+    /**
+     * Desconto de patrocínio por divisão — aplica-se SÓ às divisões inferiores do BRASIL
+     * (2=B, 3=C, 4=D). Ligas estrangeiras usam códigos de divisão altos (La Liga=13,
+     * Serie A=14, etc.) e não são penalizadas; antes a fórmula zerava o patrocínio delas.
+     */
+    fun penalidadeDivisaoPatrocinio(divisao: Int): Long =
+        if (divisao in 2..4) (divisao - 1) * 500_000_00L else 0L
 
     // Folha salarial mensal
     fun calcularFolhaMensal(elenco: List<Jogador>): Long =
@@ -275,6 +356,54 @@ object MotorFinanceiro {
         return assentosNovos * 5_000_00L  // R$ 500 por assento novo
     }
 
+    // ── Metas de temporada ────────────────────────────────────
+    /**
+     * Meta oficial do clube para a temporada. Calculada a partir da reputação
+     * do clube e da divisão em que ele joga. Serve para dar direção ao usuário
+     * (o que se espera dele no ano) e para o técnico ser julgado ao final.
+     */
+    enum class MetaTemporada(val titulo: String, val descricao: String) {
+        TITULO             ("Vencer o campeonato",  "O clube não aceita menos que o título"),
+        G4                 ("Terminar no G4",        "Vaga em torneio continental é obrigação"),
+        TOP_10             ("Ficar no Top 10",       "Terminar entre os 10 primeiros"),
+        MEIO_TABELA        ("Meio de tabela",        "Uma campanha tranquila, sem sustos"),
+        FUGIR_REBAIXAMENTO ("Não ser rebaixado",     "Se manter na divisão é o essencial"),
+        ACESSO             ("Conquistar o acesso",   "Terminar no G4 e subir de divisão"),
+        SOBREVIVER         ("Sobreviver",            "Elenco modesto — evitar humilhação")
+    }
+
+    /**
+     * Deriva a meta de temporada a partir do time e da divisão em que joga.
+     * Reputação vai de ~30 a ~99. Regras:
+     *  - Primeiras divisões (Série A/Primera/Premier/La Liga):
+     *      rep ≥ 90 → TITULO | ≥ 78 → G4 | ≥ 66 → TOP_10 | senão → NÃO SER REBAIXADO
+     *    (times recém-promovidos, de reputação baixa, caem naturalmente em "não ser
+     *     rebaixado"; times médios miram o Top 10; só a elite mira o título/G4.)
+     *  - Divisões inferiores (B/C/D, Championship, Segundas):
+     *      rep ≥ 70 → ACESSO | ≥ 52 → MEIO_TABELA | senão → SOBREVIVER
+     */
+    fun calcularMetaTemporada(time: Time): MetaTemporada {
+        val rep = time.reputacao
+        // Primeiras divisões (todos os países): Série A Brasil = 1, Primera Argentina = 5,
+        // Primera Uruguai = 9, Premier League = 11, La Liga = 13, Serie A italiana = 14.
+        val ehPrimeiraDivisao = time.divisao == 1 || time.divisao == 5 || time.divisao == 9 ||
+                                time.divisao == 11 || time.divisao == 13 || time.divisao == 14
+        return if (ehPrimeiraDivisao) {
+            when {
+                rep >= 90f -> MetaTemporada.TITULO
+                rep >= 78f -> MetaTemporada.G4
+                rep >= 66f -> MetaTemporada.TOP_10
+                else       -> MetaTemporada.FUGIR_REBAIXAMENTO
+            }
+        } else {
+            when {
+                rep >= 70f -> MetaTemporada.ACESSO
+                rep >= 52f -> MetaTemporada.MEIO_TABELA
+                else       -> MetaTemporada.SOBREVIVER
+            }
+        }
+    }
+
     // Atualiza morale do elenco com base em resultados recentes
     fun calcularMorale(
         vitoriasUltimas5: Int,
@@ -305,14 +434,27 @@ object MotorPatrocinio {
         val reputacaoMinima: Int
     ) {
         REGIONAL (1, "Patrocinador Regional",  "empresa local",    0.30, 0),
-        NACIONAL (2, "Patrocinador Nacional",  "empresa nacional", 0.60, 25),
-        PREMIUM  (3, "Patrocinador Premium",   "multinacional",    1.00, 50)
+        NACIONAL (2, "Patrocinador Nacional",  "empresa nacional", 0.60, 78),
+        PREMIUM  (3, "Patrocinador Premium",   "multinacional",    1.00, 90)
+    }
+
+    /**
+     * Faixa de patrocínio a que o clube TEM DIREITO, conforme a reputação:
+     *  - reputação ≥ 90         → Premium
+     *  - reputação 78–89        → Nacional
+     *  - reputação ≤ 77         → Regional
+     * Cada clube fecha apenas com o patrocinador da sua faixa (exclusivo).
+     */
+    fun tierElegivel(reputacao: Int): Tier = when {
+        reputacao >= 90 -> Tier.PREMIUM
+        reputacao >= 78 -> Tier.NACIONAL
+        else            -> Tier.REGIONAL
     }
 
     private val nomesPorTier = mapOf(
-        Tier.REGIONAL to listOf("Banco Regional", "Cerveja Local BR",  "Supermercados Unidos"),
-        Tier.NACIONAL to listOf("Construtora Nacional", "Banco Nacional BR", "Telecom Plus"),
-        Tier.PREMIUM  to listOf("Multinacional Corp",  "FinTech Global",    "Energia Máxima")
+        Tier.REGIONAL to listOf("Banco Regional", "Supermercado ZéMais",  "Supermercados Unidos"),
+        Tier.NACIONAL to listOf("Construtora Nacional", "Banco Nacional", "Telecom Plus"),
+        Tier.PREMIUM  to listOf("Multinacional Corp",  "Google",    "Energia Máxima")
     )
 
     /** Valor base anual para a reputação dada (de R$1M a R$100M). */
@@ -337,6 +479,7 @@ object MotorPatrocinio {
      */
     fun gerarOfertas(reputacao: Int, temporadaId: Int): List<OfertaPatrocinio> {
         val base = valorBase(reputacao)
+        val elegivel = tierElegivel(reputacao)
         return Tier.values().map { tier ->
             val empresas = nomesPorTier[tier] ?: listOf("Patrocinador")
             val empresa  = empresas[temporadaId % empresas.size]
@@ -346,7 +489,8 @@ object MotorPatrocinio {
                 tier         = tier,
                 nomeEmpresa  = empresa,
                 valorAnual   = valor,
-                disponivel   = reputacao >= tier.reputacaoMinima
+                // Exclusivo por faixa: só o patrocinador da faixa do clube fica disponível.
+                disponivel   = tier == elegivel
             )
         }
     }
