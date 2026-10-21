@@ -77,6 +77,12 @@ fun HallDaFamaScreen(
         600 to "Todas",
         24 to "Serie A", 26 to "Copa Italiana", 29 to "Supercopa da Itália"
     )
+    // Competições continentais: 30, 31 e 32 estavam livres — a Champions é a 30,
+    // e 31/32 ficam para a Europa League e a Conference League.
+    val opcoesEuropa = listOf(
+        700 to "Todas",
+        30 to "Champions League"
+    )
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
@@ -85,6 +91,7 @@ fun HallDaFamaScreen(
             20, 21, 23, 27, 400 -> "Inglaterra"
             22, 25, 28, 500 -> "Espanha"
             24, 26, 29, 600 -> "Italia"
+            30, 31, 32, 700 -> "Europa"
             0 -> "Todos"
             else -> "Brasil"
         }
@@ -97,6 +104,7 @@ fun HallDaFamaScreen(
         "Inglaterra" -> opcoesInglaterra
         "Espanha" -> opcoesEspanha
         "Italia" -> opcoesItalia
+        "Europa" -> opcoesEuropa
         "Brasil" -> opcoesBrasil
         else -> emptyList()
     }
@@ -114,7 +122,7 @@ fun HallDaFamaScreen(
         )
 
         // Filtro de país (chips horizontais)
-        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia")
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia", "Europa")
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -135,6 +143,7 @@ fun HallDaFamaScreen(
                             "Inglaterra" -> 400
                             "Espanha" -> 500
                             "Italia" -> 600
+                            "Europa" -> 700
                             else -> 0
                         }
                         vm.selecionarDivisao(div)
@@ -494,5 +503,6 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Inglaterra" -> "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
     "Espanha" -> "🇪🇸"
     "Italia" -> "🇮🇹"
+    "Europa" -> "🇪🇺"
     else -> ""
 }

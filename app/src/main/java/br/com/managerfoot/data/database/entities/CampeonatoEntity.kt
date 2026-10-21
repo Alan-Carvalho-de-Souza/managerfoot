@@ -48,7 +48,19 @@ enum class FormatoCampeonato {
     PONTOS_CORRIDOS,        // todos contra todos
     GRUPOS_E_MATA_MATA,     // fase de grupos + eliminatórias
     MATA_MATA_SIMPLES,      // só eliminatórias, jogo único
-    MATA_MATA_IDA_VOLTA     // eliminatórias, ida e volta
+    MATA_MATA_IDA_VOLTA,    // eliminatórias, ida e volta
+    /**
+     * Fase de Liga única + mata-mata — o formato novo da Champions League.
+     *
+     * Não é PONTOS_CORRIDOS: os 36 clubes estão numa tabela só, mas cada um
+     * enfrenta apenas 8 adversários DIFERENTES (2 de cada pote, um em casa e um
+     * fora), de modo que ninguém joga contra todos e o confronto direto não
+     * existe entre a maioria dos pares. Também não é GRUPOS_E_MATA_MATA, porque
+     * não há grupos: a classificação vai de 1 a 36 numa única tabela.
+     *
+     * Ver regras_championsleague.md e SorteioChampions.
+     */
+    FASE_LIGA_E_MATA_MATA
 }
 
 // Vínculo many-to-many entre Campeonato e Times participantes

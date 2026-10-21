@@ -1449,6 +1449,10 @@ private fun competitionLabelFor(
     return when {
         ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
         ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"
+        // Champions: na Fase de Liga a partida não tem fase (é o que alimenta a
+        // tabela de 1 a 36); do play-off em diante o nome da fase aparece.
+        snap.championsId > 0 && proximaPartida.campeonatoId == snap.championsId ->
+            "Champions League — ${proximaPartida.fase ?: "Fase de Liga"}"
         else -> when (proximaPartida.campeonatoId) {
             snap.campeonatoAId -> "Série A"
             snap.campeonatoBId -> "Série B"

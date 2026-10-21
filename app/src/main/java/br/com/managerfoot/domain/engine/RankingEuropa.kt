@@ -187,4 +187,19 @@ object RankingEuropa {
     val DIVISOES_ELITE = setOf(11, 13, 14)
 
     fun ehDivisaoElite(divisao: Int): Boolean = divisao in DIVISOES_ELITE
+
+    /**
+     * Clubes sem liga nacional no jogo, que existem para disputar os torneios
+     * continentais — ver o pool de "Outros times" e regras_championsleague.md.
+     * Entram na Champions e pontuam, mas ficam fora do ranking por divisão de
+     * elite (e do piso de 20%, que depende do coeficiente da associação).
+     */
+    val DIVISOES_POOL = setOf(90, 91, 92)
+
+    /**
+     * Divisões de onde saem os candidatos à Champions: as de elite europeia mais
+     * o pool. O filtro de continente é aplicado por fora, porque o pool também
+     * abriga clubes de outros continentes (o Inter Miami, por exemplo).
+     */
+    val DIVISOES_ELEGIVEIS_CHAMPIONS = DIVISOES_ELITE + DIVISOES_POOL
 }

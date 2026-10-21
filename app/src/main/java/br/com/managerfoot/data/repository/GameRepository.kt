@@ -1046,6 +1046,7 @@ class GameRepository @Inject constructor(
         val copaInglaterraId: Int,        // Copa da Inglaterra
         val copaEspanholaId: Int,         // Copa Espanhola (Copa do Rei)
         val copaItalianaId: Int,          // Copa Italiana (Coppa Italia)
+        val championsId: Int,             // UEFA Champions League
         val supercopaId: Int,
         val supercopaInglaterraId: Int,   // Supercopa da Inglaterra
         val supercopaEspanholaId: Int,    // Supercopa da Espanha
@@ -1072,6 +1073,7 @@ class GameRepository @Inject constructor(
         campeonatoChampionshipId: Int = -1, // EFL Championship inglesa (divisao 12)
         campeonatoLaLigaId: Int = -1,       // La Liga espanhola (divisao 13)
         campeonatoSerieAId: Int = -1,       // Serie A italiana (divisao 14)
+        championsId: Int = -1,              // UEFA Champions League da temporada que encerra
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -1143,26 +1145,6 @@ class GameRepository @Inject constructor(
         aplicarBonusTitulo(campeonatoChampionshipId, 0.03) // EFL Championship +3%
         aplicarBonusTitulo(campeonatoLaLigaId, 0.05)  // La Liga +5%
         aplicarBonusTitulo(campeonatoSerieAId, 0.05)  // Serie A +5%
-
-        // ── Penalidade de rebaixamento (multiplicativa, mínima 0.5pt) ──────
-        // Rebaixamento é o gatilho mais forte de queda de reputação/nivel.
-        suspend fun aplicarPenalidadeRebaixamento(timeIds: List<Int>, dropPercent: Double) {
-            for (id in timeIds) {
-                val t = timeRepository.buscarPorId(id) ?: continue
-                val drop = (t.reputacao * dropPercent).toFloat().coerceAtLeast(0.5f)
-                timeRepository.atualizarReputacao(id, t.reputacao - drop)
-            }
-        }
-
-        // ── Bônus de promoção (acesso à divisão superior) ────────────────
-        // Independente do título: subir de divisão sempre dá ganho de prestígio.
-        suspend fun aplicarBonusPromocao(timeIds: List<Int>, gainPercent: Double) {
-            for (id in timeIds) {
-                val t = timeRepository.buscarPorId(id) ?: continue
-                val gain = (t.reputacao * gainPercent).toFloat().coerceAtLeast(0.5f)
-                timeRepository.atualizarReputacao(id, t.reputacao + gain)
-            }
-        }
 
         // ── Premiações de títulos — para o time do jogador se ele é campeão ou vice ─────────
         // Os valores estão em centavos (1 milhão = 1_000_000_00L no padrão monetário do jogo)
@@ -1471,40 +1453,18 @@ class GameRepository @Inject constructor(
                 pais         = "Argentina"
             ), novosArgB) else -1
 
-        // ── Promoção / Rebaixamento — Uruguai ─────────────────────────────
-        // Tabela Anual: soma de pontos do Apertura + Clausura + Intermediário
-        val tabelaAnualUru = calcularTabelaAnualUruguai(campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId)
-        // 2 últimos rebaixados para a Segunda Divisão
-        val rebaixadosUruA = tabelaAnualUru.entries.sortedBy { it.value }.take(2).map { it.key }
-        // 2 primeiros da Segunda División Uruguaia promovidos (acesso direto)
-        val promovidosUruB = if (campeonatoUruBId > 0) {
-            classificacaoDao.buscarTabelaOrdenada(campeonatoUruBId)
-                .sortedWith(compareByDescending<ClassificacaoEntity> { it.pontos }
-                    .thenByDescending { it.vitorias }.thenByDescending { it.saldoGols })
-                .take(2).map { it.timeId }
-        } else emptyList()
-        rebaixadosUruA.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 10)) } }
-        promovidosUruB.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 9)) } }
-
-        // ── Reputação: rebaixamento e promoção (Uruguai) ──
-        aplicarPenalidadeRebaixamento(rebaixadosUruA, 0.04)  // Primera URU → Segunda: -4%
-        aplicarBonusPromocao(promovidosUruB, 0.03)           // Segunda URU → Primera: +3%
-
-        // Renova Primera División Uruguaia
-        val participantesUruA = if (campeonatoUruAperturaId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruAperturaId) else emptyList()
-        val novosUruA = (participantesUruA - rebaixadosUruA.toSet()) + promovidosUruB
-        val novoUruAperturaId = if (novosUruA.isNotEmpty()) criarUruguaiApertura(novosUruA, novoTemporadaId, novoAno) else -1
-        val novoUruIntermedId = if (novosUruA.isNotEmpty()) criarUruguaiIntermediario(novosUruA, novoTemporadaId, novoAno) else -1
-        val novoUruClausuraId = if (novoUruAperturaId > 0) criarUruguaiClausura(novoUruAperturaId, novosUruA, novoTemporadaId, novoAno) else -1
-
-        // Renova Segunda División Uruguaia
-        val participantesUruB = if (campeonatoUruBId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruBId) else emptyList()
-        val novosUruB = (participantesUruB - promovidosUruB.toSet()) + rebaixadosUruA
-        val novoUruBId = if (novosUruB.isNotEmpty()) criarCampeonato(
-            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Segunda División Uruguaia $novoAno",
-                tipo = TipoCampeonato.EXTRANGEIRO_DIVISAO2, formato = FormatoCampeonato.PONTOS_CORRIDOS,
-                totalRodadas = (novosUruB.size - 1) * 2, pais = "Uruguay"), novosUruB) else -1
-        val novoUruBCompetId = if (novosUruB.size >= 2) criarUruguaiSegundaDivCompetencia(novosUruB, novoTemporadaId, novoAno) else -1
+        // ── Promoção / Rebaixamento e renovação — Uruguai ────────────
+        // Extraído em helper para manter este método abaixo do limite de 64KB de bytecode.
+        val renovUru = renovarTorneiosUruguaios(
+            campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId,
+            campeonatoUruBId, novoTemporadaId, novoAno
+        )
+        val rebaixadosUruA    = renovUru.rebaixadosPrimera
+        val novoUruAperturaId = renovUru.novoAperturaId
+        val novoUruIntermedId = renovUru.novoIntermedId
+        val novoUruClausuraId = renovUru.novoClausuraId
+        val novoUruBId        = renovUru.novoSegundaId
+        val novoUruBCompetId  = renovUru.novoCompetenciaId
 
         // ── Renovação das ligas europeias (Premier↔Championship + La Liga) ──
         // Extraído em helper para manter este método abaixo do limite de 64KB de bytecode.
@@ -1564,6 +1524,11 @@ class GameRepository @Inject constructor(
         // não estourar o limite de bytecode do método de rollover.
         val (novoCopaEspanholaId, novoCopaItalianaId) =
             criarCopasEspanholaItaliana(novoTemporadaId, novoAno, novoLaLigaId, novoSerieAId)
+
+        // Conclui a Champions que encerra e cria a da próxima temporada.
+        val novoChampionsId = encerrarECriarChampions(
+            championsId, ano, temporadaId, novoTemporadaId, novoAno
+        )
 
         // Cria as Supercopas (Brasil/Inglaterra/Espanha/Itália) para a próxima temporada.
         // Extraído em helper para manter este método sob o limite de bytecode da JVM.
@@ -1647,7 +1612,103 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoTemporadaId, novoAno, resultadoMeta)
+    }
+
+    // ── Reputação por mudança de divisão ────────────────────────
+    // Eram funções locais de [encerrarTemporadaComHallDaFama]; viraram membros
+    // quando a renovação dos torneios uruguaios saiu daquele método e passou a
+    // precisar delas — uma função local não é visível de fora do seu corpo.
+
+    /** Penalidade de rebaixamento (multiplicativa, mínima 0,5pt).
+     *  Rebaixamento é o gatilho mais forte de queda de reputação/nível. */
+    private suspend fun aplicarPenalidadeRebaixamento(timeIds: List<Int>, dropPercent: Double) {
+        for (id in timeIds) {
+            val t = timeRepository.buscarPorId(id) ?: continue
+            val drop = (t.reputacao * dropPercent).toFloat().coerceAtLeast(0.5f)
+            timeRepository.atualizarReputacao(id, t.reputacao - drop)
+        }
+    }
+
+    /** Bônus de promoção: independente do título, subir de divisão sempre dá
+     *  ganho de prestígio. */
+    private suspend fun aplicarBonusPromocao(timeIds: List<Int>, gainPercent: Double) {
+        for (id in timeIds) {
+            val t = timeRepository.buscarPorId(id) ?: continue
+            val gain = (t.reputacao * gainPercent).toFloat().coerceAtLeast(0.5f)
+            timeRepository.atualizarReputacao(id, t.reputacao + gain)
+        }
+    }
+
+    private data class RenovacaoUruguaia(
+        /** Rebaixados da Primera — reaproveitados nas demissões por desempenho. */
+        val rebaixadosPrimera: List<Int>,
+        val novoAperturaId: Int,
+        val novoIntermedId: Int,
+        val novoClausuraId: Int,
+        val novoSegundaId: Int,
+        val novoCompetenciaId: Int
+    )
+
+    /**
+     * Aplica promoção/rebaixamento da Primera ↔ Segunda División Uruguaia (2 vagas
+     * de cada lado, pela Tabela Anual) e renova os torneios uruguaios da próxima
+     * temporada: Apertura, Intermediário, Clausura, Segunda e Competencia.
+     *
+     * Extraído de [encerrarTemporadaComHallDaFama] para manter aquele método
+     * abaixo do limite de 64KB de bytecode da JVM, como já se fez com a renovação
+     * das ligas europeias: num método só não cabe tudo o que o fim de temporada faz.
+     */
+    private suspend fun renovarTorneiosUruguaios(
+        campeonatoUruAperturaId: Int,
+        campeonatoUruClausuraId: Int,
+        campeonatoUruIntermedId: Int,
+        campeonatoUruBId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int
+    ): RenovacaoUruguaia {
+        // Tabela Anual: soma de pontos do Apertura + Clausura + Intermediário
+        val tabelaAnualUru = calcularTabelaAnualUruguai(campeonatoUruAperturaId, campeonatoUruClausuraId, campeonatoUruIntermedId)
+        // 2 últimos rebaixados para a Segunda Divisão
+        val rebaixadosUruA = tabelaAnualUru.entries.sortedBy { it.value }.take(2).map { it.key }
+        // 2 primeiros da Segunda División Uruguaia promovidos (acesso direto)
+        val promovidosUruB = if (campeonatoUruBId > 0) {
+            classificacaoDao.buscarTabelaOrdenada(campeonatoUruBId)
+                .sortedWith(compareByDescending<ClassificacaoEntity> { it.pontos }
+                    .thenByDescending { it.vitorias }.thenByDescending { it.saldoGols })
+                .take(2).map { it.timeId }
+        } else emptyList()
+        rebaixadosUruA.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 10)) } }
+        promovidosUruB.forEach { id -> timeRepository.buscarEntityPorId(id)?.let { timeRepository.atualizar(it.copy(divisao = 9)) } }
+
+        // ── Reputação: rebaixamento e promoção (Uruguai) ──
+        aplicarPenalidadeRebaixamento(rebaixadosUruA, 0.04)  // Primera URU → Segunda: -4%
+        aplicarBonusPromocao(promovidosUruB, 0.03)           // Segunda URU → Primera: +3%
+
+        // Renova Primera División Uruguaia
+        val participantesUruA = if (campeonatoUruAperturaId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruAperturaId) else emptyList()
+        val novosUruA = (participantesUruA - rebaixadosUruA.toSet()) + promovidosUruB
+        val novoUruAperturaId = if (novosUruA.isNotEmpty()) criarUruguaiApertura(novosUruA, novoTemporadaId, novoAno) else -1
+        val novoUruIntermedId = if (novosUruA.isNotEmpty()) criarUruguaiIntermediario(novosUruA, novoTemporadaId, novoAno) else -1
+        val novoUruClausuraId = if (novoUruAperturaId > 0) criarUruguaiClausura(novoUruAperturaId, novosUruA, novoTemporadaId, novoAno) else -1
+
+        // Renova Segunda División Uruguaia
+        val participantesUruB = if (campeonatoUruBId > 0) campeonatoDao.buscarIdsParticipantes(campeonatoUruBId) else emptyList()
+        val novosUruB = (participantesUruB - promovidosUruB.toSet()) + rebaixadosUruA
+        val novoUruBId = if (novosUruB.isNotEmpty()) criarCampeonato(
+            CampeonatoEntity(temporadaId = novoTemporadaId, nome = "Segunda División Uruguaia $novoAno",
+                tipo = TipoCampeonato.EXTRANGEIRO_DIVISAO2, formato = FormatoCampeonato.PONTOS_CORRIDOS,
+                totalRodadas = (novosUruB.size - 1) * 2, pais = "Uruguay"), novosUruB) else -1
+        val novoUruBCompetId = if (novosUruB.size >= 2) criarUruguaiSegundaDivCompetencia(novosUruB, novoTemporadaId, novoAno) else -1
+
+        return RenovacaoUruguaia(
+            rebaixadosPrimera = rebaixadosUruA,
+            novoAperturaId    = novoUruAperturaId,
+            novoIntermedId    = novoUruIntermedId,
+            novoClausuraId    = novoUruClausuraId,
+            novoSegundaId     = novoUruBId,
+            novoCompetenciaId = novoUruBCompetId
+        )
     }
 
     private data class RenovacaoEuropeia(
@@ -1847,6 +1908,9 @@ class GameRepository @Inject constructor(
             val champ = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, div)
             if (champ != null) campeoes.add(champ.campeaoTimeId)
         }
+        // Champions League (divisão 30): o maior título europeu também imuniza.
+        hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_CHAMPIONS)
+            ?.let { campeoes.add(it.campeaoTimeId) }
 
         val todos = timeRepository.observeTodos().first()
         for (time in todos) {
@@ -2517,6 +2581,355 @@ class GameRepository @Inject constructor(
         copaId: Int, timeJogadorId: Int, anoAtual: Int, temporadaId: Int
     ) = avancarCopaIdaVoltaSeJogadorEliminado(copaId, timeJogadorId) {
         verificarEAvancarFaseCopaItaliana(copaId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UEFA Champions League  (TipoCampeonato.CONTINENTAL)
+    //  Ver regras_championsleague.md e MotorCampeonato (seção Champions).
+    //
+    //  Fase de Liga de 36 clubes com fase = null — é o que faz a tabela de 1 a
+    //  36 ser alimentada pelo caminho normal da classificação — seguida de
+    //  play-off (9º–24º) e mata-mata das oitavas em diante, todos ida e volta.
+    //  O coeficiente da UEFA ordena os potes, e ao encerrar a competição cada
+    //  participante tem a sua campanha registrada de volta nesse coeficiente.
+    // ══════════════════════════════════════════════════════════════
+
+    /** Código de divisão da Champions no Hall da Fama. */
+    private val DIVISAO_HALL_CHAMPIONS = 30
+
+    /**
+     * Monta a lista de acesso da temporada: clubes europeus das divisões de elite
+     * e do pool, ordenados pelo coeficiente da UEFA com a reputação desempatando.
+     *
+     * Devolve menos de 36 vagas quando o jogo não tem clubes europeus suficientes
+     * — hoje é o caso enquanto o pool de clubes estrangeiros não existir, e o
+     * sinal para não criar a competição.
+     */
+    suspend fun determinarParticipantesChampions(anoAtual: Int): List<VagaChampions> {
+        val coeficientes = rankingEuropaDao.buscarCoeficientes(anoAtual)
+            .associate { it.timeId to it.coeficiente }
+        val candidatos = timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.divisao in RankingEuropa.DIVISOES_ELEGIVEIS_CHAMPIONS }
+            .filter { Continentes.ehEuropa(it.pais) }
+            .map { time ->
+                CandidatoChampions(
+                    timeId      = time.id,
+                    nome        = time.nome,
+                    pais        = time.pais,
+                    coeficiente = coeficientes[time.id] ?: 0.0,
+                    reputacao   = time.reputacao
+                )
+            }
+        return ListaDeAcessoChampions.montar(candidatos)
+    }
+
+    /**
+     * Cria a Champions e persiste as 144 partidas da Fase de Liga.
+     *
+     * Devolve -1 quando o sorteio é impossível: as travas geográficas exigem no
+     * mínimo 5 países e no máximo 7 clubes por país — e no máximo 4 de um país
+     * dentro de um pote, restrição que a lista de acesso não consegue garantir
+     * sozinha, porque os potes saem do coeficiente. Em vez de criar um torneio
+     * sem calendário, não criamos nada e o resto do jogo segue sem a competição.
+     */
+    suspend fun criarChampions(
+        campeonato: CampeonatoEntity,
+        vagas: List<VagaChampions>,
+        random: kotlin.random.Random = kotlin.random.Random.Default
+    ): Int {
+        val clubes = ListaDeAcessoChampions.paraSorteio(vagas)
+        if (SorteioChampions.verificarViabilidade(clubes).isNotEmpty()) return -1
+        val sorteio = SorteioChampions.sortear(clubes, random) ?: return -1
+
+        val championsId = campeonatoDao.inserir(campeonato).toInt()
+        val participantes = clubes.map { it.timeId }
+        campeonatoDao.inserirParticipantes(
+            participantes.map { CampeonatoTimeEntity(championsId, it) }
+        )
+        classificacaoDao.inserirTodos(
+            MotorCampeonato.gerarClassificacaoInicial(championsId, participantes)
+        )
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseLigaChampions(championsId, sorteio.confrontos, random)
+        )
+        return championsId
+    }
+
+    /**
+     * Conclui a Champions da temporada que encerra e cria a da temporada nova.
+     *
+     * A conclusão forçada é necessária porque, quando o jogador não disputa a
+     * Champions (ou caiu cedo), ela pode chegar ao fim da temporada inacabada —
+     * e sem o campeão registrado não há título no Hall da Fama nem campanhas no
+     * coeficiente da UEFA, que é justamente o que ordena os potes da edição
+     * seguinte. Por isso conclui primeiro e cria depois, nesta ordem.
+     *
+     * Extraído de [encerrarTemporadaComHallDaFama] para manter aquele método
+     * abaixo do limite de 64KB de bytecode da JVM, onde ele já estava raspando.
+     */
+    private suspend fun encerrarECriarChampions(
+        championsIdAnterior: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int
+    ): Int {
+        var iteracoes = 60
+        while (championsIdAnterior > 0 && iteracoes-- > 0) {
+            if (campeonatoDao.buscarPorId(championsIdAnterior)?.encerrado != false) break
+            try {
+                simularProximaRodadaChampionsSeNecessario(championsIdAnterior, -1, ano, temporadaId)
+            } catch (_: Exception) { break }
+        }
+        return try {
+            criarChampionsDaTemporada(novoTemporadaId, novoAno)
+        } catch (_: Exception) { -1 }
+    }
+
+    /**
+     * Cria a Champions de uma temporada, ou devolve -1 quando a lista de acesso
+     * não fecha os 36 clubes. Extraído em helper porque o rollover de temporada
+     * já está no limite de bytecode da JVM.
+     */
+    suspend fun criarChampionsDaTemporada(temporadaId: Int, ano: Int): Int {
+        val vagas = determinarParticipantesChampions(ano)
+        if (vagas.size < SorteioChampions.CLUBES) return -1
+        return criarChampions(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Champions League $ano",
+                tipo         = TipoCampeonato.CONTINENTAL,
+                formato      = FormatoCampeonato.FASE_LIGA_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.CHAMPIONS_TOTAL_RODADAS,
+                // Torneio continental: não pertence a um país. O nome é o que
+                // identifica a competição para o peso 14 da IFFHS.
+                pais         = Continentes.EUROPA
+            ),
+            vagas
+        )
+    }
+
+    /**
+     * Avança a Champions: gera o play-off quando a Fase de Liga termina, gera as
+     * oitavas quando o play-off termina, e delega o resto do mata-mata ao motor
+     * de copa ida/volta. Devolve true quando a final foi concluída nesta chamada.
+     */
+    suspend fun verificarEAvancarFaseChampions(
+        championsId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (championsId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(championsId) ?: return false
+        if (camp.encerrado) return false
+        val todas = partidaDao.buscarTodasPorCampeonato(championsId)
+        if (todas.isEmpty()) return false
+
+        // ── Fase de Liga (fase = null) precisa estar completa ──────────
+        val faseLiga = todas.filter { it.fase == null }
+        if (faseLiga.isEmpty() || !faseLiga.all { it.jogada }) return false
+
+        val temPlayoff = todas.any { it.fase == MotorCampeonato.CHAMPIONS_FASE_PLAYOFF }
+        if (!temPlayoff) {
+            gerarPlayoffChampions(championsId)
+            return false
+        }
+
+        // ── Play-off completo → oitavas com os 8 cabeças de chave ──────
+        val partidasPlayoff = todas.filter { it.fase == MotorCampeonato.CHAMPIONS_FASE_PLAYOFF }
+        val temOitavas = todas.any { it.fase == MotorCampeonato.CHAMPIONS_FASES_MATA_MATA.first() }
+        if (!temOitavas) {
+            if (!partidasPlayoff.all { it.jogada }) return false
+            gerarOitavasChampions(championsId, partidasPlayoff)
+            return false
+        }
+
+        // ── Oitavas → Final: o motor de copa ida/volta dá conta ────────
+        val encerrou = verificarEAvancarFaseCopa(
+            copaId            = championsId,
+            anoAtual          = anoAtual,
+            timeJogadorId     = timeJogadorId,
+            temporadaId       = temporadaId,
+            fases             = MotorCampeonato.CHAMPIONS_FASES_MATA_MATA,
+            ordemGlobal       = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA,
+            divisaoHallDaFama = DIVISAO_HALL_CHAMPIONS,
+            premioCampeao     = 120_000_000_00L,
+            premioVice        = 60_000_000_00L,
+            rodadaBase        = MotorCampeonato.CHAMPIONS_RODADA_BASE_MATA_MATA
+        )
+        if (encerrou) registrarCampanhasEuropeias(championsId, anoAtual)
+        return encerrou
+    }
+
+    /** Play-off: 9º–24º da Fase de Liga, ida e volta, melhor colocado decide em casa. */
+    private suspend fun gerarPlayoffChampions(championsId: Int) {
+        // A tabela decide quem passa direto, quem joga o play-off e quem cai, e
+        // ainda alimenta o bônus de posição do coeficiente da UEFA. Recalcula das
+        // partidas antes de ler, para que uma atualização incremental perdida não
+        // vire um chaveamento errado — na Champions não há como corrigir depois.
+        recalcularClassificacao(championsId)
+        val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
+        val pares = MotorCampeonato.paresPlayoffChampions(classificados)
+        if (pares.isEmpty()) return
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = championsId,
+                pares             = pares,
+                fase              = MotorCampeonato.CHAMPIONS_FASE_PLAYOFF,
+                rodadaIda         = MotorCampeonato.CHAMPIONS_RODADA_IDA_PLAYOFF,
+                confrontoIdInicio = 1,
+                ordemGlobalIda    = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_PLAYOFF[0],
+                ordemGlobalVolta  = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_PLAYOFF[1]
+            )
+        )
+    }
+
+    /**
+     * Oitavas: os 8 primeiros da Fase de Liga contra os 8 vencedores do play-off,
+     * o 1º contra o vencedor do último par. Os vencedores saem na ordem dos
+     * confrontos do play-off, para o cruzamento ficar estável.
+     */
+    private suspend fun gerarOitavasChampions(championsId: Int, partidasPlayoff: List<PartidaEntity>) {
+        recalcularClassificacao(championsId)
+        val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
+        val vencedores = partidasPlayoff
+            .groupBy { it.confrontoId }
+            .toSortedMap(compareBy { it ?: 0 })
+            .mapNotNull { (_, jogos) -> vencedorDoTie(jogos) }
+        if (vencedores.size < MotorCampeonato.CHAMPIONS_CLASSIFICADOS_DIRETO) return
+
+        val pares = MotorCampeonato.paresOitavasChampions(classificados, vencedores)
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = championsId,
+                pares             = pares,
+                fase              = MotorCampeonato.CHAMPIONS_FASES_MATA_MATA.first(),
+                rodadaIda         = MotorCampeonato.rodadaIdaDeFaseChampions(0),
+                confrontoIdInicio = (partidasPlayoff.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
+                ordemGlobalIda    = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA[0],
+                ordemGlobalVolta  = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA[1]
+            )
+        )
+    }
+
+    /**
+     * Vencedor de um confronto ida/volta, decidindo nos pênaltis quando o
+     * agregado empata. Para confrontos IA×IA sem pênaltis persistidos, simula a
+     * disputa aqui — o mesmo caminho das copas.
+     */
+    private suspend fun vencedorDoTie(jogos: List<PartidaEntity>): Int? {
+        val ida   = jogos.minByOrNull { it.rodada } ?: return null
+        val volta = jogos.maxByOrNull { it.rodada } ?: return null
+        val direto = MotorCampeonato.determinarVencedorTie(
+            timeCasaIdaId = ida.timeCasaId,
+            timeForaIdaId = ida.timeForaId,
+            golsCasaIda   = ida.golsCasa   ?: 0,
+            golsForaIda   = ida.golsFora   ?: 0,
+            golsCasaVolta = volta.golsCasa ?: 0,
+            golsForaVolta = volta.golsFora ?: 0
+        )
+        if (direto != null) return direto
+        val pCasa = volta.penaltisCasa
+        val pFora = volta.penaltisForaId
+        if (pCasa != null && pFora != null) {
+            return if (pCasa > pFora) volta.timeCasaId else volta.timeForaId
+        }
+        return simularEPersistirPenaltisIA(ida, volta)
+    }
+
+    /**
+     * Registra a campanha de cada participante no Coeficiente de Clubes da UEFA.
+     *
+     * Vitórias e empates contam todas as partidas da competição, Fase de Liga e
+     * mata-mata — inclusive as do play-off, que pontuam por jogo ainda que não
+     * dêem bônus de avanço. Jogo decidido nos pênaltis entra como empate, que é
+     * exatamente o que o placar dos 90 minutos devolve.
+     *
+     * A fase alcançada começa nas oitavas: quem caiu no play-off não leva bônus
+     * de avanço, só os pontos por jogo (ver RankingEuropa.bonusPorAvanco).
+     *
+     * Apaga os lançamentos do ano antes de registrar, para reencerrar a mesma
+     * temporada não duplicar a pontuação.
+     */
+    private suspend fun registrarCampanhasEuropeias(championsId: Int, ano: Int) {
+        val competicao = CompeticaoUefa.CHAMPIONS_LEAGUE
+        rankingEuropaDao.apagarLancamentos(ano, competicao.name)
+
+        recalcularClassificacao(championsId)
+        val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
+        val partidas = partidaDao.buscarTodasPorCampeonato(championsId).filter { it.jogada }
+
+        for ((indice, timeId) in classificados.withIndex()) {
+            val doClube = partidas.filter { it.timeCasaId == timeId || it.timeForaId == timeId }
+            var vitorias = 0
+            var empates  = 0
+            for (partida in doClube) {
+                val golsPro    = if (partida.timeCasaId == timeId) partida.golsCasa else partida.golsFora
+                val golsContra = if (partida.timeCasaId == timeId) partida.golsFora else partida.golsCasa
+                if (golsPro == null || golsContra == null) continue
+                when {
+                    golsPro > golsContra  -> vitorias++
+                    golsPro == golsContra -> empates++
+                }
+            }
+            registrarCampanhaEuropeia(
+                timeId          = timeId,
+                ano             = ano,
+                competicao      = competicao,
+                posicaoFaseLiga = indice + 1,
+                vitorias        = vitorias,
+                empates         = empates,
+                faseAlcancada   = faseUefaAlcancada(doClube)
+            )
+        }
+    }
+
+    /** Fase mais avançada do mata-mata em que o clube jogou, ou null se nenhuma. */
+    private fun faseUefaAlcancada(partidasDoClube: List<PartidaEntity>): FaseUefa? {
+        val fases = partidasDoClube.mapNotNull { it.fase }.toSet()
+        return FaseUefa.entries
+            .filter { fase -> nomeDaFase(fase) in fases }
+            .maxByOrNull { it.ordem }
+    }
+
+    /** Nome da fase no banco para cada fase pontuável do coeficiente da UEFA. */
+    private fun nomeDaFase(fase: FaseUefa): String = when (fase) {
+        FaseUefa.OITAVAS   -> "Oitavas"
+        FaseUefa.QUARTAS   -> "Quartas"
+        FaseUefa.SEMIFINAL -> "Semi"
+        FaseUefa.FINAL     -> "Final"
+    }
+
+    /**
+     * Mantém a Champions andando quando o jogador não tem jogo pendente nela:
+     * simula uma rodada da Fase de Liga por chamada (como as ligas nacionais) e,
+     * terminada a Fase de Liga, simula as fases de mata-mata pendentes.
+     */
+    suspend fun simularProximaRodadaChampionsSeNecessario(
+        championsId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) {
+        if (championsId <= 0) return
+        val camp = campeonatoDao.buscarPorId(championsId) ?: return
+        if (camp.encerrado) return
+        val todas = partidaDao.buscarTodasPorCampeonato(championsId)
+        // Jogador com jogo pendente → não interferir, ele joga quando chegar a vez.
+        if (todas.any { !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId) }) return
+
+        val pendentesLiga = todas.filter { !it.jogada && it.fase == null }
+        if (pendentesLiga.isNotEmpty()) {
+            // Uma rodada por chamada, começando pela mais antiga pendente.
+            simularRodada(championsId, pendentesLiga.minOf { it.rodada })
+        } else {
+            val pendentesMataMata = todas.filter { !it.jogada && it.fase != null }
+            pendentesMataMata.map { it.rodada }.toSortedSet().forEach { rodada ->
+                simularRodada(championsId, rodada)
+            }
+        }
+        verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId)
     }
 
     // ── Verifica se fase atual da Copa da Inglaterra (jogo único) acabou e avança ──
@@ -3637,7 +4050,11 @@ class GameRepository @Inject constructor(
         ordemGlobal: IntArray = MotorCampeonato.COPA_ORDEM_GLOBAL,
         divisaoHallDaFama: Int = 5,
         premioCampeao: Long = 30_000_000_00L,
-        premioVice: Long = 15_000_000_00L
+        premioVice: Long = 15_000_000_00L,
+        // Deslocamento das rodadas do mata-mata. Zero para as copas, cujas fases
+        // ocupam as rodadas 1..n; a Champions usa um deslocamento para o seu
+        // mata-mata não colidir com as rodadas da Fase de Liga.
+        rodadaBase: Int = 0
     ): Boolean {
         val campEntity = campeonatoDao.buscarPorId(copaId) ?: return false
         if (campEntity.encerrado) return false
@@ -3770,7 +4187,7 @@ class GameRepository @Inject constructor(
 
             // Gera partidas da próxima fase
             val faseIndex   = fases.indexOf(proximaFase)
-            val rodadaIda   = MotorCampeonato.rodadaIdaDeFase(faseIndex)
+            val rodadaIda   = rodadaBase + MotorCampeonato.rodadaIdaDeFase(faseIndex)
             val maxConfId   = todasPartidas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0
             val novosPares  = MotorCampeonato.sortearPares(vencedores)
             val novasPartidas = MotorCampeonato.gerarFaseIdaVolta(
@@ -5193,7 +5610,13 @@ class GameRepository @Inject constructor(
         divisaoHallDaFama: Int = 5,
         premioCampeao: Long = 30_000_000_00L,
         premioVice: Long = 15_000_000_00L,
-        temporadaId: Int = 1
+        temporadaId: Int = 1,
+        /**
+         * Avanço alternativo, para competições cujo chaveamento o motor de copa
+         * não conhece — a Champions passa antes pelo play-off e pelo cruzamento
+         * das oitavas. Quando nulo, avança como copa ida/volta.
+         */
+        avancoAlternativo: (suspend () -> Unit)? = null
     ): ResultadoPenaltis {
         val todasPartidas  = partidaDao.buscarTodasPorCampeonato(copaId)
         val voltaPartida   = todasPartidas.firstOrNull { it.id == voltaPartidaId }
@@ -5246,7 +5669,8 @@ class GameRepository @Inject constructor(
         }
 
         partidaDao.registrarPenaltis(voltaPartida.id, resultado.golsCasa, resultado.golsFora)
-        verificarEAvancarFaseCopa(copaId, anoAtual, timeJogadorId, temporadaId, fases, ordemGlobal, divisaoHallDaFama, premioCampeao, premioVice)
+        if (avancoAlternativo != null) avancoAlternativo()
+        else verificarEAvancarFaseCopa(copaId, anoAtual, timeJogadorId, temporadaId, fases, ordemGlobal, divisaoHallDaFama, premioCampeao, premioVice)
         return resultado
     }
 
@@ -5290,6 +5714,23 @@ class GameRepository @Inject constructor(
     ) {
         partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
         verificarEAvancarFaseCopa(copaId, anoAtual, timeJogadorId, temporadaId, fases, ordemGlobal, divisaoHallDaFama, premioCampeao, premioVice)
+    }
+
+    /**
+     * Persiste pênaltis da UI interativa e avança a Champions. Não dá para usar
+     * [persistirResultadoPenaltisJogador]: o avanço da Champions passa antes pelo
+     * play-off e pelo cruzamento das oitavas, que o motor de copa não conhece.
+     */
+    suspend fun persistirResultadoPenaltisJogadorChampions(
+        resultado: ResultadoPenaltis,
+        championsId: Int,
+        anoAtual: Int,
+        voltaPartidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId)
     }
 
     /** Persiste pênaltis da UI interativa e avança a fase do torneio Argentine (jogo único). */

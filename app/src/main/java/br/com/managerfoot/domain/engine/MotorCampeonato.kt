@@ -539,4 +539,210 @@ object MotorCampeonato {
     const val URU_B_COMPET_FINAL_RODADA = 7    // Competencia Final round
     const val URU_B_COMPET_OG_OFFSET    = 450  // OG offset for Competencia groups (R1→460)
     const val URU_B_COMPET_OG_FINAL     = 520  // Competencia Final OG (7*10+450)
+
+    // ══════════════════════════════════════════════════════════════
+    //  UEFA Champions League  (FASE_LIGA_E_MATA_MATA)
+    //  Ver regras_championsleague.md.
+    //
+    //  Fase de Liga: 36 clubes numa tabela só, 8 jogos cada contra
+    //  adversários DIFERENTES (as 144 partidas vêm de SorteioChampions).
+    //  As partidas da Fase de Liga têm fase = null, como a fase de grupos
+    //  dos torneios argentino e uruguaio — é isso que faz a classificação
+    //  ser alimentada pelo caminho normal (recalcularClassificacao só
+    //  conta partidas de fase nula).
+    //
+    //  Depois dela: play-off (9º–24º), Oitavas, Quartas, Semi e Final,
+    //  todos ida e volta. O play-off NÃO dá bônus de avanço no coeficiente
+    //  da UEFA — a contagem começa nas oitavas (ver RankingEuropa) — mas
+    //  as suas partidas pontuam por jogo como qualquer outra.
+    // ══════════════════════════════════════════════════════════════
+
+    /** Rodadas da Fase de Liga: 8 jogos por clube. */
+    const val CHAMPIONS_RODADAS_LIGA = 8
+
+    /**
+     * Deslocamento das rodadas do mata-mata. A Fase de Liga ocupa as rodadas
+     * 1..8 (até 12 na folga do fallback de distribuição), então o play-off
+     * começa em 19 e as oitavas em 21, bem longe de qualquer colisão.
+     */
+    const val CHAMPIONS_RODADA_BASE_MATA_MATA = 20
+
+    /** Última rodada do torneio: a volta da final. */
+    const val CHAMPIONS_TOTAL_RODADAS = CHAMPIONS_RODADA_BASE_MATA_MATA + 8   // 28
+
+    /** O play-off, que fica entre a Fase de Liga e as oitavas. */
+    const val CHAMPIONS_FASE_PLAYOFF = "Play-off"
+
+    /** Fases de mata-mata a partir das oitavas, na ordem. */
+    val CHAMPIONS_FASES_MATA_MATA = listOf("Oitavas", "Quartas", "Semi", "Final")
+
+    /** Todas as fases nomeadas, na ordem — usada pelo chaveamento na UI. */
+    val CHAMPIONS_FASES = listOf(CHAMPIONS_FASE_PLAYOFF) + CHAMPIONS_FASES_MATA_MATA
+
+    /** Clubes que vão direto às oitavas; os 16 seguintes disputam o play-off. */
+    const val CHAMPIONS_CLASSIFICADOS_DIRETO = 8
+    const val CHAMPIONS_ULTIMO_DO_PLAYOFF    = 24
+
+    /**
+     * ordemGlobal das 8 rodadas da Fase de Liga. As ligas nacionais usam
+     * ordemGlobal = rodada*10 (10..380); a Fase de Liga encaixa entre elas, a
+     * cada ~4 rodadas de liga, como as competições europeias de meio de semana.
+     *   R1 após liga R2 (27), R2 após R6 (67), R3 após R10 (107) ...
+     */
+    val CHAMPIONS_ORDEM_GLOBAL_LIGA = intArrayOf(27, 67, 107, 147, 187, 227, 257, 287)
+
+    /**
+     * ordemGlobal de uma rodada da Fase de Liga. Rodadas além da 8ª só existem
+     * no fallback de [distribuirRodadasFaseLiga] e entram logo após a 8ª.
+     */
+    fun ordemGlobalLigaChampions(rodada: Int): Int =
+        CHAMPIONS_ORDEM_GLOBAL_LIGA.getOrElse(rodada - 1) {
+            CHAMPIONS_ORDEM_GLOBAL_LIGA.last() + (rodada - CHAMPIONS_RODADAS_LIGA) * 2
+        }
+
+    /** ordemGlobal do play-off: ida e volta, no fim da fase de liga. */
+    val CHAMPIONS_ORDEM_GLOBAL_PLAYOFF = intArrayOf(303, 307)
+
+    /**
+     * ordemGlobal do mata-mata (4 fases × ida/volta), encaixado na reta final da
+     * temporada, entre as últimas rodadas das ligas nacionais.
+     *   Oitavas 313/317, Quartas 323/327, Semi 343/347, Final 363/373
+     */
+    val CHAMPIONS_ORDEM_GLOBAL_MATA_MATA =
+        intArrayOf(313, 317, 323, 327, 343, 347, 363, 373)
+
+    /** rodadaIda de uma fase do mata-mata da Champions (0 = Oitavas). */
+    fun rodadaIdaDeFaseChampions(faseIndex: Int) =
+        CHAMPIONS_RODADA_BASE_MATA_MATA + rodadaIdaDeFase(faseIndex)
+
+    /** rodada de ida do play-off, imediatamente antes das oitavas. */
+    const val CHAMPIONS_RODADA_IDA_PLAYOFF = CHAMPIONS_RODADA_BASE_MATA_MATA - 1
+
+    /**
+     * Distribui as 144 partidas da Fase de Liga em rodadas em que nenhum clube
+     * joga duas vezes.
+     *
+     * É uma coloração de arestas do grafo 8-regular dos confrontos: 8 rodadas
+     * são o mínimo, e quase todo grafo desses admite as 8 (classe 1), mas isso
+     * não é garantido — pelo teorema de Vizing o pior caso precisa de 9. Então
+     * tentamos encaixar em 8 por guloso com reinícios aleatórios e, se nenhuma
+     * tentativa fechar, abrimos uma rodada extra e repetimos. O calendário
+     * aceita isso sem remendo: [ordemGlobalLigaChampions] cobre rodadas além da
+     * 8ª, e a classificação não depende de todos terem jogado o mesmo número de
+     * partidas na mesma rodada.
+     *
+     * Devolve, para cada confronto de [confrontos], a rodada (1-based) atribuída.
+     */
+    fun distribuirRodadasFaseLiga(
+        confrontos: List<ConfrontoChampions>,
+        random: kotlin.random.Random = kotlin.random.Random.Default,
+        tentativasPorTamanho: Int = 200
+    ): List<Int> {
+        var rodadas = CHAMPIONS_RODADAS_LIGA
+        while (rodadas <= CHAMPIONS_RODADAS_LIGA + 4) {
+            repeat(tentativasPorTamanho) {
+                val tentativa = tentarDistribuir(confrontos, rodadas, random)
+                if (tentativa != null) return tentativa
+            }
+            rodadas++
+        }
+        // Inalcançável na prática: com 12 rodadas o guloso sempre fecha, já que
+        // cada clube ocupa no máximo 8 delas.
+        return tentarDistribuir(confrontos, confrontos.size, random)
+            ?: List(confrontos.size) { it + 1 }
+    }
+
+    /**
+     * Guloso de uma passada: percorre os confrontos numa ordem aleatória e põe
+     * cada um na primeira rodada livre para os dois clubes. Devolve null quando
+     * algum confronto não cabe em [rodadas] rodadas.
+     */
+    private fun tentarDistribuir(
+        confrontos: List<ConfrontoChampions>,
+        rodadas: Int,
+        random: kotlin.random.Random
+    ): List<Int>? {
+        val atribuicao = IntArray(confrontos.size)
+        // ocupado[rodada][timeId]
+        val ocupado = Array(rodadas) { HashSet<Int>() }
+        for (indice in confrontos.indices.shuffled(random)) {
+            val confronto = confrontos[indice]
+            val rodada = (0 until rodadas).firstOrNull { r ->
+                confronto.casaId !in ocupado[r] && confronto.foraId !in ocupado[r]
+            } ?: return null
+            ocupado[rodada] += confronto.casaId
+            ocupado[rodada] += confronto.foraId
+            atribuicao[indice] = rodada + 1
+        }
+        return atribuicao.toList()
+    }
+
+    /**
+     * Converte o sorteio na lista de partidas da Fase de Liga, já distribuídas
+     * em rodadas e com o ordemGlobal do calendário. fase = null de propósito:
+     * é o que faz a tabela de 1 a 36 ser alimentada pelo caminho normal.
+     */
+    fun gerarFaseLigaChampions(
+        campeonatoId: Int,
+        confrontos: List<ConfrontoChampions>,
+        random: kotlin.random.Random = kotlin.random.Random.Default
+    ): List<PartidaEntity> {
+        val rodadas = distribuirRodadasFaseLiga(confrontos, random)
+        return confrontos.mapIndexed { indice, confronto ->
+            val rodada = rodadas[indice]
+            PartidaEntity(
+                campeonatoId = campeonatoId,
+                rodada       = rodada,
+                timeCasaId   = confronto.casaId,
+                timeForaId   = confronto.foraId,
+                fase         = null,
+                ordemGlobal  = ordemGlobalLigaChampions(rodada)
+            )
+        }
+    }
+
+    /**
+     * Pares do play-off: do 9º ao 24º da Fase de Liga, o melhor colocado contra
+     * o pior (9º×24º, 10º×23º ... 16º×17º). O melhor colocado decide em casa, e
+     * como [gerarFaseIdaVolta] inverte o mando na volta, o par entra com o pior
+     * colocado como mandante da ida.
+     *
+     * [classificados] é a tabela ordenada do 1º ao 36º.
+     */
+    fun paresPlayoffChampions(classificados: List<Int>): List<Pair<Int, Int>> {
+        // Sem os 9 primeiros não existe play-off: a lista está incompleta e
+        // insistir só produziria um chaveamento inventado.
+        if (classificados.size <= CHAMPIONS_CLASSIFICADOS_DIRETO) return emptyList()
+        val faixa = classificados.subList(
+            CHAMPIONS_CLASSIFICADOS_DIRETO,
+            minOf(CHAMPIONS_ULTIMO_DO_PLAYOFF, classificados.size)
+        )
+        val metade = faixa.size / 2
+        return (0 until metade).map { i ->
+            val melhor = faixa[i]
+            val pior   = faixa[faixa.size - 1 - i]
+            pior to melhor          // pior recebe a ida; melhor decide em casa
+        }
+    }
+
+    /**
+     * Pares das oitavas: os 8 primeiros da Fase de Liga, que passaram direto,
+     * contra os 8 vencedores do play-off — o 1º contra o vencedor do último par,
+     * o 2º contra o penúltimo, e assim por diante. O cabeça de chave decide em
+     * casa, então o vencedor do play-off é o mandante da ida.
+     *
+     * [classificados] é a tabela ordenada; [vencedoresPlayoff] vem na ordem dos
+     * pares de [paresPlayoffChampions].
+     */
+    fun paresOitavasChampions(
+        classificados: List<Int>,
+        vencedoresPlayoff: List<Int>
+    ): List<Pair<Int, Int>> {
+        val cabecas = classificados.take(CHAMPIONS_CLASSIFICADOS_DIRETO)
+        return cabecas.mapIndexed { i, cabeca ->
+            val vencedor = vencedoresPlayoff.getOrNull(vencedoresPlayoff.size - 1 - i)
+                ?: vencedoresPlayoff[i % vencedoresPlayoff.size]
+            vencedor to cabeca      // vencedor recebe a ida; cabeça decide em casa
+        }
+    }
 }

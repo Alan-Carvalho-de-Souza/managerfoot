@@ -44,6 +44,7 @@ fun CopaChaveamentoScreen(
     copaInglaterraId: Int = -1,
     copaEspanholaId: Int = -1,
     copaItalianaId: Int = -1,
+    championsId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
@@ -53,9 +54,10 @@ fun CopaChaveamentoScreen(
     val partidasIng by vm.partidasIng.collectAsState()
     val partidasEsp by vm.partidasEsp.collectAsState()
     val partidasIta by vm.partidasIta.collectAsState()
+    val partidasChampions by vm.partidasChampions.collectAsState()
 
-    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId) {
-        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId)
+    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId) {
+        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId)
     }
 
     // Copa inicial exibida: prioriza a que existe (Brasil > Argentina > Inglaterra > Espanha > Itália)
@@ -65,6 +67,7 @@ fun CopaChaveamentoScreen(
         if (copaInglaterraId > 0) add("Inglaterra")
         if (copaEspanholaId > 0) add("Espanha")
         if (copaItalianaId > 0) add("Itália")
+        if (championsId > 0) add("Champions")
     }
     val mostrarFiltroPais = copasDisponiveis.size > 1
     var paisSelecionado by remember(copasDisponiveis) { mutableStateOf(copasDisponiveis.firstOrNull() ?: "Brasil") }
@@ -75,12 +78,14 @@ fun CopaChaveamentoScreen(
         "Inglaterra" -> partidasIng
         "Espanha" -> partidasEsp
         "Itália" -> partidasIta
+        "Champions" -> partidasChampions
         else -> partidas
     }
     val fasesMotor = when (paisSelecionado) {
         "Argentina" -> MotorCampeonato.COPA_ARG_FASES
         "Inglaterra" -> MotorCampeonato.COPA_ING_FASES
         "Espanha", "Itália" -> MotorCampeonato.COPA16_FASES
+        "Champions" -> MotorCampeonato.CHAMPIONS_FASES
         else -> MotorCampeonato.COPA_FASES
     }
 
@@ -104,6 +109,7 @@ fun CopaChaveamentoScreen(
         "Inglaterra" -> "Copa da Inglaterra"
         "Espanha" -> "Copa Espanhola"
         "Itália" -> "Copa Italiana"
+        "Champions" -> "Champions League"
         else -> "Copa do Brasil"
     }
 
@@ -142,7 +148,8 @@ fun CopaChaveamentoScreen(
         if (faseDisponivel.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Copa ainda não iniciada",
+                    if (paisSelecionado == "Champions") "Mata-mata ainda não sorteado — a Fase de Liga está em andamento"
+                    else "Copa ainda não iniciada",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

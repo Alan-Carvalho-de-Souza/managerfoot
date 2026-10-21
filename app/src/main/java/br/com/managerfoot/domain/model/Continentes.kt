@@ -31,10 +31,19 @@ object Continentes {
         "venezuela"
     )
 
+    // As associações da lista de acesso da Champions (ver regras_championsleague.md)
+    // estão todas aqui, inclusive as que ainda não têm clubes no seed, para que um
+    // país novo entre nos rankings e no sorteio sem outra alteração.
     private val PAISES_EUROPA = setOf(
         "espanha", "italia", "itália", "inglaterra",
         "portugal", "franca", "frança", "alemanha", "holanda", "paises baixos", "países baixos",
-        "escocia", "escócia", "belgica", "bélgica", "turquia"
+        "escocia", "escócia", "belgica", "bélgica", "turquia",
+        "tchequia", "tchéquia", "republica tcheca", "república tcheca",
+        "ucrania", "ucrânia",
+        "austria", "áustria", "suica", "suíça", "grecia", "grécia",
+        "dinamarca", "noruega", "suecia", "suécia", "croacia", "croácia",
+        "servia", "sérvia", "polonia", "polônia", "romenia", "romênia",
+        "hungria", "russia", "rússia", "irlanda", "chipre", "israel"
     )
 
     private val PAISES_AMERICA_DO_NORTE = setOf(
