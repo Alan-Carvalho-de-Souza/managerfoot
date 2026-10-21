@@ -7,7 +7,26 @@ import androidx.room.Query
 import br.com.managerfoot.data.database.entities.EscalacaoEntity
 import br.com.managerfoot.data.database.entities.EventoPartidaEntity
 import br.com.managerfoot.data.database.entities.PartidaEntity
+import br.com.managerfoot.data.database.entities.TipoCampeonato
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * Campanha agregada de um clube numa competição, para o Ranking Mundial (IFFHS).
+ * Uma linha por clube/competição/fase, com vitórias e empates contados; o peso em
+ * pontos é aplicado em Kotlin.
+ */
+data class CampanhaMundialDto(
+    val timeId: Int,
+    val nomeTime: String,
+    val escudoRes: String,
+    val pais: String,
+    val tipo: TipoCampeonato,
+    val paisCampeonato: String,
+    val nomeCampeonato: String,
+    val fase: String?,
+    val vitorias: Int,
+    val empates: Int
+)
 
 // ─────────────────────────────────────────────
 //  PartidaDao
@@ -126,6 +145,65 @@ interface PartidaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirEventos(eventos: List<EventoPartidaEntity>)
+
+    /**
+     * Campanha de um clube numa competição, dentro da janela do Ranking Mundial:
+     * vitórias e empates agrupados por competição e fase. O peso de cada linha é
+     * aplicado em Kotlin (ver RankingMundial), então o SQL não precisa conhecer
+     * níveis de liga nem o corte das oitavas de final.
+     */
+    @Query("""
+        SELECT x.timeId        AS timeId,
+               tm.nome         AS nomeTime,
+               tm.escudoRes    AS escudoRes,
+               tm.pais         AS pais,
+               x.tipo          AS tipo,
+               x.paisCampeonato AS paisCampeonato,
+               x.nomeCampeonato AS nomeCampeonato,
+               x.fase          AS fase,
+               SUM(x.venceu)   AS vitorias,
+               SUM(x.empatou)  AS empates
+        FROM (
+            SELECT p.timeCasaId AS timeId, c.tipo AS tipo, c.pais AS paisCampeonato,
+                   c.nome AS nomeCampeonato, p.fase AS fase,
+                   CASE WHEN p.golsCasa >  p.golsFora THEN 1 ELSE 0 END AS venceu,
+                   CASE WHEN p.golsCasa =  p.golsFora THEN 1 ELSE 0 END AS empatou
+            FROM partidas p
+            INNER JOIN campeonatos c ON c.id = p.campeonatoId
+            INNER JOIN temporadas  t ON t.id = c.temporadaId
+            WHERE p.jogada = 1 AND p.golsCasa IS NOT NULL AND p.golsFora IS NOT NULL
+              AND (  (t.ano = :anoAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
+                  OR (t.ano = :anoAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
+            UNION ALL
+            SELECT p.timeForaId AS timeId, c.tipo AS tipo, c.pais AS paisCampeonato,
+                   c.nome AS nomeCampeonato, p.fase AS fase,
+                   CASE WHEN p.golsFora >  p.golsCasa THEN 1 ELSE 0 END AS venceu,
+                   CASE WHEN p.golsFora =  p.golsCasa THEN 1 ELSE 0 END AS empatou
+            FROM partidas p
+            INNER JOIN campeonatos c ON c.id = p.campeonatoId
+            INNER JOIN temporadas  t ON t.id = c.temporadaId
+            WHERE p.jogada = 1 AND p.golsCasa IS NOT NULL AND p.golsFora IS NOT NULL
+              AND (  (t.ano = :anoAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
+                  OR (t.ano = :anoAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
+        ) x
+        INNER JOIN times tm ON tm.id = x.timeId
+        GROUP BY x.timeId, x.tipo, x.paisCampeonato, x.nomeCampeonato, x.fase
+    """)
+    fun observeCampanhasMundial(anoAtual: Int, ordemGlobalAtual: Int): Flow<List<CampanhaMundialDto>>
+
+    /**
+     * Relógio da janela: o maior ordemGlobal já jogado na temporada corrente. Como
+     * ordemGlobal é monotônico dentro da temporada, ele faz o papel de "agora" e
+     * dispensa data nas partidas. Zero quando a temporada ainda não teve jogos.
+     */
+    @Query("""
+        SELECT COALESCE(MAX(p.ordemGlobal), 0)
+        FROM partidas p
+        INNER JOIN campeonatos c ON c.id = p.campeonatoId
+        INNER JOIN temporadas  t ON t.id = c.temporadaId
+        WHERE p.jogada = 1 AND t.ano = :anoAtual
+    """)
+    fun observeOrdemGlobalAtual(anoAtual: Int): Flow<Int>
 
     @Query("DELETE FROM partidas")
     suspend fun deleteAll()

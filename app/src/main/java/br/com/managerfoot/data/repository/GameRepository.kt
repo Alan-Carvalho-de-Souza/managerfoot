@@ -3,6 +3,7 @@ package br.com.managerfoot.data.repository
 import androidx.room.withTransaction
 import br.com.managerfoot.data.dao.CampeonatoDao
 import br.com.managerfoot.data.dao.ClassificacaoDao
+import br.com.managerfoot.data.dao.CampanhaMundialDto
 import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.EstadioDao
 import br.com.managerfoot.data.dao.HallDaFamaDao
@@ -10,6 +11,8 @@ import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.dao.PropostaClubeDao
 import br.com.managerfoot.data.dao.PropostaIADao
 import br.com.managerfoot.data.dao.RankingBrasileiroDao
+import br.com.managerfoot.data.dao.RankingEuropaDao
+import br.com.managerfoot.data.dao.RankingEuropaLinha
 import br.com.managerfoot.data.dao.RankingConmebolDao
 import br.com.managerfoot.data.dao.RankingGeralDao
 import br.com.managerfoot.data.database.AppDatabase
@@ -18,6 +21,7 @@ import br.com.managerfoot.domain.engine.*
 import br.com.managerfoot.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +40,7 @@ class GameRepository @Inject constructor(
     private val rankingGeralDao: RankingGeralDao,
     private val rankingConmebolDao: RankingConmebolDao,
     private val rankingBrasileiroDao: RankingBrasileiroDao,
+    private val rankingEuropaDao: RankingEuropaDao,
     private val estadioDao: EstadioDao,
     private val propostaIADao: PropostaIADao,
     private val propostaClubeDao: PropostaClubeDao
@@ -156,6 +161,7 @@ class GameRepository @Inject constructor(
         rankingGeralDao.deleteAll()
         rankingConmebolDao.deleteAll()
         rankingBrasileiroDao.deleteAll()
+        rankingEuropaDao.deleteAll()
         estadioDao.deleteAll()
         propostaIADao.limparTodas()
         propostaClubeDao.limparTodas()
@@ -4285,6 +4291,162 @@ class GameRepository @Inject constructor(
     }
 
     fun observarRankingBrasileiro(anoAtual: Int) = rankingBrasileiroDao.observeRanking(anoAtual)
+
+    // ── Ranking por colocação mundial (IFFHS) ───────────────────────
+    // Conjunto de regras do recorte MUNDO (ver ranking_mundial.md): janela de 12
+    // meses, soma por partida pelo peso do torneio, sem recência.
+    //
+    // Único dos quatro SEM tabela de lançamentos: a pontuação é derivada das
+    // partidas já gravadas, na leitura. O motivo é que `partidas` guarda toda
+    // partida oficial de todas as temporadas — só amistosos são apagados, e eles
+    // não pontuam — com tudo que a regra precisa: resultado, fase, ordemGlobal, e
+    // o tipo e o país via campeonatos. Derivar em vez de acumular dá três coisas:
+    // nenhuma migração, nenhuma escrita por partida dentro do laço de simulação, e
+    // recálculo automático se os níveis de liga mudarem, como mandam as regras.
+
+    /**
+     * Ranking mundial consolidado. Combina o relógio da janela (maior ordemGlobal
+     * jogado na temporada) com as campanhas agregadas, aplica o peso de cada
+     * competição em Kotlin e soma por clube.
+     */
+    fun observarRankingMundial(anoAtual: Int): Flow<List<RankingMundialLinha>> =
+        partidaDao.observeOrdemGlobalAtual(anoAtual)
+            .flatMapLatest { ordemGlobalAtual ->
+                partidaDao.observeCampanhasMundial(anoAtual, ordemGlobalAtual)
+            }
+            .map { campanhas -> consolidarRankingMundial(campanhas) }
+
+    private fun consolidarRankingMundial(
+        campanhas: List<CampanhaMundialDto>
+    ): List<RankingMundialLinha> {
+        val acumulado = mutableMapOf<Int, RankingMundialLinha>()
+        for (c in campanhas) {
+            val peso = RankingMundial.pesoDaVitoria(
+                tipo = c.tipo,
+                paisCampeonato = c.paisCampeonato,
+                nomeCampeonato = c.nomeCampeonato,
+                fase = c.fase
+            ) ?: continue   // competição que não pontua, ou fase anterior às oitavas
+            val pontos = RankingMundial.pontos(peso, c.vitorias, c.empates)
+            if (pontos <= 0.0) continue
+
+            val atual = acumulado[c.timeId] ?: RankingMundialLinha(
+                timeId = c.timeId, nomeTime = c.nomeTime,
+                escudoRes = c.escudoRes, pais = c.pais
+            )
+            val ehLiga = RankingMundial.profundidadeDaDivisao(c.tipo) != null
+            val ehInternacional = c.tipo == TipoCampeonato.CONTINENTAL ||
+                c.tipo == TipoCampeonato.MUNDIAL_CLUBES
+            acumulado[c.timeId] = atual.copy(
+                pontos             = atual.pontos + pontos,
+                pontosLiga         = atual.pontosLiga + if (ehLiga) pontos else 0.0,
+                pontosCopa         = atual.pontosCopa +
+                    if (c.tipo == TipoCampeonato.COPA_NACIONAL) pontos else 0.0,
+                pontosInternacional = atual.pontosInternacional + if (ehInternacional) pontos else 0.0,
+                jogos              = atual.jogos + c.vitorias + c.empates
+            )
+        }
+        return acumulado.values
+            .sortedWith(compareByDescending<RankingMundialLinha> { it.pontos }.thenBy { it.nomeTime })
+    }
+
+    // ── Ranking por colocação da Europa (Coeficiente da UEFA) ───────
+    // Conjunto de regras do recorte EUROPA (ver ranking_europa.md): janela de 5
+    // temporadas sem pesos, pontuando só Champions, Europa e Conference League.
+    //
+    // ⚠️ DORMENTE: nenhuma competição da UEFA existe no jogo, então não há de onde
+    // tirar pontos e o ranking fica vazio. Ligas e copas nacionais não pontuam aqui,
+    // por regra. A função de registro abaixo já está pronta para o dia em que as
+    // competições existirem — é só chamá-la ao encerrar cada uma.
+
+    /**
+     * Registra a campanha de um clube numa competição da UEFA. Ignora clubes de fora
+     * da Europa. Apaga antes o lançamento daquele ano/competição, para que reencerrar
+     * a mesma temporada não duplique a pontuação.
+     */
+    suspend fun registrarCampanhaEuropeia(
+        timeId: Int,
+        ano: Int,
+        competicao: CompeticaoUefa,
+        posicaoFaseLiga: Int,
+        vitorias: Int,
+        empates: Int,
+        faseAlcancada: FaseUefa? = null
+    ) {
+        if (timeId <= 0) return
+        val time = timeRepository.buscarEntityPorId(timeId) ?: return
+        if (!Continentes.ehEuropa(time.pais)) return
+        val pontos = RankingEuropa.pontosDaCampanha(
+            competicao, posicaoFaseLiga, vitorias, empates, faseAlcancada
+        )
+        if (pontos <= 0.0) return
+        rankingEuropaDao.inserir(
+            RankingEuropaEntity(
+                timeId     = timeId,
+                ano        = ano,
+                competicao = competicao.name,
+                motivo     = montarMotivoUefa(posicaoFaseLiga, faseAlcancada),
+                pontos     = pontos
+            )
+        )
+    }
+
+    /**
+     * Registra a eliminação na qualificação, que rende apenas a consolação fixa da
+     * rodada: partidas de qualificação não dão pontos por jogo.
+     */
+    suspend fun registrarQualificacaoEuropeia(
+        timeId: Int,
+        ano: Int,
+        competicao: CompeticaoUefa,
+        fase: FaseQualificatoriaUefa
+    ) {
+        if (timeId <= 0) return
+        val time = timeRepository.buscarEntityPorId(timeId) ?: return
+        if (!Continentes.ehEuropa(time.pais)) return
+        rankingEuropaDao.inserir(
+            RankingEuropaEntity(
+                timeId     = timeId,
+                ano        = ano,
+                competicao = competicao.name,
+                motivo     = "Eliminado na ${fase.rotulo}",
+                pontos     = RankingEuropa.pontosDaQualificacao(fase)
+            )
+        )
+    }
+
+    private fun montarMotivoUefa(posicaoFaseLiga: Int, faseAlcancada: FaseUefa?): String {
+        val posicao = if (posicaoFaseLiga > 0) "${posicaoFaseLiga}º na Fase de Liga" else "Fase de Liga"
+        return if (faseAlcancada == null) posicao else "$posicao, ${faseAlcancada.rotulo}"
+    }
+
+    /**
+     * Ranking europeu consolidado. O DAO devolve a soma bruta da janela por clube; o
+     * piso de 20% do país é aplicado aqui, em Kotlin, porque depende do coeficiente da
+     * associação — a média dos clubes daquele país — e fazer isso em SQL exigiria função
+     * de janela, cuja disponibilidade varia com a versão do Android.
+     *
+     * Clubes que continuam em zero depois do piso não entram no ranking.
+     */
+    fun observarRankingEuropa(anoAtual: Int): Flow<List<RankingEuropaLinha>> =
+        rankingEuropaDao.observeRankingBruto(anoAtual, RankingEuropa.DIVISOES_ELITE)
+            .map { linhas ->
+                val coeficientePorPais = linhas
+                    .groupBy { it.pais }
+                    .mapValues { (_, clubes) ->
+                        RankingEuropa.coeficienteDoPais(clubes.map { it.pontosBrutos })
+                    }
+                linhas
+                    .map { linha ->
+                        val piso = coeficientePorPais[linha.pais] ?: 0.0
+                        linha.copy(
+                            pontosBrutos = RankingEuropa.aplicarPisoDoPais(linha.pontosBrutos, piso)
+                        )
+                    }
+                    .filter { it.pontosBrutos > 0.0 }
+                    .sortedWith(compareByDescending<RankingEuropaLinha> { it.pontosBrutos }
+                        .thenBy { it.nomeTime })
+            }
 
     // ── Determina participantes da Copa ─────────────────────────────
     suspend fun determinarParticipantesCopa(

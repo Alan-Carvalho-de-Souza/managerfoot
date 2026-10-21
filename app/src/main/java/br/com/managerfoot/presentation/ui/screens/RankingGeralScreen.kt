@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.dao.RankingBrasileiroLinha
 import br.com.managerfoot.data.dao.RankingConmebolLinha
+import br.com.managerfoot.data.dao.RankingEuropaLinha
+import br.com.managerfoot.domain.engine.RankingMundialLinha
 import br.com.managerfoot.data.database.entities.RankingGeralEntity
 import br.com.managerfoot.domain.model.Continentes
 import br.com.managerfoot.presentation.ui.components.EmptyState
@@ -47,6 +49,8 @@ fun RankingGeralScreen(
     val paisJogador by vm.paisJogador.collectAsState()
     val rankingConmebol by vm.rankingConmebol.collectAsState()
     val rankingBrasileiro by vm.rankingBrasileiro.collectAsState()
+    val rankingEuropa by vm.rankingEuropa.collectAsState()
+    val rankingMundial by vm.rankingMundial.collectAsState()
 
     // Qual dos dois rankings está em tela: 0 = Geral (desempenho) · 1 = Colocação
     var tipoRanking by remember { mutableIntStateOf(0) }
@@ -62,10 +66,16 @@ fun RankingGeralScreen(
         if (tipoRanking == 1) rankingConmebol.map { it.pais } + rankingBrasileiro.map { it.pais }
         else ranking.map { it.pais }
     }
-    val continentes = remember(paisesDoRankingAtivo) {
-        paisesDoRankingAtivo.map { continenteDePais(it) }
+    val continentes = remember(paisesDoRankingAtivo, tipoRanking) {
+        val porDados = paisesDoRankingAtivo.map { continenteDePais(it) }
             .groupingBy { it }.eachCount()
             .entries.sortedByDescending { it.value }.map { it.key }
+        // Na aba Colocação, os recortes com conjunto de regras próprio aparecem mesmo
+        // sem nenhum clube pontuado — é o caso da Europa, cujo Coeficiente da UEFA só
+        // pontua competições da UEFA, que ainda não existem no jogo. Sem esta âncora o
+        // chip nunca surgiria, e o recorte ficaria inalcançável.
+        if (tipoRanking == 1 && Continentes.EUROPA !in porDados) porDados + Continentes.EUROPA
+        else porDados
     }
     val paises = remember(paisesDoRankingAtivo) {
         paisesDoRankingAtivo.filter { it.isNotBlank() }
@@ -98,22 +108,38 @@ fun RankingGeralScreen(
         else -> rankingConmebol
     }
 
-    // Na aba Colocação, a REGRA segue o recorte: País = Brasil usa o Ranking
-    // Nacional de Clubes da CBF (janela de 5 anos, pesos 5/4/3/2/1); os demais
-    // recortes usam as regras CONMEBOL (janela de 10 anos, depreciação de 10%/ano).
-    // Europa e os outros países terão os seus conjuntos, que entram aqui do mesmo
-    // jeito — mais um ramo deste `usaRnc`.
+    // Na aba Colocação, a REGRA segue o recorte:
+    //   Mundo                    → Ranking Mundial de Clubes da IFFHS (12 meses, por partida)
+    //   País = Brasil            → Ranking Nacional de Clubes da CBF (5 anos, pesos 5..1)
+    //   Europa (continente/país) → Coeficiente de Clubes da UEFA (5 temporadas, sem pesos)
+    //   demais recortes          → regras CONMEBOL (10 anos, −10% ao ano)
+    // Os próximos conjuntos entram aqui do mesmo jeito: mais um ramo nesta cadeia.
+    val usaIffhs = tipoRanking == 1 && modo == 0
     val usaRnc = tipoRanking == 1 && modo == 2 && paisSel?.let { Continentes.ehBrasil(it) } == true
+    val usaUefa = tipoRanking == 1 && !usaRnc && when (modo) {
+        1    -> continenteSel == Continentes.EUROPA
+        2    -> paisSel?.let { Continentes.ehEuropa(it) } == true
+        else -> false
+    }
     val visivelBrasileiro = if (modo == 2) rankingBrasileiro.filter { it.pais == paisSel }
                             else rankingBrasileiro
+    val visivelEuropa = if (modo == 2) rankingEuropa.filter { it.pais == paisSel }
+                        else rankingEuropa
 
     val totalVisivel = when {
+        usaIffhs         -> rankingMundial.size
         usaRnc           -> visivelBrasileiro.size
+        usaUefa          -> visivelEuropa.size
         tipoRanking == 1 -> visivelConmebol.size
         else             -> visivel.size
     }
+    // Os recortes com conjunto de regras próprio (Mundo e Europa) não ficam "vazios"
+    // por não haver pontos neles: o estado vazio certo é o da lista, que explica o
+    // motivo de cada caso.
     val rankingAtivoVazio =
-        if (tipoRanking == 1) rankingConmebol.isEmpty() && rankingBrasileiro.isEmpty()
+        if (tipoRanking == 1)
+            rankingConmebol.isEmpty() && rankingBrasileiro.isEmpty() && rankingEuropa.isEmpty() &&
+                rankingMundial.isEmpty() && !usaUefa && !usaIffhs
         else ranking.isEmpty()
 
     Column(
@@ -196,8 +222,12 @@ fun RankingGeralScreen(
             // Deixa explícito qual conjunto de regras está pontuando o recorte,
             // já que os números não são comparáveis entre eles.
             Text(
-                if (usaRnc) "Ranking Nacional de Clubes (CBF) · 5 anos, pesos 5/4/3/2/1"
-                else "Regras CONMEBOL · 10 anos, −10% ao ano",
+                when {
+                    usaIffhs -> "Ranking Mundial da IFFHS · 12 meses, por partida"
+                    usaRnc   -> "Ranking Nacional de Clubes (CBF) · 5 anos, pesos 5/4/3/2/1"
+                    usaUefa  -> "Coeficiente de Clubes da UEFA · 5 temporadas, sem pesos"
+                    else     -> "Regras CONMEBOL · 10 anos, −10% ao ano"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -206,8 +236,12 @@ fun RankingGeralScreen(
                     .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 textAlign = TextAlign.Center
             )
-            if (usaRnc) RankingBrasileiroLista(visivelBrasileiro)
-            else RankingConmebolLista(visivelConmebol)
+            when {
+                usaIffhs -> RankingMundialLista(rankingMundial)
+                usaRnc   -> RankingBrasileiroLista(visivelBrasileiro)
+                usaUefa  -> RankingEuropaLista(visivelEuropa)
+                else     -> RankingConmebolLista(visivelConmebol)
+            }
             return@Column
         }
 
@@ -270,6 +304,244 @@ private fun ColumnScope.RankingConmebolLista(linhas: List<RankingConmebolLinha>)
 //  Ranking de Colocação (regras do Brasil) — Ranking Nacional de Clubes da
 //  CBF. A pontuação já vem do DAO com o peso de cada ano aplicado.
 // ─────────────────────────────────────────────────────────────
+@Composable
+private fun ColumnScope.RankingMundialLista(linhas: List<RankingMundialLinha>) {
+    if (linhas.isEmpty()) {
+        EmptyState(
+            "Nenhum clube pontuado ainda.\n" +
+            "O ranking mundial soma as partidas dos últimos 12 meses."
+        )
+        return
+    }
+
+    RankingColocacaoHeader()
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+    LazyColumn {
+        itemsIndexed(linhas) { index, linha ->
+            RankingMundialRow(
+                posicao = index + 1,
+                linha = linha,
+                isOdd = index % 2 == 0
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+            )
+        }
+        item { Spacer(Modifier.height(Spacing.lg)) }
+    }
+}
+
+@Composable
+private fun RankingMundialRow(posicao: Int, linha: RankingMundialLinha, isOdd: Boolean) {
+    val (posBarColor, posTextColor) = when (posicao) {
+        1 -> GoldChampion to GoldChampion
+        2 -> SilverRunnerUp to SilverRunnerUp
+        3 -> BronzePlace to BronzePlace
+        else -> Color.Transparent to MaterialTheme.colorScheme.onSurface
+    }
+    val ptsBgColor = when (posicao) {
+        1 -> GoldChampion.copy(alpha = 0.18f)
+        2 -> SilverRunnerUp.copy(alpha = 0.18f)
+        3 -> BronzePlace.copy(alpha = 0.18f)
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val rowBg = if (isOdd) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                else MaterialTheme.colorScheme.surface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(56.dp)
+                .background(posBarColor)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$posicao",
+                    modifier = Modifier.width(26.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = if (posicao <= 3) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    color = posTextColor
+                )
+                TeamBadge(nome = linha.nomeTime, escudoRes = linha.escudoRes, size = 24.dp)
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    linha.nomeTime,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Surface(
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = ptsBgColor
+                ) {
+                    Text(
+                        formatarPontosConmebol(linha.pontos),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (posicao <= 3) posTextColor else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            // Decomposição: país · liga · copa · internacional, e quantas partidas
+            // pontuaram na janela (derrota não soma, então não entra na contagem).
+            Row(modifier = Modifier.padding(start = 56.dp)) {
+                Text(
+                    buildString {
+                        append(linha.pais.ifBlank { "—" })
+                        append(" · Liga ${formatarPontosConmebol(linha.pontosLiga)}")
+                        append(" · Copa ${formatarPontosConmebol(linha.pontosCopa)}")
+                        if (linha.pontosInternacional > 0.0) {
+                            append(" · Int ${formatarPontosConmebol(linha.pontosInternacional)}")
+                        }
+                        append(" · ${linha.jogos} jogos")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.RankingEuropaLista(linhas: List<RankingEuropaLinha>) {
+    if (linhas.isEmpty()) {
+        // Vazio esperado, não um erro: o Coeficiente da UEFA pontua exclusivamente
+        // Champions, Europa e Conference League, e nenhuma delas existe no jogo.
+        // Ligas e copas nacionais não pontuam aqui, por regra.
+        EmptyState(
+            "Nenhum clube pontuado ainda.\n" +
+            "O coeficiente europeu conta só Champions, Europa e Conference League,\n" +
+            "que ainda não existem no jogo. Ligas nacionais não pontuam aqui."
+        )
+        return
+    }
+
+    RankingColocacaoHeader()
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+    LazyColumn {
+        itemsIndexed(linhas) { index, linha ->
+            RankingEuropaRow(
+                posicao = index + 1,
+                linha = linha,
+                isOdd = index % 2 == 0
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+            )
+        }
+        item { Spacer(Modifier.height(Spacing.lg)) }
+    }
+}
+
+@Composable
+private fun RankingEuropaRow(posicao: Int, linha: RankingEuropaLinha, isOdd: Boolean) {
+    val (posBarColor, posTextColor) = when (posicao) {
+        1 -> GoldChampion to GoldChampion
+        2 -> SilverRunnerUp to SilverRunnerUp
+        3 -> BronzePlace to BronzePlace
+        else -> Color.Transparent to MaterialTheme.colorScheme.onSurface
+    }
+    val ptsBgColor = when (posicao) {
+        1 -> GoldChampion.copy(alpha = 0.18f)
+        2 -> SilverRunnerUp.copy(alpha = 0.18f)
+        3 -> BronzePlace.copy(alpha = 0.18f)
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val rowBg = if (isOdd) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                else MaterialTheme.colorScheme.surface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(56.dp)
+                .background(posBarColor)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$posicao",
+                    modifier = Modifier.width(26.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = if (posicao <= 3) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    color = posTextColor
+                )
+                TeamBadge(nome = linha.nomeTime, escudoRes = linha.escudoRes, size = 24.dp)
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    linha.nomeTime,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Surface(
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = ptsBgColor
+                ) {
+                    Text(
+                        formatarPontosConmebol(linha.pontosBrutos),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (posicao <= 3) posTextColor else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            // Decomposição por competição: Champions · Europa · Conference.
+            Row(modifier = Modifier.padding(start = 56.dp)) {
+                Text(
+                    buildString {
+                        append(linha.ultimaCampanha.ifBlank { linha.pais.ifBlank { "—" } })
+                        append(" · UCL ${formatarPontosConmebol(linha.pontosChampions)}")
+                        append(" · UEL ${formatarPontosConmebol(linha.pontosEuropa)}")
+                        append(" · UECL ${formatarPontosConmebol(linha.pontosConference)}")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ColumnScope.RankingBrasileiroLista(linhas: List<RankingBrasileiroLinha>) {
     if (linhas.isEmpty()) {
