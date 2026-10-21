@@ -13,11 +13,15 @@ Regras:
 """
 import json
 import io
+import os
 import random
 
 random.seed(42)  # determinismo
 
-PATH = r"C:\Dev\ManagerFoot\app\src\main\assets\seed_data.json"
+# Relativo ao diretorio de onde o script e chamado (a raiz do projeto), como os
+# demais scripts do pipeline. Caminho absoluto aqui escrevia no checkout
+# principal mesmo quando rodado de um worktree.
+PATH = os.path.join("app", "src", "main", "assets", "seed_data.json")
 
 # Nomes ficticios mas realistas — todos sem acentos para evitar issues
 NOMES_BR_PRENOMES = [
@@ -180,6 +184,40 @@ OVERRIDES = {
 
     # ── Outros times (pool intercontinental) ─────────────────
     601: ("Javier Mascherano",  41, "Argentina"),   # Inter Miami
+
+    # ── Pool europeu (divisao 91) — base da Champions League ─
+    # Sem override, gen_nome cai no pool brasileiro: um tecnico de nome
+    # brasileiro no Bayern. Por isso todos os 30 clubes tem override.
+    602: ("Vincent Kompany",       39, "Belgica"),      # Bayern de Munique
+    603: ("Kasper Hjulmand",       53, "Dinamarca"),    # Bayer Leverkusen
+    604: ("Niko Kovac",            54, "Croacia"),      # Borussia Dortmund
+    605: ("Ole Werner",            37, "Alemanha"),     # RB Leipzig
+    606: ("Luis Enrique",          55, "Espanha"),      # Paris Saint-Germain
+    607: ("Roberto De Zerbi",      46, "Italia"),       # Olympique de Marselha
+    608: ("Sebastien Pocognoli",   38, "Belgica"),      # AS Monaco
+    609: ("Peter Bosz",            62, "Holanda"),      # PSV Eindhoven
+    610: ("John Heitinga",         42, "Holanda"),      # Ajax
+    611: ("Nicky Hayen",           45, "Belgica"),      # Club Brugge
+    612: ("Jindrich Trpisovsky",   49, "Tchequia"),     # Slavia Praga
+    613: ("Okan Buruk",            52, "Turquia"),      # Galatasaray
+    614: ("Rui Borges",            44, "Portugal"),     # Sporting CP
+    615: ("Arda Turan",            38, "Turquia"),      # Shakhtar Donetsk
+    616: ("Wilfried Nancy",        48, "Franca"),       # Celtic
+    617: ("Danny Rohl",            36, "Alemanha"),     # Rangers
+    618: ("Jose Luis Mendilibar",  64, "Espanha"),      # Olympiacos
+    619: ("Razvan Lucescu",        56, "Romenia"),      # PAOK
+    620: ("Thomas Letsch",         57, "Alemanha"),     # Red Bull Salzburg
+    621: ("Jurgen Saumel",         40, "Austria"),      # Sturm Graz
+    622: ("Giorgio Contini",       51, "Suica"),        # Young Boys
+    623: ("Ludovic Magnin",        46, "Suica"),        # Basel
+    624: ("Jacob Neestrup",        37, "Dinamarca"),    # Copenhague
+    625: ("Mike Tullberg",         40, "Dinamarca"),    # Midtjylland
+    626: ("Kjetil Knutsen",        57, "Noruega"),      # Bodo Glimt
+    627: ("Mario Kovacevic",       50, "Croacia"),      # Dinamo Zagreb
+    628: ("Vladan Milojevic",      56, "Servia"),       # Estrela Vermelha
+    629: ("Edward Iordanescu",     47, "Romenia"),      # Legia Varsovia
+    630: ("Henrik Rydstrom",       49, "Suecia"),       # Malmo FF
+    631: ("Elias Charalambous",    45, "Chipre"),       # FCSB
 }
 
 
