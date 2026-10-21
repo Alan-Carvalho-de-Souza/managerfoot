@@ -653,9 +653,16 @@ object MotorCampeonato {
     }
 
     /**
-     * Guloso de uma passada: percorre os confrontos numa ordem aleatória e põe
-     * cada um na primeira rodada livre para os dois clubes. Devolve null quando
-     * algum confronto não cabe em [rodadas] rodadas.
+     * Guloso de uma passada, com heurística de confronto mais restrito primeiro:
+     * a cada passo pega o confronto que tem MENOS rodadas disponíveis e o põe na
+     * primeira delas. É a mesma ideia que faz o retrocesso do sorteio funcionar —
+     * decidir primeiro o que tem menos saída.
+     *
+     * A ordem importa muito aqui. Pegar os confrontos em ordem aleatória e
+     * encaixar cada um na primeira rodada livre fecha as 8 rodadas raramente: o
+     * sorteio real do seed precisava de 10. Com a heurística, as 8 saem.
+     *
+     * Devolve null quando algum confronto não cabe em [rodadas] rodadas.
      */
     private fun tentarDistribuir(
         confrontos: List<ConfrontoChampions>,
@@ -665,11 +672,28 @@ object MotorCampeonato {
         val atribuicao = IntArray(confrontos.size)
         // ocupado[rodada][timeId]
         val ocupado = Array(rodadas) { HashSet<Int>() }
-        for (indice in confrontos.indices.shuffled(random)) {
-            val confronto = confrontos[indice]
-            val rodada = (0 until rodadas).firstOrNull { r ->
+        val pendentes = confrontos.indices.shuffled(random).toMutableList()
+
+        fun rodadasLivres(confronto: ConfrontoChampions): List<Int> =
+            (0 until rodadas).filter { r ->
                 confronto.casaId !in ocupado[r] && confronto.foraId !in ocupado[r]
-            } ?: return null
+            }
+
+        while (pendentes.isNotEmpty()) {
+            var escolhido = -1
+            var melhores: List<Int> = emptyList()
+            for ((posicao, indice) in pendentes.withIndex()) {
+                val livres = rodadasLivres(confrontos[indice])
+                if (livres.isEmpty()) return null          // beco sem saída
+                if (escolhido < 0 || livres.size < melhores.size) {
+                    escolhido = posicao
+                    melhores = livres
+                    if (livres.size == 1) break            // não há mais restrito
+                }
+            }
+            val indice = pendentes.removeAt(escolhido)
+            val confronto = confrontos[indice]
+            val rodada = melhores.first()
             ocupado[rodada] += confronto.casaId
             ocupado[rodada] += confronto.foraId
             atribuicao[indice] = rodada + 1

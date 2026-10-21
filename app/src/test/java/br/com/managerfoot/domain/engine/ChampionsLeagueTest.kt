@@ -269,11 +269,14 @@ class ChampionsLeagueTest {
                     clubes.size, clubes.distinct().size
                 )
             }
-            // 8 rodadas é o mínimo possível; o fallback admite algumas a mais.
+            // 8 rodadas é o mínimo possível e o formato real: cada clube joga
+            // uma vez por rodada. A heurística de confronto mais restrito as
+            // alcança; a folga de rodadas extras fica só como rede de proteção
+            // para o pior caso de Vizing, que não deve aparecer na prática.
             val rodadas = partidas.map { it.rodada }.distinct()
-            assertTrue(
+            assertEquals(
                 "semente $semente precisou de ${rodadas.size} rodadas",
-                rodadas.size in MotorCampeonato.CHAMPIONS_RODADAS_LIGA..(MotorCampeonato.CHAMPIONS_RODADAS_LIGA + 4)
+                MotorCampeonato.CHAMPIONS_RODADAS_LIGA, rodadas.size
             )
         }
     }
