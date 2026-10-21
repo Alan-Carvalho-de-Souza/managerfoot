@@ -460,6 +460,51 @@ class ChampionsLeagueTest {
         assertTrue(12 !in RankingEuropa.DIVISOES_ELEGIVEIS_CHAMPIONS)
     }
 
+    /**
+     * Grafias de país exatamente como o seed as escreve — ligas de elite e pool de
+     * clubes estrangeiros (divisão 91), conferidas no seed real.
+     *
+     * O seed escreve sem acento ("Franca", "Belgica", "Tchequia", "Ucrania"), e um
+     * alias que não casasse falharia em silêncio: o país perderia TODAS as suas
+     * vagas diretas, a lista de acesso não fecharia os 36 e a Champions
+     * simplesmente não seria criada, sem nenhum erro. Daí o teste.
+     */
+    private val grafiasDoSeed = listOf(
+        "Inglaterra", "Espanha", "Italia",
+        "Alemanha", "Franca", "Holanda", "Belgica", "Tchequia", "Turquia",
+        "Portugal", "Ucrania",
+        "Escocia", "Grecia", "Austria", "Suica", "Dinamarca", "Noruega",
+        "Croacia", "Servia", "Polonia", "Suecia", "Romenia"
+    )
+
+    @Test
+    fun `as grafias do seed casam com os paises da lista de acesso`() {
+        val canonicos = ListaDeAcessoChampions.VAGAS_DIRETAS.keys
+        val casados = grafiasDoSeed.mapNotNull { ListaDeAcessoChampions.paisCanonico(it) }.toSet()
+        assertEquals(
+            "todo pais com vaga direta tem de casar com alguma grafia do seed",
+            canonicos, casados
+        )
+    }
+
+    @Test
+    fun `as grafias do seed sao todas reconhecidas como Europa`() {
+        // Um país fora de Continentes.PAISES_EUROPA nem chega a ser candidato:
+        // determinarParticipantesChampions filtra por ehEuropa antes de tudo.
+        grafiasDoSeed.forEach { pais ->
+            assertTrue(
+                "$pais devia ser Europa",
+                br.com.managerfoot.domain.model.Continentes.ehEuropa(pais)
+            )
+        }
+    }
+
+    @Test
+    fun `a divisao do pool do seed e elegivel`() {
+        // Os clubes estrangeiros do seed estão na divisão 91.
+        assertTrue(91 in RankingEuropa.DIVISOES_ELEGIVEIS_CHAMPIONS)
+    }
+
     @Test
     fun `os paises da lista de acesso contam como Europa`() {
         ListaDeAcessoChampions.VAGAS_DIRETAS.keys.forEach { pais ->
