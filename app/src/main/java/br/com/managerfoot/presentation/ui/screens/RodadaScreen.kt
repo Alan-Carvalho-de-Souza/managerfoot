@@ -50,6 +50,7 @@ fun RodadaScreen(
     campeonatoChampionshipId: Int = -1,
     campeonatoLaLigaId: Int = -1,
     campeonatoSerieAId: Int = -1,
+    campeonatoChampionsId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -59,12 +60,14 @@ fun RodadaScreen(
     val rodadaSelecionada  by vm.rodadaSelecionada.collectAsState()
     val maxRodada          by vm.maxRodada.collectAsState()
 
-    val esMataMataDivisao = divisaoSelecionada == 8 || divisaoSelecionada == 9
+    val esMataMataDivisao =
+        divisaoSelecionada == 8 || divisaoSelecionada == 9 || divisaoSelecionada == 31
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId,
-        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId
+        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
+        campeonatoChampionsId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
@@ -74,13 +77,15 @@ fun RodadaScreen(
             campPremierId = campeonatoPremierId,
             campChampionshipId = campeonatoChampionshipId,
             campLaLigaId = campeonatoLaLigaId,
-            campSerieAId = campeonatoSerieAId
+            campSerieAId = campeonatoSerieAId,
+            campChampionsId = campeonatoChampionsId
         )
     }
 
     // Fases do mata-mata disponíveis
-    val fasesDisponiveisMM = remember(knockoutPartidas) {
-        vm.ARG_FASES_ORDER.filter { fase -> knockoutPartidas.any { it.fase == fase } }
+    val fasesDisponiveisMM = remember(knockoutPartidas, divisaoSelecionada) {
+        vm.fasesDaDivisao(divisaoSelecionada)
+            .filter { fase -> knockoutPartidas.any { it.fase == fase } }
     }
     var faseSelecionadaMM by remember(fasesDisponiveisMM) {
         mutableStateOf(fasesDisponiveisMM.firstOrNull() ?: "")
@@ -121,12 +126,23 @@ fun RodadaScreen(
     val opcoesItalia = buildList {
         if (campeonatoSerieAId > 0) add(23 to "Serie A")
     }
+    // Competições continentais, que não pertencem a um país. Só a Fase de Liga da
+    // Champions entra aqui: ela tem rodadas de 1 a 8, como uma liga. O play-off e o
+    // mata-mata aparecem na tela de Chaveamento, que já tem a aba Champions.
+    val opcoesEuropa = buildList {
+        if (campeonatoChampionsId > 0) {
+            add(30 to "Champions — Fase de Liga")
+            add(31 to "Champions — Mata-Mata")
+        }
+    }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
     val temInglaterra = opcoesInglaterra.isNotEmpty()
     val temEspanha = opcoesEspanha.isNotEmpty()
     val temItalia = opcoesItalia.isNotEmpty()
-    val temOutrosPaises = temArgentina || temUruguai || temInglaterra || temEspanha || temItalia
+    val temEuropa = opcoesEuropa.isNotEmpty()
+    val temOutrosPaises =
+        temArgentina || temUruguai || temInglaterra || temEspanha || temItalia || temEuropa
 
     var paisSelecionado by remember {
         mutableStateOf(
@@ -136,6 +152,7 @@ fun RodadaScreen(
                 divisaoSelecionada in 20..21  -> "Inglaterra"
                 divisaoSelecionada == 22      -> "Espanha"
                 divisaoSelecionada == 23      -> "Italia"
+                divisaoSelecionada in 30..31  -> "Europa"
                 else -> "Brasil"
             }
         )
@@ -147,6 +164,7 @@ fun RodadaScreen(
             divisaoSelecionada in 20..21  -> "Inglaterra"
             divisaoSelecionada == 22      -> "Espanha"
             divisaoSelecionada == 23      -> "Italia"
+            divisaoSelecionada in 30..31  -> "Europa"
             else -> "Brasil"
         }
     }
@@ -157,6 +175,7 @@ fun RodadaScreen(
         "Inglaterra" -> opcoesInglaterra
         "Espanha"    -> opcoesEspanha
         "Italia"     -> opcoesItalia
+        "Europa"     -> opcoesEuropa
         else         -> opcoesBrasil
     }
 
@@ -199,6 +218,7 @@ fun RodadaScreen(
                         if (temInglaterra) add("Inglaterra")
                         if (temEspanha)   add("Espanha")
                         if (temItalia)    add("Italia")
+                        if (temEuropa)    add("Europa")
                     },
                     onSelect = { pais ->
                         paisSelecionado = pais
@@ -209,6 +229,7 @@ fun RodadaScreen(
                             "Inglaterra" -> opcoesInglaterra
                             "Espanha"    -> opcoesEspanha
                             "Italia"     -> opcoesItalia
+                            "Europa"     -> opcoesEuropa
                             else         -> opcoesBrasil
                         }
                         primeiraOpcao.firstOrNull()?.let { vm.selecionarDivisao(it.first) }
@@ -376,8 +397,23 @@ private fun ConteudoMataMata(
         }
     }
 
+    // Rótulo de cada jogo, derivado dos dados em vez de fixo: se o confronto
+    // inverso existe na mesma fase, a eliminatória é de ida e volta — o caso do
+    // play-off e de todo o mata-mata da Champions. O mata-mata argentino é de jogo
+    // único, e continua rotulado como tal. A ida é a de menor ordemGlobal.
     val jogosDoFase = remember(knockoutPartidas, faseSelecionada) {
-        knockoutPartidas.filter { it.fase == faseSelecionada }
+        val daFase = knockoutPartidas.filter { it.fase == faseSelecionada }
+        daFase.map { partida ->
+            val volta = daFase.firstOrNull {
+                it.timeCasaId == partida.timeForaId && it.timeForaId == partida.timeCasaId
+            }
+            val rotulo = when {
+                volta == null -> "JOGO ÚNICO"
+                partida.ordemGlobal <= volta.ordemGlobal -> "IDA"
+                else -> "VOLTA"
+            }
+            partida to rotulo
+        }
     }
 
     LazyColumn(
@@ -387,17 +423,18 @@ private fun ConteudoMataMata(
         ),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        items(jogosDoFase, key = { it.partidaId }) { partida ->
-            RodadaKnockoutCard(partida = partida)
+        items(jogosDoFase, key = { it.first.partidaId }) { (partida, rotulo) ->
+            RodadaKnockoutCard(partida = partida, rotulo = rotulo)
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Card de jogo único do mata-mata (com pênaltis quando empate)
+//  Card de jogo do mata-mata (com pênaltis quando empate). O [rotulo] diz se a
+//  eliminatória é de jogo único ou de ida e volta — ver ConteudoMataMata.
 // ─────────────────────────────────────────────────────────────
 @Composable
-private fun RodadaKnockoutCard(partida: CalendarioPartidaDto) {
+private fun RodadaKnockoutCard(partida: CalendarioPartidaDto, rotulo: String = "JOGO ÚNICO") {
     val borderColor = if (partida.jogada) GreenMid
                       else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
 
@@ -410,9 +447,9 @@ private fun RodadaKnockoutCard(partida: CalendarioPartidaDto) {
         border = BorderStroke(1.dp, borderColor)
     ) {
         Column(modifier = Modifier.padding(Spacing.md)) {
-            // Tag "JOGO ÚNICO"
+            // Tag do tipo de eliminatória: JOGO ÚNICO, IDA ou VOLTA
             Text(
-                "JOGO ÚNICO",
+                rotulo,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.sp,

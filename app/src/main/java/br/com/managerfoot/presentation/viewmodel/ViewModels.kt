@@ -3607,12 +3607,14 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoChampionshipId = -1
     private var campeonatoLaLigaId = -1
     private var campeonatoSerieAId = -1
+    private var campeonatoChampionsId = -1
 
     private var coletarJob: Job? = null
 
     fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1,
                  campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1,
-                 campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1) = viewModelScope.launch {
+                 campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1,
+                 campChampionsId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -3629,6 +3631,7 @@ class RodadaViewModel @Inject constructor(
         campeonatoChampionshipId = campChampionshipId
         campeonatoLaLigaId = campLaLigaId
         campeonatoSerieAId = campSerieAId
+        campeonatoChampionsId = campChampionsId
         atualizarMaxEColetar()
     }
 
@@ -3647,9 +3650,14 @@ class RodadaViewModel @Inject constructor(
 
     private suspend fun atualizarMaxEColetar() {
         val div = _divisaoSelecionada.value
-        // Divisões 8 e 9 = mata-mata Apertura/Clausura
-        if (div == 8 || div == 9) {
-            val campId = if (div == 8) campeonatoArgAId else campeonatoArgClausuraId
+        // Divisões de mata-mata, que compartilham o campeonatoId da fase anterior:
+        // 8 e 9 = Apertura/Clausura argentinos, 31 = play-off e mata-mata da Champions.
+        if (div == 8 || div == 9 || div == 31) {
+            val campId = when (div) {
+                8    -> campeonatoArgAId
+                9    -> campeonatoArgClausuraId
+                else -> campeonatoChampionsId
+            }
             _partidas.value = emptyList()
             coletarJob?.cancel()
             coletarJob = viewModelScope.launch {
@@ -3691,11 +3699,22 @@ class RodadaViewModel @Inject constructor(
         21 -> campeonatoChampionshipId
         22 -> campeonatoLaLigaId
         23 -> campeonatoSerieAId
+        // 30 = Fase de Liga da Champions, mesmo código usado na tela de Classificação.
+        // Só a Fase de Liga: as partidas dela têm fase = null e rodada de 1 a 8, então
+        // observeRodada e maxRodada funcionam sem adaptação.
+        30 -> campeonatoChampionsId
         else -> campeonatoArgAId
     }
 
     // fases in the current knockout view, ordered by importance
     val ARG_FASES_ORDER = listOf("Oitavas", "Quartas", "Semi", "Final")
+
+    /**
+     * Ordem das fases do mata-mata da divisão selecionada. A Champions começa no
+     * play-off, que antecede as oitavas e não existe no mata-mata argentino.
+     */
+    fun fasesDaDivisao(divisao: Int): List<String> =
+        if (divisao == 31) MotorCampeonato.CHAMPIONS_FASES else ARG_FASES_ORDER
 }
 
 // ═══════════════════════════════════════════════════════════
