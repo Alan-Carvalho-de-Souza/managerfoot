@@ -28,13 +28,14 @@ import br.com.managerfoot.data.database.entities.*
         RankingGeralEntity::class,
         RankingConmebolEntity::class,
         RankingBrasileiroEntity::class,
+        RankingEuropaEntity::class,
         EstadioEntity::class,
         PropostaIAEntity::class,
         PropostaClubeEntity::class,
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 32,
+    version = 33,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -50,6 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun rankingGeralDao(): RankingGeralDao
     abstract fun rankingConmebolDao(): RankingConmebolDao
     abstract fun rankingBrasileiroDao(): RankingBrasileiroDao
+    abstract fun rankingEuropaDao(): RankingEuropaDao
     abstract fun estadioDao(): EstadioDao
     abstract fun propostaIADao(): PropostaIADao
     abstract fun propostaClubeDao(): PropostaClubeDao
@@ -152,6 +154,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // 32 → 33: tabela ranking_europa (Coeficiente de Clubes da UEFA).
+        // Não-destrutiva. A tabela nasce vazia e continua vazia até que Champions,
+        // Europa e Conference League existam no jogo: esse conjunto de regras pontua
+        // exclusivamente competições da UEFA, e nenhuma delas está implementada.
+        private val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS ranking_europa (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timeId INTEGER NOT NULL,
+                        ano INTEGER NOT NULL,
+                        competicao TEXT NOT NULL,
+                        motivo TEXT NOT NULL DEFAULT '',
+                        pontos REAL NOT NULL DEFAULT 0.0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_europa_timeId ON ranking_europa(timeId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ranking_europa_ano ON ranking_europa(ano)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -162,7 +187,8 @@ abstract class AppDatabase : RoomDatabase() {
                     //.createFromAsset("database/seed.db")   // dados iniciais (times, jogadores)
                     .addMigrations(
                         MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-                        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32
+                        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
+                        MIGRATION_32_33
                     )
                     .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()

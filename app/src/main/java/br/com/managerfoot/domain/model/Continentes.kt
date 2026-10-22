@@ -58,4 +58,8 @@ object Continentes {
     private val GRAFIAS_BRASIL = setOf("brasil", "brazil")
 
     fun ehBrasil(pais: String): Boolean = pais.trim().lowercase() in GRAFIAS_BRASIL
+
+    // O conjunto de regras do ranking por colocação da Europa é o Coeficiente de
+    // Clubes da UEFA (ver ranking_europa.md), independente dos outros dois.
+    fun ehEuropa(pais: String): Boolean = dePais(pais) == EUROPA
 }

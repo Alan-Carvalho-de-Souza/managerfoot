@@ -9,6 +9,7 @@ import br.com.managerfoot.data.dao.CopaPartidaDto
 import br.com.managerfoot.data.dao.PartidaDao
 import br.com.managerfoot.data.dao.RankingBrasileiroLinha
 import br.com.managerfoot.data.dao.RankingConmebolLinha
+import br.com.managerfoot.data.dao.RankingEuropaLinha
 import br.com.managerfoot.data.dao.TransferenciaDetalhe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -2924,6 +2925,22 @@ class RankingGeralViewModel @Inject constructor(
         flow {
             val ano = gameDataStore.saveState.first().anoAtual
             emitAll(gameRepository.observarRankingBrasileiro(ano))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // Coeficiente de Clubes da UEFA, usado quando o recorte é a Europa.
+    // Fica vazio enquanto as competições da UEFA não existirem no jogo.
+    val rankingEuropa: StateFlow<List<RankingEuropaLinha>> =
+        flow {
+            val ano = gameDataStore.saveState.first().anoAtual
+            emitAll(gameRepository.observarRankingEuropa(ano))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // Ranking Mundial de Clubes (IFFHS), usado no recorte Mundo. Não vem de tabela:
+    // é derivado das partidas da janela de 12 meses na leitura.
+    val rankingMundial: StateFlow<List<RankingMundialLinha>> =
+        flow {
+            val ano = gameDataStore.saveState.first().anoAtual
+            emitAll(gameRepository.observarRankingMundial(ano))
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
