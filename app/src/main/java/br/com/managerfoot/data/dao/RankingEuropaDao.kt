@@ -26,6 +26,12 @@ data class RankingEuropaLinha(
     val ultimaCampanha: String
 )
 
+/** Coeficiente acumulado de um clube na janela, usado para ordenar os potes. */
+data class CoeficienteClubeUefa(
+    val timeId: Int,
+    val coeficiente: Double
+)
+
 @Dao
 interface RankingEuropaDao {
 
@@ -69,6 +75,24 @@ interface RankingEuropaDao {
         ORDER BY pontosBrutos DESC, nomeTime ASC
     """)
     fun observeRankingBruto(anoAtual: Int, divisoesElite: Set<Int>): Flow<List<RankingEuropaLinha>>
+
+    /**
+     * Coeficiente bruto de cada clube com lançamentos na janela, sem o piso do
+     * país e sem filtrar divisão.
+     *
+     * É o que ordena os potes do sorteio da Champions, e por isso não pode usar
+     * [observeRankingBruto]: aquele corta por divisão de elite, o que deixaria de
+     * fora justamente os clubes do pool (divisões 90/91/92), que existem só para
+     * disputar a Champions. Clubes sem lançamento não aparecem — o repositório
+     * desempata por reputação, que é o único critério disponível na 1ª temporada.
+     */
+    @Query("""
+        SELECT timeId AS timeId, COALESCE(SUM(pontos), 0.0) AS coeficiente
+        FROM ranking_europa
+        WHERE ano <= :anoAtual AND ano > :anoAtual - 5
+        GROUP BY timeId
+    """)
+    suspend fun buscarCoeficientes(anoAtual: Int): List<CoeficienteClubeUefa>
 
     /** Lançamentos de um clube, do mais recente para o mais antigo. */
     @Query("SELECT * FROM ranking_europa WHERE timeId = :timeId ORDER BY ano DESC, id DESC")

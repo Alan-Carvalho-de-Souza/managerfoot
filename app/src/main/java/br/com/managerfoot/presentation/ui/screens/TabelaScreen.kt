@@ -54,6 +54,7 @@ fun TabelaScreen(
     campeonatoChampionshipId: Int = -1,
     campeonatoLaLigaId: Int = -1,
     campeonatoSerieAId: Int = -1,
+    campeonatoChampionsId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -75,7 +76,8 @@ fun TabelaScreen(
         campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
         campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
-        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId
+        campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
+        campeonatoChampionsId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -91,6 +93,7 @@ fun TabelaScreen(
             campChampionshipId = campeonatoChampionshipId,
             campLaLigaId = campeonatoLaLigaId,
             campSerieAId = campeonatoSerieAId,
+            campChampionsId = campeonatoChampionsId,
             timeJogadorId = timeJogadorId
         )
     }
@@ -126,6 +129,11 @@ fun TabelaScreen(
     val opcoesItalia = buildList {
         if (campeonatoSerieAId > 0) add(23 to "Serie A")
     }
+    // Competições continentais, que não pertencem a um país: a Fase de Liga da
+    // Champions é uma tabela única de 36 clubes (ver regras_championsleague.md).
+    val opcoesEuropa = buildList {
+        if (campeonatoChampionsId > 0) add(30 to "Champions League")
+    }
 
     val paises = buildList {
         if (opcoesBrasil.isNotEmpty()) add("Brasil")
@@ -134,6 +142,7 @@ fun TabelaScreen(
         if (opcoesInglaterra.isNotEmpty()) add("Inglaterra")
         if (opcoesEspanha.isNotEmpty()) add("Espanha")
         if (opcoesItalia.isNotEmpty()) add("Italia")
+        if (opcoesEuropa.isNotEmpty()) add("Europa")
     }
 
     // País selecionado: derivado da divisão atual
@@ -144,6 +153,7 @@ fun TabelaScreen(
             in 20..21 -> "Inglaterra"
             22 -> "Espanha"
             23 -> "Italia"
+            30 -> "Europa"
             else -> "Brasil"
         }
     }
@@ -153,6 +163,7 @@ fun TabelaScreen(
         "Inglaterra" -> opcoesInglaterra
         "Espanha" -> opcoesEspanha
         "Italia" -> opcoesItalia
+        "Europa" -> opcoesEuropa
         else -> opcoesBrasil
     }
     val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
@@ -203,6 +214,7 @@ fun TabelaScreen(
                                 "Inglaterra" -> opcoesInglaterra.firstOrNull()?.first ?: 20
                                 "Espanha" -> opcoesEspanha.firstOrNull()?.first ?: 22
                                 "Italia" -> opcoesItalia.firstOrNull()?.first ?: 23
+                                "Europa" -> opcoesEuropa.firstOrNull()?.first ?: 30
                                 else -> opcoesBrasil.firstOrNull()?.first ?: 1
                             }
                             vm.selecionarDivisao(primeiraDivisao)
@@ -412,6 +424,11 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao >= 13 -> RelegationRed
         else -> null
     }
+    30 -> when {                            // Fase de Liga da Champions (1..36)
+        posicao <= 8 -> LibertadoresBlue    // passa direto às oitavas
+        posicao <= 24 -> PlayoffOrange      // play-off de acesso às oitavas
+        else -> null                        // 25º–36º: eliminados
+    }
     20 -> when {                            // Premier League
         posicao <= 4 -> LibertadoresBlue   // Champions League
         posicao <= 6 -> SulAmericanaTeal   // Europa/Conference
@@ -458,6 +475,10 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
             LibertadoresBlue to "G2 Acesso direto",
             PlayoffOrange to "G6 Playoff",
             RelegationRed to "Z2 Rebaixamento"
+        )
+        30 -> listOf(
+            LibertadoresBlue to "G8 Oitavas",
+            PlayoffOrange to "9º–24º Play-off"
         )
         20 -> listOf(
             LibertadoresBlue to "G4 Champions League",
@@ -518,5 +539,6 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Inglaterra" -> "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
     "Espanha" -> "🇪🇸"
     "Italia" -> "🇮🇹"
+    "Europa" -> "🇪🇺"
     else -> ""
 }

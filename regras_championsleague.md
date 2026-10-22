@@ -171,21 +171,53 @@ limites acima antes de começar e devolve a causa quando o conjunto é inviável
 caso real dos 3 países do seed. Tem também `validar()`, que confere um sorteio inteiro
 contra todas as regras — usado nos testes e aproveitável para checar save antigo.
 
+**A lista de acesso** — `ListaDeAcessoChampions.kt`. Distribui as 28 vagas diretas pela
+tabela de países e abre a qualificação para os melhores clubes europeus restantes, com o
+teto de 7 clubes por país que as travas impõem. Casa grafias diferentes do mesmo país
+("Países Baixos" = "Holanda"), para que duas escritas não burlem a trava de compatriotas.
+
+> **Ordem dos potes na 1ª temporada.** O coeficiente da UEFA ordena os potes, mas no
+> primeiro ano ele é zero para todos — e `montarPotes` desempata por NOME. Os potes sairiam
+> em ordem alfabética, os 5 ingleses cairiam no mesmo pote e o sorteio seria recusado por
+> concentração. Por isso o peso do sorteio é `coeficiente × 1000 + reputação`: o
+> coeficiente manda sempre, e a reputação só desempata.
+
+**O formato** — `FormatoCampeonato.FASE_LIGA_E_MATA_MATA`. As partidas da Fase de Liga têm
+`fase = null`, como a fase de grupos dos torneios argentino e uruguaio: é isso que faz a
+classificação de 1 a 36 ser alimentada pelo caminho normal, sem nenhum caso especial.
+
+**A competição** — `GameRepository.criarChampionsDaTemporada`, com
+`TipoCampeonato.CONTINENTAL` e nome "Champions League &lt;ano&gt;" (é o nome que o peso 14 da
+IFFHS reconhece). As 144 partidas são distribuídas em 8 rodadas por coloração de arestas
+(`MotorCampeonato.distribuirRodadasFaseLiga`), com `ordemGlobal` encaixado entre as rodadas
+das ligas nacionais; o mata-mata usa as rodadas 19–28, longe da Fase de Liga.
+
+**Play-off e mata-mata** — 9º–24º no play-off, melhor colocado decidindo em casa; os 8
+primeiros entram nas oitavas contra os vencedores, o 1º contra o vencedor do último par.
+Das oitavas à final o avanço é o do motor de copa ida/volta, com pênaltis no empate.
+
+**Os rankings** — ao encerrar, cada participante tem a campanha registrada no coeficiente
+da UEFA, com a posição na Fase de Liga, vitórias, empates e a fase máxima do mata-mata (o
+play-off não conta para o bônus de avanço, mas as suas partidas pontuam por jogo). O
+ranking mundial da IFFHS deriva das partidas sozinho.
+
+**Hall da Fama** — divisão 30, no recorte "Europa" (31 e 32 ficam para a Europa League e a
+Conference League). **Telas** — a Fase de Liga na tela de Classificação, no recorte Europa,
+com as faixas de oitavas e play-off; o mata-mata na aba "Champions" do chaveamento.
+
 ### Falta
 
 1. **Os clubes do pool** — ~30 clubes das 8 associações que faltam, no modelo de divisão
-   90/91/92. Sem isso nada roda, porque o sorteio recusa 3 países.
-2. **Um formato novo de Fase de Liga.** `FormatoCampeonato` tem `PONTOS_CORRIDOS`,
-   `GRUPOS_E_MATA_MATA` e `MATA_MATA_SIMPLES`. A liga única de 36 com 8 jogos por clube não
-   é nenhum dos três: é uma tabela única em que os clubes têm adversários diferentes.
-3. **Criar a competição** com `TipoCampeonato.CONTINENTAL`, que existe no enum e nunca foi
-   usado, distribuir as vagas pela lista de acesso e persistir as 144 partidas com
-   `ordemGlobal` encaixado entre as rodadas das ligas nacionais.
-4. **Classificação de 1 a 36** numa tabela só, que alimenta o bônus de posição do
-   coeficiente da UEFA (12 pontos para o 1º, caindo 0,25 por posição).
-5. **O play-off e o mata-mata** das oitavas em diante, que dão o bônus de avanço de 1,5 por
-   fase. O `MotorCampeonato` já tem `gerarFaseIdaVolta`, `gerarFaseJogoUnico`,
-   `sortearPares` e `determinarVencedorTie` reaproveitáveis.
-6. **A fiação com os rankings**, que é automática: `registrarCampanhaEuropeia` já existe e
-   o peso 14 da IFFHS já está implementado. Os dois conjuntos dormentes acordam sozinhos.
-7. **A tela** da Fase de Liga e do mata-mata.
+   90/91/92. Enquanto não existirem, `criarChampionsDaTemporada` devolve -1 e a competição
+   simplesmente não é criada: o sorteio recusa 3 países, e é o único bloqueio restante.
+   O pool foi escrito em paralelo e **já confere**: com ele, a 1ª temporada monta 36 clubes
+   de 15 países e nenhum pote passa de 4 clubes do mesmo país (o teto: Espanha 4 no pote 1,
+   Itália 4 no pote 2). O caso degenerado que recusaria o sorteio não acontece — mas ele
+   depende das reputações do seed, então vale reconferir se elas mudarem muito.
+2. **As fases qualificatórias de verdade.** As 8 vagas da qualificação já saem das ligas
+   menores, como manda o enunciado, mas vão direto para as melhores delas — o mata-mata
+   entre mais de 50 clubes não existe. `registrarQualificacaoEuropeia` já está pronto para
+   pontuar quem cair nele.
+3. **Chaveamento fixo das oitavas em diante.** Das quartas à final os confrontos são
+   sorteados a cada fase (`sortearPares`), como nas outras copas do jogo, em vez de seguirem
+   um quadro fechado a partir das oitavas como na Champions de verdade.
