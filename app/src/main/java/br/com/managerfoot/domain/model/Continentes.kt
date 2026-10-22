@@ -31,10 +31,22 @@ object Continentes {
         "venezuela"
     )
 
+    // Cobre as associações da UEFA presentes no pool europeu (divisão 91), que
+    // existe para a Champions League — ver regras_championsleague.md.
     private val PAISES_EUROPA = setOf(
         "espanha", "italia", "itália", "inglaterra",
         "portugal", "franca", "frança", "alemanha", "holanda", "paises baixos", "países baixos",
-        "escocia", "escócia", "belgica", "bélgica", "turquia"
+        "escocia", "escócia", "belgica", "bélgica", "turquia",
+        "tchequia", "tchéquia", "republica tcheca", "república tcheca",
+        "ucrania", "ucrânia", "grecia", "grécia", "austria", "áustria",
+        "suica", "suíça", "dinamarca", "noruega", "suecia", "suécia",
+        "croacia", "croácia", "servia", "sérvia", "polonia", "polônia",
+        "romenia", "romênia", "irlanda", "pais de gales", "país de gales",
+        "russia", "rússia", "hungria", "bulgaria", "bulgária",
+        "eslovaquia", "eslováquia", "eslovenia", "eslovênia",
+        "bosnia", "bósnia", "montenegro", "albania", "albânia",
+        "israel", "georgia", "geórgia", "chipre", "finlandia", "finlândia",
+        "islandia", "islândia"
     )
 
     private val PAISES_AMERICA_DO_NORTE = setOf(
