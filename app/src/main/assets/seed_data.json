@@ -4860,7 +4860,7 @@
       "tatica": "3-4-3",
       "estilo": "OFENSIVO",
       "reputacao": 80,
-      "escudo_res": ""
+      "escudo_res": "escudo_eintrachtfrankfurt"
     },
     {
       "id": 633,
@@ -4877,7 +4877,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 78,
-      "escudo_res": ""
+      "escudo_res": "escudo_vfbstuttgart"
     },
     {
       "id": 634,
@@ -4894,7 +4894,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 77,
-      "escudo_res": ""
+      "escudo_res": "escudo_lille"
     },
     {
       "id": 635,
@@ -4910,8 +4910,8 @@
       "preco_ingresso": 5000,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 76,
-      "escudo_res": ""
+      "reputacao": 82,
+      "escudo_res": "escudo_lyon"
     },
     {
       "id": 636,
@@ -4928,7 +4928,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 77,
-      "escudo_res": ""
+      "escudo_res": "escudo_feyenoord"
     },
     {
       "id": 637,
@@ -4945,7 +4945,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 85,
-      "escudo_res": ""
+      "escudo_res": "escudo_benfica"
     },
     {
       "id": 638,
@@ -4962,7 +4962,7 @@
       "tatica": "3-5-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_unionsaintgilloise"
     },
     {
       "id": 639,
