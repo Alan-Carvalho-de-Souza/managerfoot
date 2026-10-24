@@ -98,7 +98,11 @@ if tecnicos:
     merged["tecnicos"] = tecnicos
 
 with open(BASE, "w", encoding="utf-8") as f:
-    json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
+    # indent=2 e o formato em que o gen_tecnicos.py (ultimo passo do pipeline)
+    # deixa o arquivo. Gravar compacto aqui reescrevia as 127 mil linhas do
+    # seed a cada merge, enterrando a mudanca real num diff do arquivo inteiro.
+    json.dump(merged, f, ensure_ascii=False, indent=2)
+    f.write(chr(10))
 
 size_kb = os.path.getsize(BASE) / 1024
 print(f"\n[OK] {BASE}")

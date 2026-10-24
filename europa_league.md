@@ -3,9 +3,10 @@
 > Companheira de [regras_championsleague.md](regras_championsleague.md): mesmo formato de
 > liga única de 36 clubes, mesma estrutura de classificação, lista de acesso diferente.
 >
-> ⚠️ **Leia o [Pré-requisito](#pré-requisito-faltam-clubes-para-as-duas-competições) antes
-> de implementar.** Com o seed atual, Champions e Europa League **não cabem juntas** sob as
-> travas geográficas. A conta está lá.
+> ✅ **O pré-requisito dos clubes está resolvido.** O pool europeu subiu de 30 para 52
+> clubes e as duas competições cabem na mesma temporada — ver
+> [Pré-requisito](#pré-requisito-os-clubes-para-as-duas-competições), com a conta nova, e
+> `SeedEuropaTest`, que monta as duas a partir do seed real e sorteia as duas.
 
 Quando existir, esta competição pontua nos dois conjuntos de ranking que já estão prontos:
 no [Coeficiente de Clubes da UEFA](ranking_europa.md) — onde o topo da Fase de Liga vale 6
@@ -91,43 +92,87 @@ UEFA com a reputação desempatando, igual ao que a Champions já faz.
 
 ---
 
-## Pré-requisito: faltam clubes para as duas competições
+## Pré-requisito: os clubes para as duas competições
 
-O seed tem **91 clubes europeus elegíveis**: 60 de elite (Inglaterra, Espanha e Itália, 20
-cada) e 31 no pool, espalhados por 20 associações. Parece bastante para dois torneios de
-36 — mas a trava de **no máximo 7 clubes por país** muda a conta.
+> **Resolvido.** O pool europeu foi ampliado de 30 para 52 clubes. O que segue é a conta
+> que motivou a ampliacão, mantida porque ela explica *por que* o pool tem o tamanho que
+> tem — e porque encolher o pool quebra a Europa League sem mudar nada na Champions.
+
+### A conta que não fechava
+
+O seed tinha **90 clubes europeus elegíveis**: 60 de elite (Inglaterra, Espanha e Itália,
+20 cada) e 30 no pool, espalhados por 19 associações. Parece bastante para dois torneios
+de 36 — mas a trava de **no máximo 7 clubes por país** muda a conta.
 
 A Champions consome, pela sua lista de acesso, 14 clubes de elite (5 + 5 + 4) e 22 do pool
-(14 diretos das 8 associações com vaga, mais 8 da qualificação). Sobram:
+(14 diretos das 8 associações com vaga, mais 8 da qualificação). Sobravam:
 
 | Origem | Total | Champions | Sobra |
 |---|---:|---:|---:|
 | Elite (ING + ESP + ITA) | 60 | 14 | 46 |
-| Pool (20 associações) | 31 | 22 | 9 |
-| **Total** | **91** | **36** | **55** |
+| Pool (19 associações) | 30 | 22 | 8 |
+| **Total** | **90** | **36** | **54** |
 
-São 55 clubes para 36 vagas, o que parece confortável. Não é:
+Eram 54 clubes para 36 vagas, o que parecia confortável. Não era:
 
 ```
 máximo de elite na Europa League = 7 por país × 3 países = 21
-sobra de pool disponível                                 =  9
-máximo montável                                          = 30
+sobra de pool disponível                                 =  8
+máximo montável                                          = 29
 necessário                                               = 36
 ```
 
-**Faltam 6 clubes.** E o gargalo não é o número de associações — é que o pool tem só 31
-clubes para 20 associações, cerca de 1,5 cada. A elite não compensa, porque o teto de 7 por
-país a limita a 21.
+E o gargalo não era o número de associações — era que o pool tinha 30 clubes para 19
+associações, cerca de 1,5 cada. A elite não compensava, porque o teto de 7 por país a
+limitava a 21.
 
-### Caminhos
+### O que foi feito
 
-| Caminho | O que implica |
+O caminho escolhido foi o recomendado: **ampliar o pool**, de 30 para **52** clubes, em 20
+associações — 2 a 3 por associação em vez de 1,5. Os 22 clubes novos saem do mesmo
+`scripts/gen_outros.py` dos 30 primeiros, com 20 jogadores cada (2 goleiros) e um técnico
+real. Divisão 91, ids 632–653.
+
+A distribuição não é uniforme, porque a demanda não é: cada país precisa de tantos clubes
+quantas vagas diretas tem **nas duas competições somadas**, mais o que a qualificação puxar.
+
+| Associação | Pool | Champions (diretas) | Europa (diretas) |
+|---|---:|---:|---:|
+| Alemanha | 6 | 4 | 2 |
+| França | 5 | 3 | 2 |
+| Holanda | 3 | 2 | 1 |
+| Escócia, Áustria, Suíça, Grécia, Dinamarca | 3 cada | — | 1 (as três primeiras) |
+| Portugal, Bélgica, Tchéquia, Turquia, Ucrânia, Sérvia | 2 cada | 1 (menos Sérvia) | 1 |
+| Noruega, Croácia, Polônia, Suécia, Romênia | 2 cada | — | — |
+| Liechtenstein | 1 | — | 1 (só pela copa) |
+
+Com isso as duas fases de liga fecham os 36 e passam pelas travas: a Champions sai com 17
+países e no máximo 5 clubes de um, a Europa League com 22 países e no máximo 5.
+
+### As reputações não são decorativas
+
+Dentro de cada país as reputações são **escalonadas de propósito**: o primeiro clube vai à
+Champions, o segundo é o que sobra para a vaga direta da Europa League, o terceiro alimenta
+a qualificação. Subir um clube acima do titular do seu país troca as duas competições de
+lugar — e, pior, pode estourar o limite menos óbvio das travas: **no máximo 4 clubes de um
+mesmo país por pote**. Os potes saem do coeficiente, que na 1ª temporada é a reputação
+sozinha, então uma reputação nova pode empilhar cinco clubes de um país no topo sem mudar
+contagem nenhuma. `SeedEuropaTest` e `SeedChampionsTest` são a rede de segurança disso.
+
+### Liechtenstein e as duas temporadas
+
+Liechtenstein só tem a porta da copa local. Na **1ª temporada** nenhuma copa encerrou, então
+essa porta está fechada e as vagas diretas fecham em **20**, não 21 — o FC Vaduz entra pela
+qualificação e o torneio fecha os 36 de qualquer forma. Da **2ª em diante**, com o campeão da
+copa conhecido, são as 21. Não é defeito; é a exceção do enunciado vista de frente, e os dois
+casos têm teste.
+
+### Caminhos que não foram seguidos
+
+| Caminho | Por que não |
 |---|---|
-| **Ampliar o pool (recomendado)** | Subir o pool de 31 para ~50 clubes, com 2 a 3 por associação. Resolve o gargalo com folga, dá disputa real às qualificatórias das duas competições, e é trabalho já trilhado: o `scripts/gen_outros.py` existe e gera clubes com elenco. |
-| **Segundas divisões europeias** | Habilitar a Championship (divisão 12) e criar segundas divisões para Espanha e Itália. **Não resolve:** o teto de 7 é por país, não por divisão. |
-| **Europa League sem travas** | Manter o seed e abandonar as travas geográficas só nesta competição. Cabe de imediato, mas um clube inglês enfrentaria 8 rivais entre espanhóis e italianos, e o torneio perde o sentido continental. |
-
----
+| **Segundas divisões europeias** | Habilitar a Championship (divisão 12) e criar segundas divisões para Espanha e Itália **não resolve**: o teto de 7 é por país, não por divisão. |
+| **Europa League sem travas** | Cabia de imediato no seed antigo, mas um clube inglês enfrentaria 8 rivais entre espanhóis e italianos, e o torneio perderia o sentido continental. |
 
 ## Estado da implementação
 
@@ -141,6 +186,11 @@ de comportamento. A Europa League joga um dia depois, com cada casa de `ordemGlo
 as duas competições **nunca colidem** no calendário, nem entre si nem com as rodadas das
 ligas nacionais, que usam múltiplos de 10.
 
+**Os clubes** — o pool europeu tem 52 clubes em 20 associações (divisão 91, ids 602–653),
+o suficiente para as duas competições na mesma temporada. `SeedEuropaTest` monta as duas a
+partir do `seed_data.json` real, na ordem em que o jogo as monta — a Champions primeiro, a
+Europa League depois recebendo os 36 já ocupados — e sorteia as duas com várias sementes.
+
 **A lista de acesso** — `ListaDeAcessoEuropa.kt`, com 15 testes. As 21 vagas diretas, as
 duas portas por país (campeão da copa e melhor da liga fora da zona da Champions), a queda
 da vaga da copa para o colocado seguinte, a exceção de Liechtenstein, a exclusão mútua com
@@ -148,7 +198,6 @@ a Champions e a fila de qualificação com o teto por país.
 
 ### Falta
 
-1. **Os clubes** — ver o pré-requisito acima. É o que impede a competição de rodar.
 2. **O repositório**: `determinarParticipantesEuropa`, `criarEuropaLeague`,
    `criarEuropaDaTemporada`, avanço de fases, Hall da Fama e a chamada de
    `registrarCampanhaEuropeia` ao encerrar. A máquina de fases da Champions
@@ -160,8 +209,6 @@ a Champions e a fila de qualificação com o teto por país.
 
 ## O que a implementação vai precisar
 
-1. **Os clubes** — ver o pré-requisito. Sem eles o sorteio recusa, como já recusa o da
-   Champions quando o conjunto é inviável.
 2. **A lista de acesso da Europa League**, no modelo de `ListaDeAcessoChampions.kt`: as 21
    vagas diretas, a queda da vaga da copa para o colocado seguinte, e a fila de qualificação.
 3. **Exclusão mútua com a Champions.** Um clube não disputa as duas, então a Europa League

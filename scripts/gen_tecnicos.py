@@ -218,7 +218,30 @@ OVERRIDES = {
     629: ("Edward Iordanescu",     47, "Romenia"),      # Legia Varsovia
     630: ("Henrik Rydstrom",       49, "Suecia"),       # Malmo FF
     631: ("Elias Charalambous",    45, "Chipre"),       # FCSB
-}
+
+    # ── Ampliacao do pool para a Europa League (ver europa_league.md) ─
+    632: ("Dino Toppmoller",      45, "Alemanha"),      # Eintracht Frankfurt
+    633: ("Sebastian Hoeness",    43, "Alemanha"),      # VfB Stuttgart
+    634: ("Bruno Genesio",        59, "Franca"),        # Lille
+    635: ("Paulo Fonseca",        52, "Portugal"),      # Olympique Lyonnais
+    636: ("Robin van Persie",     42, "Holanda"),       # Feyenoord
+    637: ("Jose Mourinho",        62, "Portugal"),      # Benfica
+    638: ("David Hubert",         37, "Belgica"),       # Union Saint-Gilloise
+    639: ("Brian Priske",         48, "Dinamarca"),     # Sparta Praga
+    640: ("Domenico Tedesco",     40, "Italia"),        # Fenerbahce
+    641: ("Oleksandr Shovkovskyi",50, "Ucrania"),       # Dinamo Kiev
+    642: ("Derek McInnes",        54, "Escocia"),       # Hearts
+    643: ("Dietmar Kuhbauer",     54, "Austria"),       # LASK
+    644: ("Jocelyn Gourvennec",   53, "Franca"),        # Servette
+    645: ("Srdjan Blagojevic",    49, "Servia"),        # Partizan
+    646: ("Marc Schneider",       45, "Suica"),         # FC Vaduz
+    647: ("Marko Nikolic",        46, "Servia"),        # AEK Atenas
+    648: ("Frederik Birk",        41, "Dinamarca"),     # Brondby
+    649: ("Erling Moe",           50, "Noruega"),       # Molde
+    650: ("Gonzalo Garcia",       44, "Espanha"),       # Hajduk Split
+    651: ("Niels Frederiksen",    54, "Dinamarca"),     # Lech Poznan
+    652: ("Jani Honkavaara",      49, "Finlandia"),     # Djurgarden
+    653: ("Andrea Mandorlini",    65, "Italia"),        # CFR Cluj}
 
 
 def gen_nome(pais: str) -> tuple[str, str]:
