@@ -1436,7 +1436,9 @@ private fun nomeCampeonatoParaData(
 
 /**
  * Constrói o label de competição mostrado no card de "Próxima partida".
- * Cobre Brasileirão (Série A-D), Copa do Brasil, Supercopa, Argentina (Apertura/Clausura/Segunda Div).
+ * Cobre Brasileirão (Série A-D), Copa do Brasil, Supercopa, Argentina
+ * (Apertura/Clausura/Segunda Div) e as continentais (Champions, Europa League
+ * e Libertadores).
  */
 private fun competitionLabelFor(
     saveState: br.com.managerfoot.data.datasource.SaveState?,
@@ -1455,6 +1457,10 @@ private fun competitionLabelFor(
             "Champions League — ${proximaPartida.fase ?: "Fase de Liga"}"
         snap.europaLeagueId > 0 && proximaPartida.campeonatoId == snap.europaLeagueId ->
             "Europa League — ${proximaPartida.fase ?: "Fase de Liga"}"
+        // Libertadores: a fase de grupos tem fase = null (e o que alimenta as 8
+        // tabelas de 4); a Pre-Libertadores e o mata-mata trazem o nome da fase.
+        snap.libertadoresId > 0 && proximaPartida.campeonatoId == snap.libertadoresId ->
+            "Libertadores — ${proximaPartida.fase ?: "Fase de Grupos"}"
         else -> when (proximaPartida.campeonatoId) {
             snap.campeonatoAId -> "Série A"
             snap.campeonatoBId -> "Série B"

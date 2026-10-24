@@ -6284,6 +6284,23 @@ class GameRepository @Inject constructor(
         verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId)
     }
 
+    /**
+     * O mesmo para a Libertadores. Sem isto a disputa interativa de pênaltis dela
+     * caía no ramo genérico de copa, que persiste os pênaltis na partida certa mas
+     * manda avançar a Copa do Brasil — e a Libertadores nunca coroava o campeão.
+     */
+    suspend fun persistirResultadoPenaltisJogadorLibertadores(
+        resultado: ResultadoPenaltis,
+        libertadoresId: Int,
+        anoAtual: Int,
+        voltaPartidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseLibertadores(libertadoresId, anoAtual, timeJogadorId, temporadaId)
+    }
+
     /** O mesmo para a Europa League, que tem a mesma máquina de fases. */
     suspend fun persistirResultadoPenaltisJogadorEuropa(
         resultado: ResultadoPenaltis,

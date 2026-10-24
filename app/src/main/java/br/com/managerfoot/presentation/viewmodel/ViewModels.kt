@@ -706,7 +706,7 @@ class DashboardViewModel @Inject constructor(
         // durante a simulação para evitar exibir o resultado antes da animação finalizar
         val copaIdInicial = save.copaId
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.championsId, save.europaLeagueId, save.campeonatoAmistososId).filter { it > 0 }
+            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
         _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
@@ -1238,7 +1238,7 @@ class DashboardViewModel @Inject constructor(
                         save.timeIdJogador,
                         listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
                             save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId,
-                            save.championsId, save.europaLeagueId, save.campeonatoAmistososId).filter { it > 0 }
+                            save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
                     )
                 }
             } catch (e: Exception) {
@@ -1254,7 +1254,7 @@ class DashboardViewModel @Inject constructor(
             _ultimosResultados.value = gameRepository.buscarUltimosResultados(
                 save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
                     save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId,
-                    save.championsId, save.europaLeagueId, save.campeonatoAmistososId).filter { it > 0 }
+                    save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
             )
             _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(save.campeonatoId, save.timeIdJogador)
 
@@ -1321,6 +1321,7 @@ class DashboardViewModel @Inject constructor(
         val copaItaId = if (save.copaItalianaId > 0 && _contextoSimulacao?.campeonatoId == save.copaItalianaId) save.copaItalianaId else -1
         val championsId = if (save.championsId > 0 && _contextoSimulacao?.campeonatoId == save.championsId) save.championsId else -1
         val europaLeagueId = if (save.europaLeagueId > 0 && _contextoSimulacao?.campeonatoId == save.europaLeagueId) save.europaLeagueId else -1
+        val libertadoresId = if (save.libertadoresId > 0 && _contextoSimulacao?.campeonatoId == save.libertadoresId) save.libertadoresId else -1
         try {
             when {
                 _penaltisParaSupercopa -> {
@@ -1389,6 +1390,16 @@ class DashboardViewModel @Inject constructor(
                     gameRepository.persistirResultadoPenaltisJogadorEuropa(
                         resultado      = resultado,
                         europaLeagueId = europaLeagueId,
+                        anoAtual       = save.anoAtual,
+                        voltaPartidaId = resultadoPartida.partidaId,
+                        timeJogadorId  = save.timeIdJogador,
+                        temporadaId    = save.temporadaId
+                    )
+                }
+                libertadoresId > 0 -> {
+                    gameRepository.persistirResultadoPenaltisJogadorLibertadores(
+                        resultado      = resultado,
+                        libertadoresId = libertadoresId,
                         anoAtual       = save.anoAtual,
                         voltaPartidaId = resultadoPartida.partidaId,
                         timeJogadorId  = save.timeIdJogador,
