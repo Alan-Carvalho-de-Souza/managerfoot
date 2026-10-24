@@ -51,6 +51,7 @@ fun RodadaScreen(
     campeonatoLaLigaId: Int = -1,
     campeonatoSerieAId: Int = -1,
     campeonatoChampionsId: Int = -1,
+    campeonatoEuropaId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -61,13 +62,14 @@ fun RodadaScreen(
     val maxRodada          by vm.maxRodada.collectAsState()
 
     val esMataMataDivisao =
-        divisaoSelecionada == 8 || divisaoSelecionada == 9 || divisaoSelecionada == 31
+        divisaoSelecionada == 8 || divisaoSelecionada == 9 ||
+            divisaoSelecionada == 31 || divisaoSelecionada == 33
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId
+        campeonatoChampionsId, campeonatoEuropaId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
@@ -78,7 +80,8 @@ fun RodadaScreen(
             campChampionshipId = campeonatoChampionshipId,
             campLaLigaId = campeonatoLaLigaId,
             campSerieAId = campeonatoSerieAId,
-            campChampionsId = campeonatoChampionsId
+            campChampionsId = campeonatoChampionsId,
+            campEuropaId = campeonatoEuropaId
         )
     }
 
@@ -134,6 +137,10 @@ fun RodadaScreen(
             add(30 to "Champions — Fase de Liga")
             add(31 to "Champions — Mata-Mata")
         }
+        if (campeonatoEuropaId > 0) {
+            add(32 to "Europa League — Fase de Liga")
+            add(33 to "Europa League — Mata-Mata")
+        }
     }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
@@ -152,7 +159,7 @@ fun RodadaScreen(
                 divisaoSelecionada in 20..21  -> "Inglaterra"
                 divisaoSelecionada == 22      -> "Espanha"
                 divisaoSelecionada == 23      -> "Italia"
-                divisaoSelecionada in 30..31  -> "Europa"
+                divisaoSelecionada in 30..33  -> "Europa"
                 else -> "Brasil"
             }
         )
@@ -164,7 +171,7 @@ fun RodadaScreen(
             divisaoSelecionada in 20..21  -> "Inglaterra"
             divisaoSelecionada == 22      -> "Espanha"
             divisaoSelecionada == 23      -> "Italia"
-            divisaoSelecionada in 30..31  -> "Europa"
+            divisaoSelecionada in 30..33  -> "Europa"
             else -> "Brasil"
         }
     }

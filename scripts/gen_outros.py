@@ -47,7 +47,7 @@ TIMES = [
     # Franca — 3 vagas diretas
     (606, "Paris Saint-Germain", "Paris", "IDF", 91, "Franca", 10, 130_000_000_00,
      "Parc des Princes", 47929, 8500, "4-3-3", "OFENSIVO", 93),
-    (607, "Olympique de Marselha", "Marselha", "PAC", 91, "Franca", 8, 50_000_000_00,
+    (607, "Olympique de Marseille", "Marselha", "PAC", 91, "Franca", 8, 50_000_000_00,
      "Stade Velodrome", 67394, 6500, "4-2-3-1", "OFENSIVO", 81),
     (608, "AS Monaco", "Monaco", "MON", 91, "Franca", 8, 48_000_000_00,
      "Stade Louis II", 18523, 6500, "4-2-3-1", "EQUILIBRADO", 80),
@@ -56,7 +56,7 @@ TIMES = [
     (609, "PSV Eindhoven", "Eindhoven", "NBR", 91, "Holanda", 8, 42_000_000_00,
      "Philips Stadion", 35000, 6000, "4-3-3", "OFENSIVO", 79),
     (610, "Ajax", "Amsterda", "NHL", 91, "Holanda", 8, 40_000_000_00,
-     "Johan Cruijff Arena", 54990, 6000, "4-3-3", "OFENSIVO", 78),
+     "Johan Cruijff Arena", 54990, 6000, "4-3-3", "OFENSIVO", 81),
 
     # Belgica, Tchequia, Turquia, Portugal, Ucrania — 1 vaga direta cada
     (611, "Club Brugge", "Bruges", "WVL", 91, "Belgica", 7, 30_000_000_00,
@@ -103,7 +103,125 @@ TIMES = [
      "Eleda Stadion", 22500, 3500, "4-4-2", "EQUILIBRADO", 67),
     (631, "FCSB", "Bucareste", "BUC", 91, "Romenia", 6, 11_000_000_00,
      "Arena Nationala", 55634, 3200, "4-2-3-1", "EQUILIBRADO", 66),
+
+    # ── Ampliacao do pool para a UEFA Europa League (ver europa_league.md) ────
+    # A Champions sozinha consome 22 clubes de pool; com 30 no total, a Europa
+    # League nao fechava os seus 36 sob o teto de 7 clubes por pais. Estes 22
+    # levam o pool a 52 e dao 2 a 3 clubes por associacao.
+    #
+    # As reputacoes sao deliberadamente escalonadas DENTRO de cada pais: o
+    # primeiro clube vai a Champions, o segundo e o que sobra para a vaga direta
+    # da Europa League, e o terceiro alimenta a qualificacao. Subir um deles
+    # acima do titular do pais troca as duas competicoes de lugar.
+
+    # Alemanha — 6 no total: 4 vagas na Champions + 2 na Europa League
+    (632, "Eintracht Frankfurt", "Frankfurt", "HES", 91, "Alemanha", 8, 38_000_000_00,
+     "Deutsche Bank Park", 58000, 6000, "3-4-3", "OFENSIVO", 80),
+    (633, "VfB Stuttgart", "Stuttgart", "BWB", 91, "Alemanha", 8, 32_000_000_00,
+     "MHPArena", 60449, 5500, "4-2-3-1", "EQUILIBRADO", 78),
+
+    # Franca — 5 no total: 3 na Champions + 2 na Europa League
+    (634, "Lille", "Lille", "HDF", 91, "Franca", 7, 28_000_000_00,
+     "Stade Pierre-Mauroy", 50186, 5000, "4-2-3-1", "EQUILIBRADO", 77),
+    (635, "Olympique Lyonnais", "Lyon", "ARA", 91, "Franca", 7, 26_000_000_00,
+     "Groupama Stadium", 59186, 5000, "4-3-3", "OFENSIVO", 76),
+
+    # Holanda — 3 no total: 2 na Champions + 1 na Europa League
+    (636, "Feyenoord", "Roterda", "ZHL", 91, "Holanda", 7, 24_000_000_00,
+     "De Kuip", 47500, 5000, "4-3-3", "OFENSIVO", 77),
+
+    # Portugal — 2 no total. Benfica entra acima do Sporting: a vaga da
+    # Champions passa a ser dele e o Sporting assume a da Europa League.
+    (637, "Benfica", "Lisboa", "LIS", 91, "Portugal", 9, 58_000_000_00,
+     "Estadio da Luz", 64642, 6000, "4-2-3-1", "OFENSIVO", 85),
+
+    # Belgica, Tchequia, Turquia, Ucrania — 2 no total cada
+    (638, "Union Saint-Gilloise", "Bruxelas", "BRU", 91, "Belgica", 7, 14_000_000_00,
+     "Stade Joseph Marien", 9400, 4000, "3-5-2", "EQUILIBRADO", 73),
+    (639, "Sparta Praga", "Praga", "PRG", 91, "Tchequia", 7, 15_000_000_00,
+     "epet Arena", 18887, 4000, "4-3-3", "EQUILIBRADO", 71),
+    (640, "Fenerbahce", "Istambul", "IST", 91, "Turquia", 8, 46_000_000_00,
+     "Sukru Saracoglu", 50509, 6000, "4-2-3-1", "OFENSIVO", 81),
+    (641, "Dinamo Kiev", "Kiev", "KIE", 91, "Ucrania", 7, 14_000_000_00,
+     "Estadio Olimpico", 70050, 3800, "4-3-3", "EQUILIBRADO", 71),
+
+    # Escocia, Austria, Suica — 3 no total cada: a Champions leva os melhores
+    # pela qualificacao, entao o terceiro e quem sobra para a Europa League.
+    (642, "Hearts", "Edimburgo", "EDI", 91, "Escocia", 6, 10_000_000_00,
+     "Tynecastle Park", 19852, 3200, "4-2-3-1", "EQUILIBRADO", 65),
+    (643, "LASK", "Linz", "UAU", 91, "Austria", 6, 11_000_000_00,
+     "Raiffeisen Arena", 19080, 3200, "4-2-3-1", "EQUILIBRADO", 66),
+    (644, "Servette", "Genebra", "GEN", 91, "Suica", 5, 9_000_000_00,
+     "Stade de Geneve", 30084, 3000, "4-4-2", "EQUILIBRADO", 64),
+
+    # Servia — 2 no total: Estrela Vermelha vai a qualificacao da Champions e o
+    # Partizan assume a vaga direta da Europa League.
+    (645, "Partizan", "Belgrado", "BEO", 91, "Servia", 6, 12_000_000_00,
+     "Estadio Partizan", 29882, 3500, "4-3-3", "OFENSIVO", 69),
+
+    # Liechtenstein — a excecao da Europa League. O pais nao tem liga propria
+    # (seus clubes jogam no campeonato suico), so a copa local, e por isso a
+    # vaga e dele mesmo sem reputacao de elite. Sem este clube a vaga fica vaga.
+    (646, "FC Vaduz", "Vaduz", "VAD", 91, "Liechtenstein", 5, 6_000_000_00,
+     "Rheinpark Stadion", 7584, 2600, "4-4-2", "DEFENSIVO", 58),
+
+    # Associacoes sem vaga direta nas duas competicoes — alimentam as
+    # qualificatorias, que precisam de mais candidatos que vagas para ter disputa
+    (647, "AEK Atenas", "Atenas", "ATT", 91, "Grecia", 7, 18_000_000_00,
+     "Agia Sophia Stadium", 32500, 4200, "4-2-3-1", "EQUILIBRADO", 72),
+    (648, "Brondby", "Brondby", "HOV", 91, "Dinamarca", 6, 10_000_000_00,
+     "Brondby Stadion", 28000, 3200, "4-3-3", "EQUILIBRADO", 66),
+    (649, "Molde", "Molde", "MOR", 91, "Noruega", 6, 11_000_000_00,
+     "Aker Stadion", 11249, 3200, "4-3-3", "OFENSIVO", 67),
+    (650, "Hajduk Split", "Split", "SPU", 91, "Croacia", 6, 11_000_000_00,
+     "Poljud", 33987, 3200, "4-2-3-1", "EQUILIBRADO", 67),
+    (651, "Lech Poznan", "Poznan", "WIE", 91, "Polonia", 6, 10_000_000_00,
+     "Enea Stadion", 42837, 3200, "4-2-3-1", "EQUILIBRADO", 66),
+    (652, "Djurgarden", "Estocolmo", "STO", 91, "Suecia", 6, 9_500_000_00,
+     "Tele2 Arena", 30000, 3000, "4-3-3", "EQUILIBRADO", 65),
+    (653, "CFR Cluj", "Cluj", "CLU", 91, "Romenia", 5, 8_500_000_00,
+     "Dr. Constantin Radulescu", 23500, 3000, "4-2-3-1", "DEFENSIVO", 64),
 ]
+
+# ─────────────────── Escudos (drawable) ───────────────────────────────────────
+# O gerador escrevia escudo_res="" e os escudos eram preenchidos a mao no
+# seed_data.json depois — de modo que rodar o pipeline de novo os apagava todos.
+# Ficam aqui para a geracao ser idempotente. Clube sem PNG em res/drawable fica
+# com "" e o app cai no escudo generico; e so acrescentar o nome do recurso
+# quando a imagem existir.
+ESCUDOS = {
+    601: "escudo_intermiami",
+    602: "escudo_bayernmunique",
+    603: "escudo_bayerleverkusen",
+    604: "escudo_borussiadortmund",
+    605: "escudo_rbleipzig",
+    606: "escudo_psg",
+    607: "escudo_olympiquemarseille",
+    608: "escudo_monaco",
+    609: "escudo_psv",
+    610: "escudo_ajax",
+    611: "escudo_clubbrugge",
+    612: "escudo_slaviapraga",
+    613: "escudo_galatasaray",
+    614: "escudo_sportingcp",
+    615: "escudo_shakhtar",
+    616: "escudo_celtic",
+    617: "escudo_rangers",
+    618: "escudo_olympiacos",
+    619: "escudo_paok",
+    620: "escudo_rbsalzburg",
+    621: "escudo_sturmgraz",
+    622: "escudo_youngboys",
+    623: "escudo_basel",
+    624: "escudo_copenhagen",
+    625: "escudo_midtjylland",
+    626: "escudo_bodoglimt",
+    627: "escudo_dinamozagreb",
+    628: "escudo_estrelavermelha",
+    629: "escudo_legiawarszawa",
+    630: "escudo_malmo",
+    631: "escudo_fcsb",
+}
 
 # ─────────────────── Derivação dos 7 atributos a partir do overall ────────────
 STAT_KEYS = ["forca", "tecnica", "passe", "velocidade", "finalizacao", "defesa", "fisico"]
@@ -881,11 +999,590 @@ ROSTERS = {
     ("Daniel Birligea",      "CENTROAVANTE",     25, "Romenia",       72),
     ("Alexandru Stoian",     "CENTROAVANTE",     19, "Romenia",       67),
 ],
+
+# ══════════ Ampliacao do pool para a Europa League (ver europa_league.md) ═════
+# Mesmo tamanho de elenco dos 30 primeiros: 20 jogadores, 2 deles goleiros.
+
+# ───────────────────────── Alemanha (Europa League) ──────────────────────────
+632: [  # Eintracht Frankfurt
+    ("Kaua Santos",           "GOLEIRO",          24, "Brasil",         76),
+    ("Michael Zetterer",      "GOLEIRO",          30, "Alemanha",       74),
+    ("Robin Koch",            "ZAGUEIRO",         29, "Alemanha",       80),
+    ("Arthur Theate",         "ZAGUEIRO",         25, "Belgica",        77),
+    ("Rasmus Kristensen",     "ZAGUEIRO",         28, "Dinamarca",      75),
+    ("Nnamdi Collins",        "LATERAL_DIREITO",  22, "Alemanha",       73),
+    ("Nathaniel Brown",       "LATERAL_ESQUERDO", 22, "Alemanha",       73),
+    ("Hugo Larsson",          "VOLANTE",          21, "Suecia",         79),
+    ("Ellyes Skhiri",         "VOLANTE",          30, "Tunisia",        77),
+    ("Oscar Hojlund",         "VOLANTE",          20, "Dinamarca",      70),
+    ("Mario Gotze",           "MEIA_CENTRAL",     33, "Alemanha",       76),
+    ("Can Uzun",              "MEIA_CENTRAL",     20, "Turquia",        76),
+    ("Fares Chaibi",          "MEIA_ATACANTE",    23, "Argelia",        74),
+    ("Ansgar Knauff",         "PONTA_DIREITA",    23, "Alemanha",       76),
+    ("Jean-Matteo Bahoya",    "PONTA_DIREITA",    20, "Franca",         74),
+    ("Ritsu Doan",            "PONTA_ESQUERDA",   27, "Japao",          79),
+    ("Elye Wahi",             "PONTA_ESQUERDA",   23, "Franca",         75),
+    ("Jonathan Burkardt",     "CENTROAVANTE",     25, "Alemanha",       79),
+    ("Michy Batshuayi",       "CENTROAVANTE",     32, "Belgica",        72),
+    ("Igor Matanovic",        "SEGUNDA_ATACANTE", 22, "Croacia",        72),
+],
+
+633: [  # VfB Stuttgart
+    ("Alexander Nubel",       "GOLEIRO",          29, "Alemanha",       80),
+    ("Fabian Bredlow",        "GOLEIRO",          30, "Alemanha",       72),
+    ("Jeff Chabot",           "ZAGUEIRO",         27, "Alemanha",       76),
+    ("Ramon Hendriks",        "ZAGUEIRO",         24, "Holanda",        73),
+    ("Finn Jeltsch",          "ZAGUEIRO",         19, "Alemanha",       71),
+    ("Josha Vagnoman",        "LATERAL_DIREITO",  25, "Alemanha",       73),
+    ("Maximilian Mittelstadt","LATERAL_ESQUERDO", 29, "Alemanha",       78),
+    ("Angelo Stiller",        "VOLANTE",          24, "Alemanha",       80),
+    ("Atakan Karazor",        "VOLANTE",          29, "Turquia",        75),
+    ("Yannik Keitel",         "VOLANTE",          25, "Alemanha",       71),
+    ("Chema Andres",          "MEIA_CENTRAL",     21, "Espanha",        72),
+    ("Bilal El Khannouss",    "MEIA_CENTRAL",     21, "Marrocos",       76),
+    ("Enzo Millot",           "MEIA_ATACANTE",    23, "Franca",         77),
+    ("Chris Fuhrich",         "PONTA_DIREITA",    28, "Alemanha",       76),
+    ("Jamie Leweling",        "PONTA_DIREITA",    24, "Alemanha",       75),
+    ("El Bilal Toure",        "PONTA_ESQUERDA",   24, "Mali",           74),
+    ("Lazar Jovanovic",       "PONTA_ESQUERDA",   21, "Servia",         70),
+    ("Nick Woltemade",        "CENTROAVANTE",     24, "Alemanha",       78),
+    ("Deniz Undav",           "CENTROAVANTE",     29, "Alemanha",       78),
+    ("Ermedin Demirovic",     "SEGUNDA_ATACANTE", 27, "Bosnia",         76),
+],
+
+# ───────────────────────── Franca (Europa League) ────────────────────────────
+634: [  # Lille
+    ("Berke Ozer",            "GOLEIRO",          25, "Turquia",        76),
+    ("Arnaud Bodart",         "GOLEIRO",          27, "Belgica",        73),
+    ("Alexsandro",            "ZAGUEIRO",         26, "Brasil",         78),
+    ("Aissa Mandi",           "ZAGUEIRO",         33, "Argelia",        75),
+    ("Nathan Ngoy",           "ZAGUEIRO",         22, "Belgica",        73),
+    ("Thomas Meunier",        "LATERAL_DIREITO",  34, "Belgica",        74),
+    ("Romain Perraud",        "LATERAL_ESQUERDO", 28, "Franca",         74),
+    ("Benjamin Andre",        "VOLANTE",          35, "Franca",         76),
+    ("Ngalayel Mukau",        "VOLANTE",          21, "Congo",          74),
+    ("Ayyoub Bouaddi",        "VOLANTE",          18, "Franca",         74),
+    ("Nabil Bentaleb",        "MEIA_CENTRAL",     31, "Argelia",        75),
+    ("Felix Correia",         "MEIA_CENTRAL",     24, "Portugal",       73),
+    ("Matias Fernandez-Pardo","MEIA_ATACANTE",    20, "Belgica",        74),
+    ("Osame Sahraoui",        "PONTA_DIREITA",    24, "Noruega",        76),
+    ("Ethan Mbappe",          "PONTA_DIREITA",    18, "Franca",         71),
+    ("Tiago Santos",          "PONTA_ESQUERDA",   23, "Portugal",       74),
+    ("Marius Broholm",        "PONTA_ESQUERDA",   22, "Noruega",        70),
+    ("Olivier Giroud",        "CENTROAVANTE",     39, "Franca",         74),
+    ("Hamza Igamane",         "CENTROAVANTE",     23, "Marrocos",       74),
+    ("Mohamed Bayo",          "SEGUNDA_ATACANTE", 27, "Guine",          73),
+],
+
+635: [  # Olympique Lyonnais
+    ("Dominik Greif",         "GOLEIRO",          28, "Eslovaquia",     75),
+    ("Remy Descamps",         "GOLEIRO",          29, "Franca",         73),
+    ("Moussa Niakhate",       "ZAGUEIRO",         29, "Senegal",        77),
+    ("Clinton Mata",          "ZAGUEIRO",         33, "Angola",         76),
+    ("Ruben Kluivert",        "ZAGUEIRO",         24, "Holanda",        73),
+    ("Ainsley Maitland-Niles","LATERAL_DIREITO",  28, "Inglaterra",     74),
+    ("Nicolas Tagliafico",    "LATERAL_ESQUERDO", 33, "Argentina",      76),
+    ("Corentin Tolisso",      "VOLANTE",          31, "Franca",         77),
+    ("Pavel Sulc",            "VOLANTE",          25, "Tchequia",       75),
+    ("Tanner Tessmann",       "VOLANTE",          24, "Estados Unidos", 74),
+    ("Tyler Morton",          "MEIA_CENTRAL",     23, "Inglaterra",     74),
+    ("Khalis Merah",          "MEIA_CENTRAL",     19, "Franca",         70),
+    ("Rachid Ghezzal",        "MEIA_ATACANTE",    33, "Argelia",        72),
+    ("Malick Fofana",         "PONTA_DIREITA",    20, "Belgica",        78),
+    ("Adam Karabec",          "PONTA_DIREITA",    22, "Tchequia",       73),
+    ("Abner",                 "PONTA_ESQUERDA",   25, "Brasil",         74),
+    ("Afonso Moreira",        "PONTA_ESQUERDA",   20, "Portugal",       72),
+    ("Georges Mikautadze",    "CENTROAVANTE",     25, "Georgia",        78),
+    ("Martin Satriano",       "CENTROAVANTE",     24, "Uruguai",        74),
+    ("Enzo Molebe",           "SEGUNDA_ATACANTE", 18, "Franca",         69),
+],
+
+# ───────────────────────── Holanda (Europa League) ───────────────────────────
+636: [  # Feyenoord
+    ("Timon Wellenreuther",   "GOLEIRO",          30, "Alemanha",       76),
+    ("Mio Backhaus",          "GOLEIRO",          21, "Alemanha",       72),
+    ("Tsuyoshi Watanabe",     "ZAGUEIRO",         29, "Japao",          76),
+    ("Gernot Trauner",        "ZAGUEIRO",         33, "Austria",        76),
+    ("Thomas Beelen",         "ZAGUEIRO",         21, "Holanda",        74),
+    ("Givairo Read",          "LATERAL_DIREITO",  19, "Holanda",        75),
+    ("Gijs Smal",             "LATERAL_ESQUERDO", 28, "Holanda",        74),
+    ("Quinten Timber",        "VOLANTE",          24, "Holanda",        79),
+    ("In-beom Hwang",         "VOLANTE",          29, "Coreia do Sul",  76),
+    ("Quilindschy Hartman",   "VOLANTE",          24, "Holanda",        74),
+    ("Jakub Moder",           "MEIA_CENTRAL",     26, "Polonia",        75),
+    ("Luciano Valente",       "MEIA_CENTRAL",     22, "Holanda",        74),
+    ("Antoni Milambo",        "MEIA_ATACANTE",    20, "Holanda",        76),
+    ("Igor Paixao",           "PONTA_DIREITA",    25, "Brasil",         79),
+    ("Anis Hadj Moussa",      "PONTA_DIREITA",    23, "Argelia",        75),
+    ("Goncalo Borges",        "PONTA_ESQUERDA",   24, "Portugal",       73),
+    ("Oussama Targhalline",   "PONTA_ESQUERDA",   23, "Marrocos",       72),
+    ("Ayase Ueda",            "CENTROAVANTE",     27, "Japao",          78),
+    ("Ibrahim Osman",         "CENTROAVANTE",     21, "Gana",           73),
+    ("Casper Tengstedt",      "SEGUNDA_ATACANTE", 25, "Dinamarca",      74),
+],
+
+# ───────────────────────── Portugal (Europa League) ──────────────────────────
+637: [  # Benfica
+    ("Anatoliy Trubin",       "GOLEIRO",          24, "Ucrania",        84),
+    ("Samuel Soares",         "GOLEIRO",          23, "Portugal",       74),
+    ("Nicolas Otamendi",      "ZAGUEIRO",         37, "Argentina",      82),
+    ("Antonio Silva",         "ZAGUEIRO",         22, "Portugal",       81),
+    ("Tomas Araujo",          "ZAGUEIRO",         23, "Portugal",       79),
+    ("Alexander Bah",         "LATERAL_DIREITO",  28, "Dinamarca",      78),
+    ("Alvaro Carreras",       "LATERAL_ESQUERDO", 22, "Espanha",        81),
+    ("Florentino Luis",       "VOLANTE",          26, "Portugal",       82),
+    ("Leandro Barreiro",      "VOLANTE",          25, "Luxemburgo",     77),
+    ("Enzo Barrenechea",      "VOLANTE",          24, "Argentina",      77),
+    ("Orkun Kokcu",           "MEIA_CENTRAL",     25, "Turquia",        81),
+    ("Fredrik Aursnes",       "MEIA_CENTRAL",     30, "Noruega",        80),
+    ("Dodi Lukebakio",        "MEIA_ATACANTE",    28, "Belgica",        79),
+    ("Kerem Akturkoglu",      "PONTA_DIREITA",    27, "Turquia",        80),
+    ("Andreas Schjelderup",   "PONTA_DIREITA",    21, "Noruega",        77),
+    ("Gianluca Prestianni",   "PONTA_ESQUERDA",   19, "Argentina",      76),
+    ("Franjo Ivanovic",       "PONTA_ESQUERDA",   22, "Croacia",        76),
+    ("Vangelis Pavlidis",     "CENTROAVANTE",     27, "Grecia",         81),
+    ("Henrique Araujo",       "CENTROAVANTE",     23, "Portugal",       73),
+    ("Zeki Amdouni",          "SEGUNDA_ATACANTE", 25, "Suica",          77),
+],
+
+# ───────────────────────── Belgica (Europa League) ───────────────────────────
+638: [  # Union Saint-Gilloise
+    ("Kjell Scherpen",        "GOLEIRO",          25, "Holanda",        74),
+    ("Vic Chambaere",         "GOLEIRO",          22, "Belgica",        68),
+    ("Christian Burgess",     "ZAGUEIRO",         34, "Inglaterra",     73),
+    ("Ross Sykes",            "ZAGUEIRO",         26, "Inglaterra",     72),
+    ("Fedde Leysen",          "ZAGUEIRO",         20, "Belgica",        71),
+    ("Kevin Mac Allister",    "LATERAL_DIREITO",  27, "Argentina",      74),
+    ("Guilherme Smith",       "LATERAL_ESQUERDO", 22, "Brasil",         69),
+    ("Charles Vanhoutte",     "VOLANTE",          27, "Belgica",        74),
+    ("Adem Zorgane",          "VOLANTE",          25, "Argelia",        73),
+    ("Mathias Rasmussen",     "VOLANTE",          28, "Noruega",        71),
+    ("Cameron Puertas",       "MEIA_CENTRAL",     27, "Suica",          76),
+    ("Alessio Castro-Montes", "MEIA_CENTRAL",     28, "Belgica",        71),
+    ("Noah Sadiki",           "MEIA_ATACANTE",    20, "Congo",          74),
+    ("Kevin Rodriguez",       "PONTA_DIREITA",    25, "Equador",        72),
+    ("Anan Khalaili",         "PONTA_DIREITA",    23, "Israel",         71),
+    ("Anouar Ait El Hadj",    "PONTA_ESQUERDA",   23, "Belgica",        73),
+    ("Dennis Eckert Ayensa",  "PONTA_ESQUERDA",   28, "Espanha",        70),
+    ("Promise David",         "CENTROAVANTE",     24, "Canada",         76),
+    ("Raul Florucz",          "CENTROAVANTE",     24, "Austria",        74),
+    ("Mohammed Fuseini",      "SEGUNDA_ATACANTE", 22, "Gana",           70),
+],
+
+# ───────────────────────── Tchequia (Europa League) ──────────────────────────
+639: [  # Sparta Praga
+    ("Peter Vindahl",         "GOLEIRO",          27, "Dinamarca",      73),
+    ("Milan Heca",            "GOLEIRO",          34, "Tchequia",       67),
+    ("Asger Sorensen",        "ZAGUEIRO",         29, "Dinamarca",      73),
+    ("Martin Vitik",          "ZAGUEIRO",         22, "Tchequia",       72),
+    ("Filip Panak",           "ZAGUEIRO",         29, "Tchequia",       72),
+    ("Jaroslav Zeleny",       "LATERAL_DIREITO",  33, "Tchequia",       69),
+    ("Angelo Preciado",       "LATERAL_ESQUERDO", 27, "Equador",        72),
+    ("Kaan Kairinen",         "VOLANTE",          27, "Finlandia",      73),
+    ("Lukas Sadilek",         "VOLANTE",          28, "Tchequia",       71),
+    ("Qazim Laci",            "VOLANTE",          29, "Albania",        71),
+    ("Veljko Birmancevic",    "MEIA_CENTRAL",     27, "Servia",         73),
+    ("Matej Rynes",           "MEIA_CENTRAL",     25, "Tchequia",       69),
+    ("Lukas Haraslin",        "MEIA_ATACANTE",    29, "Eslovaquia",     74),
+    ("Pavel Kaderabek",       "PONTA_DIREITA",    33, "Tchequia",       70),
+    ("Victor Olatunji",       "PONTA_DIREITA",    26, "Nigeria",        72),
+    ("Mikael Soisalo",        "PONTA_ESQUERDA",   28, "Finlandia",      70),
+    ("John Mercado",          "PONTA_ESQUERDA",   22, "Equador",        69),
+    ("Albion Rrahmani",       "CENTROAVANTE",     25, "Albania",        74),
+    ("Jan Kuchta",            "CENTROAVANTE",     28, "Tchequia",       72),
+    ("Daniel Vasulin",        "SEGUNDA_ATACANTE", 24, "Tchequia",       68),
+],
+
+# ───────────────────────── Turquia (Europa League) ───────────────────────────
+640: [  # Fenerbahce
+    ("Dominik Livakovic",     "GOLEIRO",          31, "Croacia",        80),
+    ("Irfan Can Egribayat",   "GOLEIRO",          27, "Turquia",        74),
+    ("Milan Skriniar",        "ZAGUEIRO",         31, "Eslovaquia",     82),
+    ("Jayden Oosterwolde",    "ZAGUEIRO",         24, "Holanda",        78),
+    ("Caglar Soyuncu",        "ZAGUEIRO",         29, "Turquia",        77),
+    ("Mert Muldur",           "LATERAL_DIREITO",  26, "Turquia",        76),
+    ("Levent Mercan",         "LATERAL_ESQUERDO", 25, "Turquia",        74),
+    ("Fred",                  "VOLANTE",          32, "Brasil",         79),
+    ("Ismail Yuksek",         "VOLANTE",          26, "Turquia",        77),
+    ("Mert Hakan Yandas",     "VOLANTE",          31, "Turquia",        73),
+    ("Marco Asensio",         "MEIA_CENTRAL",     29, "Espanha",        82),
+    ("Sofyan Amrabat",        "MEIA_CENTRAL",     29, "Marrocos",       78),
+    ("Irfan Can Kahveci",     "MEIA_ATACANTE",    30, "Turquia",        78),
+    ("Allan Saint-Maximin",   "PONTA_DIREITA",    28, "Franca",         77),
+    ("Oguz Aydin",            "PONTA_DIREITA",    25, "Turquia",        73),
+    ("Sebastian Szymanski",   "PONTA_ESQUERDA",   26, "Polonia",        79),
+    ("Anderson Talisca",      "PONTA_ESQUERDA",   31, "Brasil",         78),
+    ("Youssef En-Nesyri",     "CENTROAVANTE",     28, "Marrocos",       80),
+    ("Cenk Tosun",            "CENTROAVANTE",     34, "Turquia",        71),
+    ("Jhon Duran",            "SEGUNDA_ATACANTE", 22, "Colombia",       78),
+],
+
+# ───────────────────────── Ucrania (Europa League) ───────────────────────────
+641: [  # Dinamo Kiev
+    ("Ruslan Neshcheret",     "GOLEIRO",          23, "Ucrania",        73),
+    ("Georgiy Bushchan",      "GOLEIRO",          31, "Ucrania",        73),
+    ("Denys Popov",           "ZAGUEIRO",         26, "Ucrania",        72),
+    ("Oleksandr Syrota",      "ZAGUEIRO",         25, "Ucrania",        71),
+    ("Mykola Mykhailenko",    "ZAGUEIRO",         27, "Ucrania",        70),
+    ("Oleksandr Tymchyk",     "LATERAL_DIREITO",  28, "Ucrania",        72),
+    ("Kristian Bilovar",      "LATERAL_ESQUERDO", 26, "Ucrania",        69),
+    ("Volodymyr Brazhko",     "VOLANTE",          23, "Ucrania",        74),
+    ("Mykola Shaparenko",     "VOLANTE",          27, "Ucrania",        74),
+    ("Oleksandr Pikhalyonok", "VOLANTE",          27, "Ucrania",        70),
+    ("Vladyslav Kabaev",      "MEIA_CENTRAL",     29, "Ucrania",        73),
+    ("Oleksandr Yatsyk",      "MEIA_CENTRAL",     26, "Ucrania",        69),
+    ("Nazar Voloshyn",        "MEIA_ATACANTE",    23, "Ucrania",        72),
+    ("Andriy Yarmolenko",     "PONTA_DIREITA",    36, "Ucrania",        72),
+    ("Vitaliy Buyalskyi",     "PONTA_DIREITA",    32, "Ucrania",        72),
+    ("Vladyslav Dubinchak",   "PONTA_ESQUERDA",   26, "Ucrania",        69),
+    ("Matviy Ponomarenko",    "PONTA_ESQUERDA",   19, "Ucrania",        67),
+    ("Vladyslav Vanat",       "CENTROAVANTE",     23, "Ucrania",        76),
+    ("Nazarii Rusyn",         "CENTROAVANTE",     27, "Ucrania",        70),
+    ("Eduardo Guerrero",      "SEGUNDA_ATACANTE", 25, "Panama",         69),
+],
+
+# ───────────────── Escocia, Austria, Suica (Europa League) ───────────────────
+642: [  # Hearts
+    ("Craig Gordon",          "GOLEIRO",          42, "Escocia",        68),
+    ("Zander Clark",          "GOLEIRO",          33, "Escocia",        67),
+    ("Frankie Kent",          "ZAGUEIRO",         30, "Inglaterra",     67),
+    ("Stuart Findlay",        "ZAGUEIRO",         30, "Escocia",        66),
+    ("Michael Steinwender",   "ZAGUEIRO",         26, "Austria",        66),
+    ("Adam Forrester",        "LATERAL_DIREITO",  22, "Escocia",        63),
+    ("Oisin McEntee",         "LATERAL_ESQUERDO", 25, "Irlanda",        64),
+    ("Beni Baningime",        "VOLANTE",          27, "Congo",          68),
+    ("Cammy Devlin",          "VOLANTE",          27, "Australia",      66),
+    ("Harry Milne",           "VOLANTE",          27, "Escocia",        63),
+    ("Blair Spittal",         "MEIA_CENTRAL",     30, "Escocia",        67),
+    ("Sander Kartum",         "MEIA_CENTRAL",     30, "Noruega",        66),
+    ("Alexandros Kyziridis",  "MEIA_ATACANTE",    26, "Grecia",         66),
+    ("Elton Kabangu",         "PONTA_DIREITA",    27, "Belgica",        66),
+    ("Yan Dhanda",            "PONTA_DIREITA",    27, "Inglaterra",     65),
+    ("Musa Drammeh",          "PONTA_ESQUERDA",   23, "Espanha",        63),
+    ("James Wilson",          "PONTA_ESQUERDA",   19, "Escocia",        62),
+    ("Lawrence Shankland",    "CENTROAVANTE",     30, "Escocia",        70),
+    ("Claudio Braga",         "CENTROAVANTE",     26, "Portugal",       65),
+    ("Kenneth Vargas",        "SEGUNDA_ATACANTE", 24, "Costa Rica",     64),
+],
+
+643: [  # LASK
+    ("Jorg Siebenhandl",      "GOLEIRO",          35, "Austria",        68),
+    ("Tobias Lawal",          "GOLEIRO",          26, "Austria",        68),
+    ("Philipp Ziereis",       "ZAGUEIRO",         32, "Alemanha",       68),
+    ("Maksym Talovierov",     "ZAGUEIRO",         25, "Ucrania",        68),
+    ("Jurgen Berg",           "ZAGUEIRO",         24, "Austria",        65),
+    ("Andres Andrade",        "LATERAL_DIREITO",  27, "Panama",         66),
+    ("Flavius Daniliuc",      "LATERAL_ESQUERDO", 24, "Austria",        68),
+    ("Sascha Horvath",        "VOLANTE",          29, "Austria",        66),
+    ("Branko Jovicic",        "VOLANTE",          32, "Servia",         66),
+    ("Ibrahim Mustapha",      "VOLANTE",          23, "Gana",           64),
+    ("Robert Zulj",           "MEIA_CENTRAL",     34, "Austria",        69),
+    ("Jerome Boateng",        "MEIA_CENTRAL",     24, "Austria",        65),
+    ("Moussa Koulibaly",      "MEIA_ATACANTE",    24, "Guine",          65),
+    ("Ousmane Diakite",       "PONTA_DIREITA",    25, "Mali",           67),
+    ("Valon Berisha",         "PONTA_DIREITA",    33, "Kosovo",         67),
+    ("Maurice Malone",        "PONTA_ESQUERDA",   25, "Alemanha",       65),
+    ("Florian Flecker",       "PONTA_ESQUERDA",   30, "Austria",        64),
+    ("Adil Taoui",            "CENTROAVANTE",     24, "Franca",         66),
+    ("Rene Renner",           "CENTROAVANTE",     32, "Austria",        64),
+    ("Thomas Goiginger",      "SEGUNDA_ATACANTE", 32, "Austria",        66),
+],
+
+644: [  # Servette
+    ("Joel Mall",             "GOLEIRO",          34, "Suica",          67),
+    ("Jeremy Frick",          "GOLEIRO",          32, "Suica",          66),
+    ("Steve Rouiller",        "ZAGUEIRO",         35, "Suica",          66),
+    ("Yoan Severin",          "ZAGUEIRO",         28, "Suica",          65),
+    ("Keyliane Abdallah",     "ZAGUEIRO",         21, "Franca",         62),
+    ("Bradley Mazikou",       "LATERAL_DIREITO",  29, "Congo",          64),
+    ("Jonathan Fabbro",       "LATERAL_ESQUERDO", 24, "Suica",          62),
+    ("Timothe Cognat",        "VOLANTE",          27, "Franca",         67),
+    ("Gael Ondoua",           "VOLANTE",          30, "Camaroes",       65),
+    ("Lilian Njoh",           "VOLANTE",          23, "Suica",          62),
+    ("Alexis Antunes",        "MEIA_CENTRAL",     24, "Peru",           65),
+    ("Florian Ayer",          "MEIA_CENTRAL",     26, "Suica",          63),
+    ("Miroslav Stevanovic",   "MEIA_ATACANTE",    35, "Bosnia",         66),
+    ("Dereck Kutesa",         "PONTA_DIREITA",    28, "Suica",          68),
+    ("Enzo Crivelli",         "PONTA_DIREITA",    30, "Franca",         64),
+    ("Jeremy Guillemenot",    "PONTA_ESQUERDA",   27, "Suica",          64),
+    ("Theo Magnin",           "PONTA_ESQUERDA",   22, "Suica",          61),
+    ("Chris Bedia",           "CENTROAVANTE",     29, "Costa do Marfim",66),
+    ("Lamine Fomba",          "CENTROAVANTE",     27, "Mali",           63),
+    ("Alexis Jaquerod",       "SEGUNDA_ATACANTE", 23, "Suica",          61),
+],
+
+# ───────────────────────── Servia (Europa League) ────────────────────────────
+645: [  # Partizan
+    ("Aleksandar Jovicic",    "GOLEIRO",          26, "Servia",         70),
+    ("Nemanja Stevanovic",    "GOLEIRO",          33, "Servia",         68),
+    ("Svetozar Markovic",     "ZAGUEIRO",         27, "Servia",         70),
+    ("Dusan Jovancic",        "ZAGUEIRO",         31, "Servia",         68),
+    ("Milan Roganovic",       "ZAGUEIRO",         24, "Montenegro",     66),
+    ("Nemanja Trifunovic",    "LATERAL_DIREITO",  23, "Servia",         66),
+    ("Vanja Dragojevic",      "LATERAL_ESQUERDO", 25, "Servia",         66),
+    ("Bibras Natcho",         "VOLANTE",          37, "Israel",         69),
+    ("Nemanja Jovic",         "VOLANTE",          24, "Servia",         67),
+    ("Jovan Milosevic",       "VOLANTE",          22, "Servia",         65),
+    ("Vukotic Vukotic",       "MEIA_CENTRAL",     25, "Montenegro",     67),
+    ("Mateja Djordjevic",     "MEIA_CENTRAL",     21, "Servia",         65),
+    ("Andrej Kostic",         "MEIA_ATACANTE",    22, "Servia",         68),
+    ("Ognjen Ugresic",        "PONTA_DIREITA",    23, "Servia",         67),
+    ("Milan Vukotic",         "PONTA_DIREITA",    24, "Servia",         66),
+    ("Nikola Simic",          "PONTA_ESQUERDA",   26, "Servia",         66),
+    ("Luka Ilic",             "PONTA_ESQUERDA",   27, "Servia",         68),
+    ("Kosta Nedeljkovic",     "CENTROAVANTE",     21, "Servia",         68),
+    ("Jovan Sljivic",         "CENTROAVANTE",     23, "Servia",         66),
+    ("Nikola Jojic",          "SEGUNDA_ATACANTE", 20, "Servia",         64),
+],
+
+# ───────────────────── Liechtenstein (Europa League) ─────────────────────────
+# A excecao da lista de acesso: o pais nao tem liga propria, so a copa local.
+646: [  # FC Vaduz
+    ("Benjamin Buchel",       "GOLEIRO",          36, "Liechtenstein",  60),
+    ("Mattia Zanotti",        "GOLEIRO",          23, "Suica",          57),
+    ("Maximilian Goppel",     "ZAGUEIRO",         26, "Alemanha",       58),
+    ("Lars Traber",           "ZAGUEIRO",         24, "Suica",          57),
+    ("Nicolas Hasler",        "ZAGUEIRO",         34, "Liechtenstein",  58),
+    ("Daniel Brandhuber",     "LATERAL_DIREITO",  25, "Austria",        56),
+    ("Milan Gajic",           "LATERAL_ESQUERDO", 23, "Suica",          55),
+    ("Tim Prica",             "VOLANTE",          25, "Suecia",         58),
+    ("Lukas Hoti",            "VOLANTE",          24, "Suica",          57),
+    ("Ferdinand Oswald",      "VOLANTE",          27, "Austria",        56),
+    ("Sandro Wieser",         "MEIA_CENTRAL",     33, "Liechtenstein",  58),
+    ("Noah Frommelt",         "MEIA_CENTRAL",     22, "Liechtenstein",  55),
+    ("Fabio Fehr",            "MEIA_ATACANTE",    24, "Liechtenstein",  57),
+    ("Gabriel Luchinger",     "PONTA_DIREITA",    23, "Suica",          56),
+    ("Marco Gajic",           "PONTA_DIREITA",    26, "Suica",          56),
+    ("Dejvid Sinani",         "PONTA_ESQUERDA",   27, "Liechtenstein",  58),
+    ("Livio Meier",           "PONTA_ESQUERDA",   22, "Suica",          54),
+    ("Anton Fehr",            "CENTROAVANTE",     26, "Liechtenstein",  58),
+    ("Mohamed Coulibaly",     "CENTROAVANTE",     25, "Mali",           57),
+    ("Aron Sele",             "SEGUNDA_ATACANTE", 24, "Liechtenstein",  55),
+],
+
+# ── Associacoes sem vaga direta: alimentam as duas qualificatorias ───────────
+647: [  # AEK Atenas
+    ("Christos Tzolakis",     "GOLEIRO",          23, "Grecia",         72),
+    ("Jan Strakosha",         "GOLEIRO",          26, "Albania",        69),
+    ("Domagoj Vida",          "ZAGUEIRO",         36, "Croacia",        72),
+    ("Harold Moukoudi",       "ZAGUEIRO",         28, "Camaroes",       72),
+    ("Milad Mohammadi",       "ZAGUEIRO",         32, "Ira",            70),
+    ("Giannis Kotsiras",      "LATERAL_DIREITO",  24, "Grecia",         69),
+    ("Lazaros Rota",          "LATERAL_ESQUERDO", 29, "Grecia",         70),
+    ("Erik Lamela",           "VOLANTE",          33, "Argentina",      73),
+    ("Lamine Diaby-Fadiga",   "VOLANTE",          25, "Franca",         69),
+    ("Nordin Amrabat",        "VOLANTE",          39, "Marrocos",       68),
+    ("Petros Mantalos",       "MEIA_CENTRAL",     34, "Grecia",         71),
+    ("Orbelin Pineda",        "MEIA_CENTRAL",     30, "Mexico",         73),
+    ("Luka Jovic",            "MEIA_ATACANTE",    28, "Servia",         74),
+    ("Anton Gonzalez",        "PONTA_DIREITA",    24, "Espanha",        69),
+    ("Konstantinos Koulierakis","PONTA_DIREITA",  22, "Grecia",         70),
+    ("Razvan Marin",          "PONTA_ESQUERDA",   29, "Romenia",        73),
+    ("Stavros Pilios",        "PONTA_ESQUERDA",   24, "Grecia",         68),
+    ("Derrick Jensen",        "CENTROAVANTE",     26, "Dinamarca",      70),
+    ("Levi Garcia",           "CENTROAVANTE",     28, "Trinidad",       72),
+    ("Fotios Ioannidis",      "SEGUNDA_ATACANTE", 25, "Grecia",         72),
+],
+
+648: [  # Brondby
+    ("Mads Hermansen",        "GOLEIRO",          25, "Dinamarca",      70),
+    ("Patrick Pentz",         "GOLEIRO",          28, "Austria",        68),
+    ("Rasmus Lauritsen",      "ZAGUEIRO",         29, "Dinamarca",      67),
+    ("Frederik Winther",      "ZAGUEIRO",         24, "Dinamarca",      67),
+    ("Sean Klaiber",          "ZAGUEIRO",         31, "Holanda",        65),
+    ("Daniel Wass",           "LATERAL_DIREITO",  36, "Dinamarca",      68),
+    ("Christian Cappis",      "LATERAL_ESQUERDO", 26, "Estados Unidos", 64),
+    ("Mathias Kvistgaarden",  "VOLANTE",          23, "Dinamarca",      68),
+    ("Ohi Omoijuanfo",        "VOLANTE",          31, "Noruega",        66),
+    ("Oskar Fallenius",       "VOLANTE",          22, "Suecia",         64),
+    ("Nicolai Vallys",        "MEIA_CENTRAL",     30, "Dinamarca",      67),
+    ("Yuito Suzuki",          "MEIA_CENTRAL",     24, "Japao",          68),
+    ("Mathias Greve",         "MEIA_ATACANTE",    30, "Dinamarca",      65),
+    ("Filip Bundgaard",       "PONTA_DIREITA",    20, "Dinamarca",      66),
+    ("Tobias Borkeeiet",      "PONTA_DIREITA",    26, "Noruega",        64),
+    ("Clement Bischoff",      "PONTA_ESQUERDA",   21, "Dinamarca",      67),
+    ("Marko Divkovic",        "PONTA_ESQUERDA",   24, "Croacia",        64),
+    ("Nicolai Jorgensen",     "CENTROAVANTE",     35, "Dinamarca",      66),
+    ("Sean Steur",            "CENTROAVANTE",     21, "Holanda",        63),
+    ("Mikael Uhre",           "SEGUNDA_ATACANTE", 31, "Dinamarca",      67),
+],
+
+649: [  # Molde
+    ("Jacob Karlstrom",       "GOLEIRO",          27, "Suecia",         68),
+    ("Oliver Petersen",       "GOLEIRO",          23, "Noruega",        65),
+    ("Martin Linnes",         "ZAGUEIRO",         34, "Noruega",        67),
+    ("Mats Moller Daehli",    "ZAGUEIRO",         30, "Noruega",        69),
+    ("Benjamin Bjortuft",     "ZAGUEIRO",         26, "Noruega",        66),
+    ("Christoffer Kleven",    "LATERAL_DIREITO",  25, "Noruega",        65),
+    ("David Fofana",          "LATERAL_ESQUERDO", 23, "Noruega",        64),
+    ("Fredrik Gulbrandsen",   "VOLANTE",          33, "Noruega",        67),
+    ("Emil Breivik",          "VOLANTE",          25, "Noruega",        67),
+    ("Kristoffer Haugen",     "VOLANTE",          31, "Noruega",        65),
+    ("Magnus Eikrem",         "MEIA_CENTRAL",     35, "Noruega",        67),
+    ("Eirik Hestad",          "MEIA_CENTRAL",     30, "Noruega",        65),
+    ("Markus Kaasa",          "MEIA_ATACANTE",    28, "Noruega",        67),
+    ("Valdemar Jensen",       "PONTA_DIREITA",    24, "Dinamarca",      65),
+    ("Johan Bakke",           "PONTA_DIREITA",    22, "Noruega",        64),
+    ("Mathias Love",          "PONTA_ESQUERDA",   24, "Noruega",        64),
+    ("Sivert Mannsverk",      "PONTA_ESQUERDA",   23, "Noruega",        66),
+    ("Ola Brynhildsen",       "CENTROAVANTE",     27, "Noruega",        69),
+    ("Oscar Hiljemark",       "CENTROAVANTE",     33, "Suecia",         65),
+    ("Elias Hoff Melkersen",  "SEGUNDA_ATACANTE", 24, "Noruega",        66),
+],
+
+650: [  # Hajduk Split
+    ("Ivan Lucic",            "GOLEIRO",          31, "Croacia",        68),
+    ("Toni Silic",            "GOLEIRO",          24, "Croacia",        65),
+    ("Nikola Kalinic",        "ZAGUEIRO",         28, "Croacia",        68),
+    ("Zvonimir Sarlija",      "ZAGUEIRO",         29, "Croacia",        67),
+    ("Branimir Mlacic",       "ZAGUEIRO",         22, "Croacia",        65),
+    ("Luka Hodak",            "LATERAL_DIREITO",  23, "Croacia",        64),
+    ("Filip Uremovic",        "LATERAL_ESQUERDO", 29, "Croacia",        67),
+    ("Emir Sahiti",           "VOLANTE",          27, "Kosovo",         67),
+    ("Jan Mlakar",            "VOLANTE",          27, "Eslovenia",      68),
+    ("Rokas Pukstas",         "VOLANTE",          22, "Estados Unidos", 66),
+    ("Marko Livaja",          "MEIA_CENTRAL",     32, "Croacia",        72),
+    ("Ivan Rakitic",          "MEIA_CENTRAL",     38, "Croacia",        71),
+    ("Michele Sego",          "MEIA_ATACANTE",    23, "Croacia",        65),
+    ("Niko Sigur",            "PONTA_DIREITA",    23, "Croacia",        67),
+    ("Stipe Biuk",            "PONTA_DIREITA",    23, "Croacia",        66),
+    ("Sandro Kulenovic",      "PONTA_ESQUERDA",   26, "Croacia",        66),
+    ("Dario Melnjak",         "PONTA_ESQUERDA",   33, "Croacia",        64),
+    ("Adrion Pajaziti",       "CENTROAVANTE",     24, "Kosovo",         66),
+    ("Vuk Teodosic",          "CENTROAVANTE",     22, "Servia",         64),
+    ("Tonio Teklic",          "SEGUNDA_ATACANTE", 25, "Croacia",        65),
+],
+
+651: [  # Lech Poznan
+    ("Bartosz Mrozek",        "GOLEIRO",          25, "Polonia",        68),
+    ("Filip Bednarek",        "GOLEIRO",          33, "Polonia",        67),
+    ("Antoni Kozubal",        "ZAGUEIRO",         21, "Polonia",        66),
+    ("Dino Hotic",            "ZAGUEIRO",         30, "Eslovenia",      67),
+    ("Alan Czerwinski",       "ZAGUEIRO",         32, "Polonia",        66),
+    ("Joel Pereira",          "LATERAL_DIREITO",  29, "Portugal",       65),
+    ("Pablo Rodriguez",       "LATERAL_ESQUERDO", 24, "Espanha",        66),
+    ("Radoslaw Murawski",     "VOLANTE",          32, "Polonia",        66),
+    ("Afonso Sousa",          "VOLANTE",          26, "Portugal",       67),
+    ("Michal Gurgul",         "VOLANTE",          21, "Polonia",        64),
+    ("Kristoffer Velde",      "MEIA_CENTRAL",     26, "Noruega",        69),
+    ("Filip Szymczak",        "MEIA_CENTRAL",     23, "Polonia",        65),
+    ("Luis Palma",            "MEIA_ATACANTE",    26, "Honduras",       68),
+    ("Mikael Ishak",          "PONTA_DIREITA",    32, "Suecia",         68),
+    ("Bryan Fiabema",         "PONTA_DIREITA",    22, "Noruega",        65),
+    ("Taofeek Ismaheel",      "PONTA_ESQUERDA",   25, "Nigeria",        66),
+    ("Gabriel Tomasiewicz",   "PONTA_ESQUERDA",   21, "Polonia",        63),
+    ("Mihai Caimacov",        "CENTROAVANTE",     27, "Moldavia",       65),
+    ("Luis Diaz Monsalve",    "CENTROAVANTE",     24, "Colombia",       65),
+    ("Daniel Hakans",         "SEGUNDA_ATACANTE", 28, "Finlandia",      66),
+],
+
+652: [  # Djurgarden
+    ("Jacob Rinne",           "GOLEIRO",          32, "Suecia",         67),
+    ("Filip Manojlovic",      "GOLEIRO",          29, "Servia",         66),
+    ("Hjalmar Ekdal",         "ZAGUEIRO",         27, "Suecia",         67),
+    ("Elliot Stroud",         "ZAGUEIRO",         23, "Suecia",         64),
+    ("Adam Strale",           "ZAGUEIRO",         25, "Suecia",         64),
+    ("Tobias Gulliksen",      "LATERAL_DIREITO",  22, "Noruega",        67),
+    ("Daniel Stensson",       "LATERAL_ESQUERDO", 24, "Suecia",         64),
+    ("Magnus Eriksson",       "VOLANTE",          35, "Suecia",         67),
+    ("Hampus Finndell",       "VOLANTE",          25, "Suecia",         66),
+    ("Rasmus Bengtsson",      "VOLANTE",          36, "Suecia",         63),
+    ("Besard Sabovic",        "MEIA_CENTRAL",     29, "Suecia",         66),
+    ("Gustav Wikheim",        "MEIA_CENTRAL",     32, "Noruega",        65),
+    ("Keita Kosugi",          "MEIA_ATACANTE",    20, "Japao",          65),
+    ("Nino Zugelj",           "PONTA_DIREITA",    25, "Eslovenia",      66),
+    ("Lucas Bergvall",        "PONTA_DIREITA",    20, "Suecia",         68),
+    ("Joel Asoro",            "PONTA_ESQUERDA",   26, "Suecia",         66),
+    ("Adam Hellborg",         "PONTA_ESQUERDA",   22, "Suecia",         62),
+    ("Isak Alemayehu",        "CENTROAVANTE",     21, "Suecia",         64),
+    ("Jesper Karlstrom",      "CENTROAVANTE",     30, "Suecia",         65),
+    ("Tokmac Nguen",          "SEGUNDA_ATACANTE", 32, "Noruega",        66),
+],
+
+653: [  # CFR Cluj
+    ("Otto Hindrich",         "GOLEIRO",          23, "Romenia",        66),
+    ("Simone Scuffet",        "GOLEIRO",          29, "Italia",         67),
+    ("Andrei Burca",          "ZAGUEIRO",         32, "Romenia",        66),
+    ("Monday Etim",           "ZAGUEIRO",         23, "Nigeria",        63),
+    ("Yuri Matias",           "ZAGUEIRO",         28, "Portugal",       65),
+    ("Karlo Muhar",           "LATERAL_DIREITO",  29, "Croacia",        64),
+    ("Cristian Manea",        "LATERAL_ESQUERDO", 28, "Romenia",        66),
+    ("Alexandru Chipciu",     "VOLANTE",          36, "Romenia",        65),
+    ("Daniel Birligea",       "VOLANTE",          25, "Romenia",        65),
+    ("Luka Zima",             "VOLANTE",          24, "Croacia",        62),
+    ("Alexandru Cordea",      "MEIA_CENTRAL",     29, "Romenia",        64),
+    ("Jonathan Rodriguez",    "MEIA_CENTRAL",     25, "Uruguai",        64),
+    ("Louis Munteanu",        "MEIA_ATACANTE",    23, "Romenia",        68),
+    ("Daniel Bitton",         "PONTA_DIREITA",    24, "Israel",         63),
+    ("Mamadou Thiam",         "PONTA_DIREITA",    30, "Senegal",        64),
+    ("Islam Slimani",         "PONTA_ESQUERDA",   37, "Argelia",        65),
+    ("Bogdan Cojocaru",       "PONTA_ESQUERDA",   22, "Romenia",        61),
+    ("Emanuel Emegha",        "CENTROAVANTE",     23, "Holanda",        66),
+    ("Victor Dican",          "CENTROAVANTE",     22, "Romenia",        62),
+    ("Alin Fica",             "SEGUNDA_ATACANTE", 24, "Romenia",        62),
+],
 }
+
+
+# ─────────────────── Técnicos dos clubes novos ──────────────────
+# Os 31 primeiros tem o seu tecnico em scripts/gen_tecnicos.py, que regera a
+# chave "tecnicos" INTEIRA com random sem semente: rodar aquele script de novo
+# trocaria o tecnico de todos os 285 clubes do seed. Para nao precisar disso, o
+# pool novo emite os seus proprios tecnicos aqui, em seed_outros.json, e o
+# merge_seeds.py faz upsert deles por id. Os overrides tambem foram acrescentados
+# ao gen_tecnicos.py, para que uma regeracao completa continue dando nomes
+# europeus a estes clubes em vez de cair no pool de nomes brasileiros.
+#
+# Os ids continuam de TECNICO_ID_BASE, logo depois dos 285 que o seed ja tem, que
+# e exatamente onde o gen_tecnicos.py os poria (ele numera na ordem dos times, e
+# os clubes novos entram no fim da lista).
+TECNICO_ID_BASE = 286
+
+TECNICOS = {
+    632: ("Dino Toppmoller",      45, "Alemanha"),      # Eintracht Frankfurt
+    633: ("Sebastian Hoeness",    43, "Alemanha"),      # VfB Stuttgart
+    634: ("Bruno Genesio",        59, "Franca"),        # Lille
+    635: ("Paulo Fonseca",        52, "Portugal"),      # Olympique Lyonnais
+    636: ("Robin van Persie",     42, "Holanda"),       # Feyenoord
+    637: ("Jose Mourinho",        62, "Portugal"),      # Benfica
+    638: ("David Hubert",         37, "Belgica"),       # Union Saint-Gilloise
+    639: ("Brian Priske",         48, "Dinamarca"),     # Sparta Praga
+    640: ("Domenico Tedesco",     40, "Italia"),        # Fenerbahce
+    641: ("Oleksandr Shovkovskyi",50, "Ucrania"),       # Dinamo Kiev
+    642: ("Derek McInnes",        54, "Escocia"),       # Hearts
+    643: ("Dietmar Kuhbauer",     54, "Austria"),       # LASK
+    644: ("Jocelyn Gourvennec",   53, "Franca"),        # Servette
+    645: ("Srdjan Blagojevic",    49, "Servia"),        # Partizan
+    646: ("Marc Schneider",       45, "Suica"),         # FC Vaduz
+    647: ("Marko Nikolic",        46, "Servia"),        # AEK Atenas
+    648: ("Frederik Birk",        41, "Dinamarca"),     # Brondby
+    649: ("Erling Moe",           50, "Noruega"),       # Molde
+    650: ("Gonzalo Garcia",       44, "Espanha"),       # Hajduk Split
+    651: ("Niels Frederiksen",    54, "Dinamarca"),     # Lech Poznan
+    652: ("Jani Honkavaara",      49, "Finlandia"),     # Djurgarden
+    653: ("Andrea Mandorlini",    65, "Italia"),        # CFR Cluj
+}
+
+
+def gen_tecnico(tid, trep, tecnico_id):
+    """Mesma formula de scripts/gen_tecnicos.py, mas com semente fixa por clube,
+    para o seed_outros.json sair igual a cada execucao."""
+    nome, idade, nacionalidade = TECNICOS[tid]
+    parts = nome.split()
+    nome_abrev = "%s. %s" % (parts[0][0], parts[-1]) if len(parts) >= 2 else nome
+    r = random.Random(tid + 555)
+    reputacao = max(30.0, min(90.0, trep * 0.75 + r.uniform(-8, 8)))
+    return {
+        "id": tecnico_id, "nome": nome, "nome_abrev": nome_abrev,
+        "idade": idade, "nacionalidade": nacionalidade, "time_id": tid,
+        "salario": int(150_000 + (reputacao - 30) * 50_000),
+        "contrato_anos": r.randint(2, 4),
+        "reputacao": round(reputacao, 1),
+    }
 
 # ─────────────────── Validação e monta seed ───────────────────────────────────
 VALID_POS = set(DELTAS.keys())
-data = {"times": [], "jogadores": []}
+data = {"times": [], "jogadores": [], "tecnicos": []}
 jogador_id = 13000
 
 for (tid, tnome, tcidade, testado, tdiv, tpais, tnivel, tsaldo, testadio, tcap, tpreco, ttatica, testilo, trep) in TIMES:
@@ -893,8 +1590,14 @@ for (tid, tnome, tcidade, testado, tdiv, tpais, tnivel, tsaldo, testadio, tcap, 
         "id": tid, "nome": tnome, "cidade": tcidade, "estado": testado,
         "divisao": tdiv, "pais": tpais, "nivel": tnivel, "saldo": tsaldo,
         "estadio_nome": testadio, "estadio_capacidade": tcap, "preco_ingresso": tpreco,
-        "tatica": ttatica, "estilo": testilo, "reputacao": trep, "escudo_res": "",
+        "tatica": ttatica, "estilo": testilo, "reputacao": trep,
+        "escudo_res": ESCUDOS.get(tid, ""),
     })
+
+    if tid in TECNICOS:
+        data["tecnicos"].append(gen_tecnico(
+            tid, trep, TECNICO_ID_BASE + len(data["tecnicos"])
+        ))
 
     roster = ROSTERS.get(tid, [])
     if not roster:
@@ -921,6 +1624,9 @@ for (tid, tnome, tcidade, testado, tdiv, tpais, tnivel, tsaldo, testadio, tcap, 
 # ─────────────────── Escreve o arquivo ────────────────────────────────────────
 out_path = os.path.join("app", "src", "main", "assets", "seed_outros.json")
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
+if not data["tecnicos"]:
+    del data["tecnicos"]
+
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
 

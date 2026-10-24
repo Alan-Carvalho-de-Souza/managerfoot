@@ -1047,6 +1047,7 @@ class GameRepository @Inject constructor(
         val copaEspanholaId: Int,         // Copa Espanhola (Copa do Rei)
         val copaItalianaId: Int,          // Copa Italiana (Coppa Italia)
         val championsId: Int,             // UEFA Champions League
+        val europaLeagueId: Int,          // UEFA Europa League
         val supercopaId: Int,
         val supercopaInglaterraId: Int,   // Supercopa da Inglaterra
         val supercopaEspanholaId: Int,    // Supercopa da Espanha
@@ -1074,6 +1075,7 @@ class GameRepository @Inject constructor(
         campeonatoLaLigaId: Int = -1,       // La Liga espanhola (divisao 13)
         campeonatoSerieAId: Int = -1,       // Serie A italiana (divisao 14)
         championsId: Int = -1,              // UEFA Champions League da temporada que encerra
+        europaLeagueId: Int = -1,           // UEFA Europa League da temporada que encerra
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -1530,6 +1532,12 @@ class GameRepository @Inject constructor(
             championsId, ano, temporadaId, novoTemporadaId, novoAno
         )
 
+        // E depois a Europa League, nesta ordem: a lista de acesso dela exclui
+        // quem já está na Champions nova, então precisa dela criada antes.
+        val novoEuropaLeagueId = encerrarECriarEuropa(
+            europaLeagueId, novoChampionsId, ano, temporadaId, novoTemporadaId, novoAno
+        )
+
         // Cria as Supercopas (Brasil/Inglaterra/Espanha/Itália) para a próxima temporada.
         // Extraído em helper para manter este método sob o limite de bytecode da JVM.
         val supers = criarSupercopasDaTemporada(ano, novoAno, novoTemporadaId)
@@ -1612,7 +1620,7 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoTemporadaId, novoAno, resultadoMeta)
     }
 
     // ── Reputação por mudança de divisão ────────────────────────
@@ -2598,6 +2606,13 @@ class GameRepository @Inject constructor(
     private val DIVISAO_HALL_CHAMPIONS = 30
 
     /**
+     * Código de divisão da Europa League no Hall da Fama. A 30 é da Champions e a
+     * 32 fica reservada à Conference League — ver a lista de opções continentais
+     * em HallDaFamaScreen, que é a fonte desses códigos.
+     */
+    private val DIVISAO_HALL_EUROPA = 31
+
+    /**
      * Monta a lista de acesso da temporada: clubes europeus das divisões de elite
      * e do pool, ordenados pelo coeficiente da UEFA com a reputação desempatando.
      *
@@ -2608,7 +2623,62 @@ class GameRepository @Inject constructor(
     suspend fun determinarParticipantesChampions(
         anoAtual: Int,
         temporadaAnteriorId: Int = -1
-    ): List<VagaChampions> {
+    ): List<VagaChampions> =
+        ListaDeAcessoChampions.montar(candidatosEuropeus(anoAtual, temporadaAnteriorId))
+
+    /**
+     * Monta a lista de acesso da Europa League, que é a mesma leitura de
+     * coeficientes e colocações da Champions com duas diferenças de fundo.
+     *
+     * A primeira é [ocupados]: um clube não disputa as duas competições, e a
+     * Europa League é montada DEPOIS da Champions, recebendo os clubes dela. A
+     * segunda são os campeões das copas nacionais europeias da temporada que
+     * encerra, que entram por uma porta própria — ver europa_league.md.
+     *
+     * Devolve menos de 36 vagas quando o jogo não tem clubes europeus livres
+     * suficientes, e aí a competição não é criada nesta temporada.
+     */
+    suspend fun determinarParticipantesEuropa(
+        anoAtual: Int,
+        temporadaAnteriorId: Int = -1,
+        ocupados: Set<Int> = emptySet()
+    ): List<VagaEuropa> = ListaDeAcessoEuropa.montar(
+        candidatos     = candidatosEuropeus(anoAtual, temporadaAnteriorId),
+        campeoesDaCopa = campeoesDasCopasEuropeias(temporadaAnteriorId),
+        ocupados       = ocupados
+    )
+
+    /**
+     * Campeão de cada copa nacional europeia da temporada informada, por país
+     * canônico da lista de acesso — Copa da Inglaterra, Copa do Rei e Coppa
+     * Italia, hoje as três copas europeias do jogo.
+     *
+     * Vazio na primeira temporada, quando nenhuma copa encerrou ainda: aí a vaga
+     * da copa desce para o colocado seguinte da liga, como manda a regra.
+     */
+    private suspend fun campeoesDasCopasEuropeias(temporadaId: Int): Map<String, Int> {
+        if (temporadaId <= 0) return emptyMap()
+        val copas = campeonatoDao.buscarPorTemporadaId(temporadaId).filter { camp ->
+            camp.tipo == TipoCampeonato.COPA_NACIONAL && Continentes.ehEuropa(camp.pais)
+        }
+        val campeoes = HashMap<String, Int>()
+        for (copa in copas) {
+            val pais = ListaDeAcessoEuropa.paisCanonico(copa.pais) ?: continue
+            val campeao = buscarCampeaoCopaSeEncerrada(copa.id)
+            if (campeao > 0) campeoes[pais] = campeao
+        }
+        return campeoes
+    }
+
+    /**
+     * Clubes europeus elegíveis às competições continentais, com o coeficiente da
+     * UEFA e a colocação final na liga nacional já resolvidos. Base comum das
+     * listas de acesso da Champions e da Europa League.
+     */
+    private suspend fun candidatosEuropeus(
+        anoAtual: Int,
+        temporadaAnteriorId: Int
+    ): List<CandidatoChampions> {
         val coeficientes = rankingEuropaDao.buscarCoeficientes(anoAtual)
             .associate { it.timeId to it.coeficiente }
         val posicoes = posicoesFinaisDasLigasEuropeias(temporadaAnteriorId)
@@ -2625,7 +2695,7 @@ class GameRepository @Inject constructor(
                     posicaoLiga = posicoes[time.id]
                 )
             }
-        return ListaDeAcessoChampions.montar(candidatos)
+        return candidatos
     }
 
     /**
@@ -2664,23 +2734,65 @@ class GameRepository @Inject constructor(
         campeonato: CampeonatoEntity,
         vagas: List<VagaChampions>,
         random: kotlin.random.Random = kotlin.random.Random.Default
+    ): Int = criarCompeticaoContinental(
+        campeonato = campeonato,
+        clubes     = ListaDeAcessoChampions.paraSorteio(vagas),
+        formato    = MotorCampeonato.FORMATO_CHAMPIONS,
+        random     = random
+    )
+
+    /**
+     * Cria a Europa League e persiste as 144 partidas da sua Fase de Liga.
+     *
+     * Mesmo sorteio e mesmas travas da Champions: o que muda é a lista de acesso
+     * (ver [determinarParticipantesEuropa]) e as casas do calendário, que vêm de
+     * [MotorCampeonato.FORMATO_EUROPA_LEAGUE] e nunca colidem com as da Champions.
+     */
+    suspend fun criarEuropaLeague(
+        campeonato: CampeonatoEntity,
+        vagas: List<VagaEuropa>,
+        random: kotlin.random.Random = kotlin.random.Random.Default
+    ): Int = criarCompeticaoContinental(
+        campeonato = campeonato,
+        clubes     = ListaDeAcessoEuropa.paraSorteio(vagas),
+        formato    = MotorCampeonato.FORMATO_EUROPA_LEAGUE,
+        random     = random
+    )
+
+    /**
+     * Grava uma competição continental de Fase de Liga: participantes, tabela
+     * inicial de 36 linhas e as 144 partidas já distribuídas em 8 rodadas.
+     *
+     * Devolve -1 quando o sorteio é impossível: as travas geográficas exigem no
+     * mínimo 5 países e no máximo 7 clubes por país — e no máximo 4 de um país
+     * dentro de um pote, restrição que a lista de acesso não consegue garantir
+     * sozinha, porque os potes saem do coeficiente. Em vez de criar um torneio
+     * sem calendário, não criamos nada e o resto do jogo segue sem a competição.
+     */
+    private suspend fun criarCompeticaoContinental(
+        campeonato: CampeonatoEntity,
+        clubes: List<ClubeChampions>,
+        formato: MotorCampeonato.FormatoContinental,
+        random: kotlin.random.Random
     ): Int {
-        val clubes = ListaDeAcessoChampions.paraSorteio(vagas)
+        if (clubes.size < SorteioChampions.CLUBES) return -1
         if (SorteioChampions.verificarViabilidade(clubes).isNotEmpty()) return -1
         val sorteio = SorteioChampions.sortear(clubes, random) ?: return -1
 
-        val championsId = campeonatoDao.inserir(campeonato).toInt()
+        val campeonatoId = campeonatoDao.inserir(campeonato).toInt()
         val participantes = clubes.map { it.timeId }
         campeonatoDao.inserirParticipantes(
-            participantes.map { CampeonatoTimeEntity(championsId, it) }
+            participantes.map { CampeonatoTimeEntity(campeonatoId, it) }
         )
         classificacaoDao.inserirTodos(
-            MotorCampeonato.gerarClassificacaoInicial(championsId, participantes)
+            MotorCampeonato.gerarClassificacaoInicial(campeonatoId, participantes)
         )
         partidaDao.inserirTodas(
-            MotorCampeonato.gerarFaseLigaChampions(championsId, sorteio.confrontos, random)
+            MotorCampeonato.gerarFaseLigaChampions(
+                campeonatoId, sorteio.confrontos, random, formato
+            )
         )
-        return championsId
+        return campeonatoId
     }
 
     /**
@@ -2702,18 +2814,58 @@ class GameRepository @Inject constructor(
         novoTemporadaId: Int,
         novoAno: Int
     ): Int {
-        var iteracoes = 60
-        while (championsIdAnterior > 0 && iteracoes-- > 0) {
-            if (campeonatoDao.buscarPorId(championsIdAnterior)?.encerrado != false) break
-            try {
-                simularProximaRodadaChampionsSeNecessario(championsIdAnterior, -1, ano, temporadaId)
-            } catch (_: Exception) { break }
+        concluirCompeticaoContinental(championsIdAnterior) {
+            simularProximaRodadaChampionsSeNecessario(championsIdAnterior, -1, ano, temporadaId)
         }
         return try {
             // temporadaId é a que encerra: a sua tabela final é a que classifica
             // os clubes para a Champions da temporada nova.
             criarChampionsDaTemporada(novoTemporadaId, novoAno, temporadaAnteriorId = temporadaId)
         } catch (_: Exception) { -1 }
+    }
+
+    /**
+     * O mesmo para a Europa League. Tem de ser chamada DEPOIS de
+     * [encerrarECriarChampions], recebendo em [championsIdNovo] a Champions que
+     * acabou de ser criada: os clubes dela são os ocupados da lista de acesso.
+     */
+    private suspend fun encerrarECriarEuropa(
+        europaIdAnterior: Int,
+        championsIdNovo: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int
+    ): Int {
+        concluirCompeticaoContinental(europaIdAnterior) {
+            simularProximaRodadaEuropaSeNecessario(europaIdAnterior, -1, ano, temporadaId)
+        }
+        return try {
+            criarEuropaDaTemporada(
+                temporadaId         = novoTemporadaId,
+                ano                 = novoAno,
+                temporadaAnteriorId = temporadaId,
+                championsId         = championsIdNovo
+            )
+        } catch (_: Exception) { -1 }
+    }
+
+    /**
+     * Força a conclusão de uma competição continental que ficou pendente. É
+     * necessário porque, quando o jogador não a disputa (ou caiu cedo), ela pode
+     * chegar ao fim da temporada inacabada — e sem o campeão registrado não há
+     * título no Hall da Fama nem campanhas no coeficiente da UEFA, que é
+     * justamente o que ordena os potes da edição seguinte.
+     */
+    private suspend fun concluirCompeticaoContinental(
+        campeonatoId: Int,
+        simularUmaRodada: suspend () -> Unit
+    ) {
+        var iteracoes = 60
+        while (campeonatoId > 0 && iteracoes-- > 0) {
+            if (campeonatoDao.buscarPorId(campeonatoId)?.encerrado != false) break
+            try { simularUmaRodada() } catch (_: Exception) { break }
+        }
     }
 
     /**
@@ -2744,6 +2896,40 @@ class GameRepository @Inject constructor(
     }
 
     /**
+     * Cria a Europa League de uma temporada, ou devolve -1 quando a lista de
+     * acesso não fecha os 36 clubes.
+     *
+     * **A ordem importa:** tem de ser chamada DEPOIS de [criarChampionsDaTemporada],
+     * recebendo o id da Champions criada. Os participantes dela são os `ocupados`
+     * da lista de acesso, porque um clube não disputa as duas competições. Com
+     * championsId = -1 (Champions que não cabe no seed) a Europa League é montada
+     * com o campo europeu inteiro disponível, que é o comportamento desejado.
+     */
+    suspend fun criarEuropaDaTemporada(
+        temporadaId: Int,
+        ano: Int,
+        temporadaAnteriorId: Int = -1,
+        championsId: Int = -1
+    ): Int {
+        val ocupados = if (championsId > 0) {
+            campeonatoDao.buscarIdsParticipantes(championsId).toSet()
+        } else emptySet()
+        val vagas = determinarParticipantesEuropa(ano, temporadaAnteriorId, ocupados)
+        if (vagas.size < SorteioChampions.CLUBES) return -1
+        return criarEuropaLeague(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = "Europa League $ano",
+                tipo         = TipoCampeonato.CONTINENTAL,
+                formato      = FormatoCampeonato.FASE_LIGA_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.FORMATO_EUROPA_LEAGUE.totalRodadas,
+                pais         = Continentes.EUROPA
+            ),
+            vagas
+        )
+    }
+
+    /**
      * Avança a Champions: gera o play-off quando a Fase de Liga termina, gera as
      * oitavas quando o play-off termina, e delega o resto do mata-mata ao motor
      * de copa ida/volta. Devolve true quando a final foi concluída nesta chamada.
@@ -2753,68 +2939,124 @@ class GameRepository @Inject constructor(
         anoAtual: Int,
         timeJogadorId: Int = -1,
         temporadaId: Int = 1
+    ): Boolean = verificarEAvancarFaseContinental(
+        campeonatoId      = championsId,
+        formato           = MotorCampeonato.FORMATO_CHAMPIONS,
+        competicao        = CompeticaoUefa.CHAMPIONS_LEAGUE,
+        divisaoHallDaFama = DIVISAO_HALL_CHAMPIONS,
+        premioCampeao     = 120_000_000_00L,
+        premioVice        = 60_000_000_00L,
+        anoAtual          = anoAtual,
+        timeJogadorId     = timeJogadorId,
+        temporadaId       = temporadaId
+    )
+
+    /**
+     * Avança a Europa League. É a mesma máquina da Champions, com o formato, o
+     * código do Hall da Fama e os pesos de coeficiente da Europa League — e
+     * prêmios menores, como na competição real.
+     */
+    suspend fun verificarEAvancarFaseEuropa(
+        europaLeagueId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean = verificarEAvancarFaseContinental(
+        campeonatoId      = europaLeagueId,
+        formato           = MotorCampeonato.FORMATO_EUROPA_LEAGUE,
+        competicao        = CompeticaoUefa.EUROPA_LEAGUE,
+        divisaoHallDaFama = DIVISAO_HALL_EUROPA,
+        premioCampeao     = 40_000_000_00L,
+        premioVice        = 20_000_000_00L,
+        anoAtual          = anoAtual,
+        timeJogadorId     = timeJogadorId,
+        temporadaId       = temporadaId
+    )
+
+    /**
+     * Avança uma competição continental: gera o play-off quando a Fase de Liga
+     * termina, gera as oitavas quando o play-off termina, e delega o resto do
+     * mata-mata ao motor de copa ida/volta. Devolve true quando a final foi
+     * concluída nesta chamada.
+     *
+     * Parametrizada pelo [formato] porque Champions e Europa League são a mesma
+     * máquina em casas diferentes do calendário — ver europa_league.md.
+     */
+    private suspend fun verificarEAvancarFaseContinental(
+        campeonatoId: Int,
+        formato: MotorCampeonato.FormatoContinental,
+        competicao: CompeticaoUefa,
+        divisaoHallDaFama: Int,
+        premioCampeao: Long,
+        premioVice: Long,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
     ): Boolean {
-        if (championsId <= 0) return false
-        val camp = campeonatoDao.buscarPorId(championsId) ?: return false
+        if (campeonatoId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(campeonatoId) ?: return false
         if (camp.encerrado) return false
-        val todas = partidaDao.buscarTodasPorCampeonato(championsId)
+        val todas = partidaDao.buscarTodasPorCampeonato(campeonatoId)
         if (todas.isEmpty()) return false
 
         // ── Fase de Liga (fase = null) precisa estar completa ──────────
         val faseLiga = todas.filter { it.fase == null }
         if (faseLiga.isEmpty() || !faseLiga.all { it.jogada }) return false
 
-        val temPlayoff = todas.any { it.fase == MotorCampeonato.CHAMPIONS_FASE_PLAYOFF }
+        val temPlayoff = todas.any { it.fase == formato.fasePlayoff }
         if (!temPlayoff) {
-            gerarPlayoffChampions(championsId)
+            gerarPlayoffContinental(campeonatoId, formato)
             return false
         }
 
         // ── Play-off completo → oitavas com os 8 cabeças de chave ──────
-        val partidasPlayoff = todas.filter { it.fase == MotorCampeonato.CHAMPIONS_FASE_PLAYOFF }
-        val temOitavas = todas.any { it.fase == MotorCampeonato.CHAMPIONS_FASES_MATA_MATA.first() }
+        val partidasPlayoff = todas.filter { it.fase == formato.fasePlayoff }
+        val temOitavas = todas.any { it.fase == formato.fasesMataMata.first() }
         if (!temOitavas) {
             if (!partidasPlayoff.all { it.jogada }) return false
-            gerarOitavasChampions(championsId, partidasPlayoff)
+            gerarOitavasContinental(campeonatoId, partidasPlayoff, formato)
             return false
         }
 
         // ── Oitavas → Final: o motor de copa ida/volta dá conta ────────
         val encerrou = verificarEAvancarFaseCopa(
-            copaId            = championsId,
+            copaId            = campeonatoId,
             anoAtual          = anoAtual,
             timeJogadorId     = timeJogadorId,
             temporadaId       = temporadaId,
-            fases             = MotorCampeonato.CHAMPIONS_FASES_MATA_MATA,
-            ordemGlobal       = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA,
-            divisaoHallDaFama = DIVISAO_HALL_CHAMPIONS,
-            premioCampeao     = 120_000_000_00L,
-            premioVice        = 60_000_000_00L,
-            rodadaBase        = MotorCampeonato.CHAMPIONS_RODADA_BASE_MATA_MATA
+            fases             = formato.fasesMataMata,
+            ordemGlobal       = formato.ordemGlobalMataMata,
+            divisaoHallDaFama = divisaoHallDaFama,
+            premioCampeao     = premioCampeao,
+            premioVice        = premioVice,
+            rodadaBase        = formato.rodadaBaseMataMata
         )
-        if (encerrou) registrarCampanhasEuropeias(championsId, anoAtual)
+        if (encerrou) registrarCampanhasEuropeias(campeonatoId, anoAtual, competicao)
         return encerrou
     }
 
     /** Play-off: 9º–24º da Fase de Liga, ida e volta, melhor colocado decide em casa. */
-    private suspend fun gerarPlayoffChampions(championsId: Int) {
+    private suspend fun gerarPlayoffContinental(
+        championsId: Int,
+        formato: MotorCampeonato.FormatoContinental
+    ) {
         // A tabela decide quem passa direto, quem joga o play-off e quem cai, e
         // ainda alimenta o bônus de posição do coeficiente da UEFA. Recalcula das
         // partidas antes de ler, para que uma atualização incremental perdida não
         // vire um chaveamento errado — na Champions não há como corrigir depois.
         recalcularClassificacao(championsId)
         val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
-        val pares = MotorCampeonato.paresPlayoffChampions(classificados)
+        val pares = MotorCampeonato.paresPlayoffChampions(classificados, formato)
         if (pares.isEmpty()) return
         partidaDao.inserirTodas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = championsId,
                 pares             = pares,
-                fase              = MotorCampeonato.CHAMPIONS_FASE_PLAYOFF,
-                rodadaIda         = MotorCampeonato.CHAMPIONS_RODADA_IDA_PLAYOFF,
+                fase              = formato.fasePlayoff,
+                rodadaIda         = formato.rodadaIdaPlayoff,
                 confrontoIdInicio = 1,
-                ordemGlobalIda    = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_PLAYOFF[0],
-                ordemGlobalVolta  = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_PLAYOFF[1]
+                ordemGlobalIda    = formato.ordemGlobalPlayoff[0],
+                ordemGlobalVolta  = formato.ordemGlobalPlayoff[1]
             )
         )
     }
@@ -2824,25 +3066,29 @@ class GameRepository @Inject constructor(
      * o 1º contra o vencedor do último par. Os vencedores saem na ordem dos
      * confrontos do play-off, para o cruzamento ficar estável.
      */
-    private suspend fun gerarOitavasChampions(championsId: Int, partidasPlayoff: List<PartidaEntity>) {
+    private suspend fun gerarOitavasContinental(
+        championsId: Int,
+        partidasPlayoff: List<PartidaEntity>,
+        formato: MotorCampeonato.FormatoContinental
+    ) {
         recalcularClassificacao(championsId)
         val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
         val vencedores = partidasPlayoff
             .groupBy { it.confrontoId }
             .toSortedMap(compareBy { it ?: 0 })
             .mapNotNull { (_, jogos) -> vencedorDoTie(jogos) }
-        if (vencedores.size < MotorCampeonato.CHAMPIONS_CLASSIFICADOS_DIRETO) return
+        if (vencedores.size < formato.classificadosDireto) return
 
-        val pares = MotorCampeonato.paresOitavasChampions(classificados, vencedores)
+        val pares = MotorCampeonato.paresOitavasChampions(classificados, vencedores, formato)
         partidaDao.inserirTodas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = championsId,
                 pares             = pares,
-                fase              = MotorCampeonato.CHAMPIONS_FASES_MATA_MATA.first(),
-                rodadaIda         = MotorCampeonato.rodadaIdaDeFaseChampions(0),
+                fase              = formato.fasesMataMata.first(),
+                rodadaIda         = formato.rodadaIdaDeFaseMataMata(0),
                 confrontoIdInicio = (partidasPlayoff.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
-                ordemGlobalIda    = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA[0],
-                ordemGlobalVolta  = MotorCampeonato.CHAMPIONS_ORDEM_GLOBAL_MATA_MATA[1]
+                ordemGlobalIda    = formato.ordemGlobalMataMata[0],
+                ordemGlobalVolta  = formato.ordemGlobalMataMata[1]
             )
         )
     }
@@ -2886,8 +3132,11 @@ class GameRepository @Inject constructor(
      * Apaga os lançamentos do ano antes de registrar, para reencerrar a mesma
      * temporada não duplicar a pontuação.
      */
-    private suspend fun registrarCampanhasEuropeias(championsId: Int, ano: Int) {
-        val competicao = CompeticaoUefa.CHAMPIONS_LEAGUE
+    private suspend fun registrarCampanhasEuropeias(
+        championsId: Int,
+        ano: Int,
+        competicao: CompeticaoUefa
+    ) {
         rankingEuropaDao.apagarLancamentos(ano, competicao.name)
 
         recalcularClassificacao(championsId)
@@ -2945,6 +3194,30 @@ class GameRepository @Inject constructor(
         timeJogadorId: Int,
         anoAtual: Int,
         temporadaId: Int
+    ) = simularProximaRodadaContinentalSeNecessario(
+        championsId, timeJogadorId, anoAtual, temporadaId
+    ) { verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId) }
+
+    /** O mesmo, para a Europa League. */
+    suspend fun simularProximaRodadaEuropaSeNecessario(
+        europaLeagueId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) = simularProximaRodadaContinentalSeNecessario(
+        europaLeagueId, timeJogadorId, anoAtual, temporadaId
+    ) { verificarEAvancarFaseEuropa(europaLeagueId, anoAtual, timeJogadorId, temporadaId) }
+
+    /**
+     * Corpo comum das duas: a simulação é idêntica — o que muda é só qual máquina
+     * de fases chamar no fim, que vem em [avancarFase].
+     */
+    private suspend fun simularProximaRodadaContinentalSeNecessario(
+        championsId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int,
+        avancarFase: suspend () -> Unit
     ) {
         if (championsId <= 0) return
         val camp = campeonatoDao.buscarPorId(championsId) ?: return
@@ -2963,7 +3236,7 @@ class GameRepository @Inject constructor(
                 simularRodada(championsId, rodada)
             }
         }
-        verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId)
+        avancarFase()
     }
 
     // ── Verifica se fase atual da Copa da Inglaterra (jogo único) acabou e avança ──
@@ -5765,6 +6038,19 @@ class GameRepository @Inject constructor(
     ) {
         partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
         verificarEAvancarFaseChampions(championsId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /** O mesmo para a Europa League, que tem a mesma máquina de fases. */
+    suspend fun persistirResultadoPenaltisJogadorEuropa(
+        resultado: ResultadoPenaltis,
+        europaLeagueId: Int,
+        anoAtual: Int,
+        voltaPartidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseEuropa(europaLeagueId, anoAtual, timeJogadorId, temporadaId)
     }
 
     /** Persiste pênaltis da UI interativa e avança a fase do torneio Argentine (jogo único). */

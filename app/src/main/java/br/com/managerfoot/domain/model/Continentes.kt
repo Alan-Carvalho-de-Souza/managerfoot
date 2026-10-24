@@ -48,7 +48,12 @@ object Continentes {
         "eslovaquia", "eslováquia", "eslovenia", "eslovênia",
         "bosnia", "bósnia", "montenegro", "albania", "albânia",
         "israel", "georgia", "geórgia", "chipre", "finlandia", "finlândia",
-        "islandia", "islândia"
+        "islandia", "islândia",
+        // Liechtenstein nao tem liga propria (seus clubes jogam o campeonato
+        // suico), mas tem vaga direta na Europa League pela copa local — ver
+        // europa_league.md. Sem esta grafia o FC Vaduz cairia em OUTROS e sairia
+        // dos rankings europeus.
+        "liechtenstein"
     )
 
     private val PAISES_AMERICA_DO_NORTE = setOf(

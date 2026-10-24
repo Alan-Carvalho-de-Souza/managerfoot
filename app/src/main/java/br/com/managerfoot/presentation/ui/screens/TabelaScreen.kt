@@ -55,6 +55,7 @@ fun TabelaScreen(
     campeonatoLaLigaId: Int = -1,
     campeonatoSerieAId: Int = -1,
     campeonatoChampionsId: Int = -1,
+    campeonatoEuropaId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -77,7 +78,7 @@ fun TabelaScreen(
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
         campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId
+        campeonatoChampionsId, campeonatoEuropaId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -94,6 +95,7 @@ fun TabelaScreen(
             campLaLigaId = campeonatoLaLigaId,
             campSerieAId = campeonatoSerieAId,
             campChampionsId = campeonatoChampionsId,
+            campEuropaId = campeonatoEuropaId,
             timeJogadorId = timeJogadorId
         )
     }
@@ -133,6 +135,7 @@ fun TabelaScreen(
     // Champions é uma tabela única de 36 clubes (ver regras_championsleague.md).
     val opcoesEuropa = buildList {
         if (campeonatoChampionsId > 0) add(30 to "Champions League")
+        if (campeonatoEuropaId > 0) add(31 to "Europa League")
     }
 
     val paises = buildList {
@@ -153,7 +156,7 @@ fun TabelaScreen(
             in 20..21 -> "Inglaterra"
             22 -> "Espanha"
             23 -> "Italia"
-            30 -> "Europa"
+            30, 31 -> "Europa"
             else -> "Brasil"
         }
     }
@@ -424,7 +427,9 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao >= 13 -> RelegationRed
         else -> null
     }
-    30 -> when {                            // Fase de Liga da Champions (1..36)
+    // As duas competições continentais têm a mesma estrutura de classificação:
+    // 1º–8º direto às oitavas, 9º–24º no play-off, 25º–36º eliminados.
+    30, 31 -> when {                        // Fase de Liga (Champions / Europa League)
         posicao <= 8 -> LibertadoresBlue    // passa direto às oitavas
         posicao <= 24 -> PlayoffOrange      // play-off de acesso às oitavas
         else -> null                        // 25º–36º: eliminados
@@ -476,7 +481,7 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
             PlayoffOrange to "G6 Playoff",
             RelegationRed to "Z2 Rebaixamento"
         )
-        30 -> listOf(
+        30, 31 -> listOf(
             LibertadoresBlue to "G8 Oitavas",
             PlayoffOrange to "9º–24º Play-off"
         )
