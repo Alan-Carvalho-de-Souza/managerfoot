@@ -2444,6 +2444,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoLaLigaId: Int = -1
     private var campeonatoSerieAId: Int = -1
     private var campeonatoAmistososId: Int = -1
+    private var championsId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -2451,7 +2452,7 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, campChampionsId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2472,6 +2473,7 @@ class ArtilheirosViewModel @Inject constructor(
         campeonatoLaLigaId = campLaLigaId
         campeonatoSerieAId = campSerieAId
         campeonatoAmistososId = campAmistosos
+        championsId = campChampionsId
         _divisaoSelecionada.value = divisaoInicial
         coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
@@ -2500,6 +2502,7 @@ class ArtilheirosViewModel @Inject constructor(
         32 -> campeonatoLaLigaId
         33 -> copaInglaterraId
         34 -> campeonatoSerieAId
+        35 -> championsId   // Champions League (Fase de Liga + mata-mata)
         else -> -1 // div=6,25,26 (combinados) e div=0,100,200,300 (todos) tratados em coletarArtilheiros
     }
 
@@ -2511,6 +2514,9 @@ class ArtilheirosViewModel @Inject constructor(
         30, 31, 33          -> "Inglaterra"
         32                  -> "Espanha"
         34                  -> "Italia"
+        // A Champions nao pertence a um pais: o campeonato e gravado com
+        // pais = Continentes.EUROPA, e e por isso que o historico casa aqui.
+        35                  -> Continentes.EUROPA
         else                -> null
     }
 
@@ -2530,6 +2536,7 @@ class ArtilheirosViewModel @Inject constructor(
         32          -> listOf("NACIONAL_DIVISAO1")    // La Liga
         33          -> listOf("COPA_NACIONAL")        // Copa da Inglaterra
         34          -> listOf("NACIONAL_DIVISAO1")    // Serie A italiana
+        35          -> listOf("CONTINENTAL")          // Champions League
         else -> emptyList()
     }
 
@@ -2542,7 +2549,8 @@ class ArtilheirosViewModel @Inject constructor(
                            campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
                            campeonatoUruBId, campeonatoUruBCompetId,
                            campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId,
-                           campeonatoSerieAId, copaInglaterraId, campeonatoAmistososId).filter { it > 0 }
+                           campeonatoSerieAId, copaInglaterraId, campeonatoAmistososId,
+                           championsId).filter { it > 0 }
             // Combinados por país
             100  -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId).filter { it > 0 }
             200  -> listOf(campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, copaArgId).filter { it > 0 }

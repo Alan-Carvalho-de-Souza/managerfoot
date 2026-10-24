@@ -557,6 +557,98 @@ object MotorCampeonato {
     //  as suas partidas pontuam por jogo como qualquer outra.
     // ══════════════════════════════════════════════════════════════
 
+    /**
+     * Parâmetros de uma competição continental de Fase de Liga + mata-mata.
+     *
+     * Extraído porque Champions e Europa League têm a MESMA estrutura — 36 clubes,
+     * 8 jogos, 1º–8º direto às oitavas, 9º–24º no play-off, 25º–36º eliminados — e
+     * só diferem na lista de acesso e nas casas do calendário. Ver
+     * regras_championsleague.md e europa_league.md.
+     */
+    data class FormatoContinental(
+        val nome: String,
+        /** Rodadas da Fase de Liga: 8 jogos por clube. */
+        val rodadasLiga: Int,
+        /**
+         * Deslocamento das rodadas do mata-mata. A Fase de Liga ocupa as rodadas
+         * 1..8 (até 12 na folga do fallback de distribuição), então o play-off
+         * começa em base−1 e as oitavas em base+1, longe de qualquer colisão.
+         */
+        val rodadaBaseMataMata: Int,
+        val fasePlayoff: String,
+        val fasesMataMata: List<String>,
+        /** Clubes que vão direto às oitavas; os seguintes disputam o play-off. */
+        val classificadosDireto: Int,
+        val ultimoDoPlayoff: Int,
+        val ordemGlobalLiga: IntArray,
+        val ordemGlobalPlayoff: IntArray,
+        val ordemGlobalMataMata: IntArray
+    ) {
+        /** Todas as fases nomeadas, na ordem — usada pelo chaveamento na UI. */
+        val fases: List<String> get() = listOf(fasePlayoff) + fasesMataMata
+
+        /** Última rodada do torneio: a volta da final. */
+        val totalRodadas: Int get() = rodadaBaseMataMata + 8
+
+        /** Rodada de ida do play-off, imediatamente antes das oitavas. */
+        val rodadaIdaPlayoff: Int get() = rodadaBaseMataMata - 1
+
+        /**
+         * ordemGlobal de uma rodada da Fase de Liga. Rodadas além da última só
+         * existem no fallback de [distribuirRodadasFaseLiga] e entram em seguida.
+         */
+        fun ordemGlobalDaRodadaLiga(rodada: Int): Int =
+            ordemGlobalLiga.getOrElse(rodada - 1) {
+                ordemGlobalLiga.last() + (rodada - rodadasLiga) * 2
+            }
+
+        /** rodadaIda de uma fase do mata-mata (0 = Oitavas). */
+        fun rodadaIdaDeFaseMataMata(faseIndex: Int): Int =
+            rodadaBaseMataMata + rodadaIdaDeFase(faseIndex)
+    }
+
+    /**
+     * A Champions joga no meio de semana, encaixada entre as rodadas das ligas
+     * nacionais (que usam ordemGlobal = rodada*10, de 10 a 380).
+     */
+    val FORMATO_CHAMPIONS = FormatoContinental(
+        nome                = "Champions League",
+        rodadasLiga         = 8,
+        rodadaBaseMataMata  = 20,
+        fasePlayoff         = "Play-off",
+        fasesMataMata       = listOf("Oitavas", "Quartas", "Semi", "Final"),
+        classificadosDireto = 8,
+        ultimoDoPlayoff     = 24,
+        //   R1 após liga R2 (27), R2 após R6 (67), R3 após R10 (107) ...
+        ordemGlobalLiga     = intArrayOf(27, 67, 107, 147, 187, 227, 257, 287),
+        ordemGlobalPlayoff  = intArrayOf(303, 307),
+        //   Oitavas 313/317, Quartas 323/327, Semi 343/347, Final 363/373
+        ordemGlobalMataMata = intArrayOf(313, 317, 323, 327, 343, 347, 363, 373)
+    )
+
+    /**
+     * A Europa League joga um dia depois da Champions, como no calendário real:
+     * cada casa de ordemGlobal é a da Champions + 1. Isso evita colisão com a
+     * Champions e com as ligas nacionais, cujas rodadas são múltiplos de 10.
+     *
+     * A base de rodada do mata-mata é 40 (contra 20 da Champions) para que as duas
+     * competições nunca compartilhem número de rodada — a tela de Rodadas e o
+     * avanço de fase indexam por rodada dentro do campeonato, e manter as faixas
+     * separadas evita confusão ao depurar dois torneios na mesma temporada.
+     */
+    val FORMATO_EUROPA_LEAGUE = FormatoContinental(
+        nome                = "Europa League",
+        rodadasLiga         = 8,
+        rodadaBaseMataMata  = 40,
+        fasePlayoff         = "Play-off",
+        fasesMataMata       = listOf("Oitavas", "Quartas", "Semi", "Final"),
+        classificadosDireto = 8,
+        ultimoDoPlayoff     = 24,
+        ordemGlobalLiga     = intArrayOf(28, 68, 108, 148, 188, 228, 258, 288),
+        ordemGlobalPlayoff  = intArrayOf(304, 308),
+        ordemGlobalMataMata = intArrayOf(314, 318, 324, 328, 344, 348, 364, 374)
+    )
+
     /** Rodadas da Fase de Liga: 8 jogos por clube. */
     const val CHAMPIONS_RODADAS_LIGA = 8
 

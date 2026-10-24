@@ -52,6 +52,27 @@ clubes de ligas menores.
 | Via qualificação | **8** |
 | **Total** | **36** |
 
+### Quem pega as vagas de cada país
+
+**A colocação na liga nacional manda.** Para os países que têm liga completa no jogo —
+Inglaterra, Espanha e Itália — as vagas vão para os primeiros colocados do campeonato da
+temporada que encerra: os 5 melhores da Premier, os 5 da LaLiga e os 4 da Serie A. É a
+tabela final que classifica, não reputação nem coeficiente.
+
+Os clubes do **pool estrangeiro** (Alemanha, França, Holanda, Portugal, Bélgica, Tchéquia,
+Turquia, Ucrânia) não disputam liga própria, então para eles não existe colocação: decide o
+coeficiente da UEFA, com a reputação desempatando. Vale o mesmo para a **primeira
+temporada** de qualquer país, quando ainda não houve campeonato encerrado — aí a reputação
+do seed decide sozinha.
+
+Um clube com colocação sempre vem antes de um sem. Dentro de um país isso nunca mistura os
+dois; na fila da qualificação, significa que um 6º colocado da Premier passa à frente de um
+clube de pool que não tem campanha nenhuma.
+
+> **Simplificação.** O enunciado dá 4 das 5 vagas inglesas "pela liga" e 1 "pelo desempenho
+> geral do país na temporada anterior". Aqui as 5 saem da tabela, porque o jogo não tem o
+> ranking de associações que distribui essa vaga extra.
+
 ---
 
 ## 2. O sorteio — modelo híbrido
