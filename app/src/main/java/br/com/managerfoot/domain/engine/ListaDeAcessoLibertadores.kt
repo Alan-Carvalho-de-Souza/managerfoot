@@ -24,7 +24,14 @@ enum class PortaDaLibertadores {
     /** Pela Pré-Libertadores, as três fases eliminatórias prévias. */
     PRE_LIBERTADORES,
     /** Campeão vigente da Libertadores ou da Copa Sul-Americana. */
-    CAMPEAO_VIGENTE
+    CAMPEAO_VIGENTE,
+    /**
+     * Vaga que o país reserva, dentro da sua cota, ao detentor de um título — não
+     * à colocação na liga. Qual título é varia por associação: o Brasil reserva
+     * uma das suas vagas ao campeão da Libertadores e a Argentina reserva uma das
+     * suas ao campeão da Copa Argentina.
+     */
+    VAGA_DE_TITULO
 }
 
 data class VagaLibertadores(
@@ -188,6 +195,12 @@ object ListaDeAcessoLibertadores {
         campeaoLibertadores: Int? = null,
         campeaoSulAmericana: Int? = null,
         /**
+         * Detentor da vaga de título de cada país, por rótulo canônico. É uma vaga
+         * DENTRO da cota do país, e não uma vaga extra: ela sai da conta das vagas
+         * de grupo daquela associação. Vazio deixa a cota inteira para a liga.
+         */
+        vagasDeTitulo: Map<String, Int> = emptyMap(),
+        /**
          * Quando true, as vagas de campeão vigente que não têm titular descem para
          * os próximos colocados, de modo que a fase de grupos feche os 32. Ver o
          * bloco no fim desta função.
@@ -211,14 +224,31 @@ object ListaDeAcessoLibertadores {
         // ── Vagas nacionais, país por país ──────────────────────────────
         val cotas = cotasEfetivas(porPais.keys)
         for ((pais, cota) in cotas) {
+            // ── Porta 1: a vaga de título do país ───────────────────────
+            // Sai da cota de GRUPOS daquele país, não é uma vaga extra. Se o
+            // detentor não existe, não é daquele país ou já entrou por outra
+            // porta, a vaga DESCE para o colocado seguinte da liga — é a mesma
+            // regra de queda que a Europa League usa para o campeão da copa.
+            var vagasDeGrupoUsadas = 0
+            val detentorDoTitulo = vagasDeTitulo[pais]
+                ?.let { id -> porPais[pais].orEmpty().firstOrNull { it.timeId == id } }
+                ?.takeIf { it.timeId !in escolhidos }
+            if (detentorDoTitulo != null && cota.grupos > 0) {
+                vagas += VagaLibertadores(detentorDoTitulo, PortaDaLibertadores.VAGA_DE_TITULO)
+                escolhidos += detentorDoTitulo.timeId
+                vagasDeGrupoUsadas++
+            }
+
+            // ── Porta 2: a colocação na liga nacional ───────────────────
+            // A fila já está na ordem de preferência, então os melhores pegam as
+            // vagas diretas e os seguintes vão à Pré-Libertadores.
             val fila = porPais[pais].orEmpty().filter { it.timeId !in escolhidos }
-            // Primeiro as vagas de grupo, depois as da Pré — a fila já está na
-            // ordem de preferência, então os melhores pegam as vagas diretas.
-            fila.take(cota.grupos).forEach {
+            val vagasDeGrupoRestantes = cota.grupos - vagasDeGrupoUsadas
+            fila.take(vagasDeGrupoRestantes).forEach {
                 vagas += VagaLibertadores(it, PortaDaLibertadores.GRUPOS)
                 escolhidos += it.timeId
             }
-            fila.drop(cota.grupos).take(cota.pre).forEach {
+            fila.drop(vagasDeGrupoRestantes).take(cota.pre).forEach {
                 vagas += VagaLibertadores(it, PortaDaLibertadores.PRE_LIBERTADORES)
                 escolhidos += it.timeId
             }
@@ -239,6 +269,7 @@ object ListaDeAcessoLibertadores {
         else CLUBES_NA_FASE_DE_GRUPOS - SOBREVIVENTES_DA_PRE -
             vagas.count {
                 it.porta == PortaDaLibertadores.GRUPOS ||
+                    it.porta == PortaDaLibertadores.VAGA_DE_TITULO ||
                     it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE
             }
         if (faltamNosGrupos > 0) {
@@ -254,10 +285,14 @@ object ListaDeAcessoLibertadores {
         return vagas
     }
 
-    /** Os clubes que entram direto na fase de grupos (nacionais + campeões). */
+    /**
+     * Os clubes que entram direto na fase de grupos: os da cota de liga, os
+     * detentores das vagas de título e os campeões vigentes.
+     */
     fun diretosNosGrupos(vagas: List<VagaLibertadores>): List<CandidatoLibertadores> =
         vagas.filter {
             it.porta == PortaDaLibertadores.GRUPOS ||
+                it.porta == PortaDaLibertadores.VAGA_DE_TITULO ||
                 it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE
         }.map { it.candidato }
 

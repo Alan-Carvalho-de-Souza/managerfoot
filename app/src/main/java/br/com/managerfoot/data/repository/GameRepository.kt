@@ -7202,18 +7202,73 @@ class GameRepository @Inject constructor(
         temporadaAnteriorId: Int = -1
     ): List<VagaLibertadores> {
         val candidatos = candidatosSulAmericanos(anoAtual, temporadaAnteriorId)
+        val campeaoLibertadores = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES)
+        val vagasDeTitulo = vagasDeTituloPorPais(candidatos, anoAtual, campeaoLibertadores)
+
+        // O campeão da Libertadores entra pela vaga de título do Brasil quando é
+        // brasileiro; nesse caso NÃO recebe também a vaga estrutural de campeão
+        // vigente, senão ocuparia duas. Sendo de outro país, a vaga de título do
+        // Brasil desce para o Brasileirão e ele entra pela vaga estrutural — que é
+        // o que garante que o campeão vigente sempre disputa a edição seguinte.
+        val campeaoEntraPelaVagaDoBrasil =
+            campeaoLibertadores != null && vagasDeTitulo[PAIS_BRASIL] == campeaoLibertadores
+
         return ListaDeAcessoLibertadores.montar(
             candidatos          = candidatos,
-            campeaoLibertadores = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES),
+            campeaoLibertadores = if (campeaoEntraPelaVagaDoBrasil) null else campeaoLibertadores,
             // A Copa Sul-Americana ainda não existe no jogo. Quando existir, basta
             // o seu código de Hall da Fama entrar aqui: a lista de acesso já trata
             // a vaga do campeão vigente dela, inclusive a regra de queda.
             campeaoSulAmericana = null,
+            vagasDeTitulo       = vagasDeTitulo,
             // Fecha os 32 dos grupos: as vagas de campeao vigente sem titular descem
             // para os proximos colocados. Sem isso a primeira temporada, que nao tem
             // campeao vigente nenhum, teria 30 clubes nos grupos em vez de 32.
             fecharFaseDeGrupos  = true
         )
+    }
+
+    /** Rótulos canônicos dos países que reservam uma vaga a um detentor de título. */
+    private val PAIS_BRASIL    = "Brasil"
+    private val PAIS_ARGENTINA = "Argentina"
+
+    /** Código de divisão da Copa Argentina no Hall da Fama. */
+    private val DIVISAO_HALL_COPA_ARGENTINA = 9
+
+    /**
+     * O detentor da vaga de título de cada país, para a edição de [anoAtual].
+     *
+     * Duas associações reservam uma das suas vagas a um título em vez de à
+     * colocação na liga:
+     *
+     *  - **Brasil** → campeão da **Libertadores** da temporada que encerrou.
+     *  - **Argentina** → campeão da **Copa Argentina** da temporada que encerrou.
+     *
+     * O Uruguai não reserva nenhuma: as quatro vagas dele saem todas da liga.
+     *
+     * Um detentor só é considerado se for clube do próprio país e estiver entre os
+     * candidatos — não faz sentido dar uma vaga brasileira a um campeão argentino.
+     * Fora isso a vaga desce para o colocado seguinte da liga, o que é o que
+     * acontece em toda primeira temporada, quando nenhum título foi decidido ainda.
+     */
+    private suspend fun vagasDeTituloPorPais(
+        candidatos: List<CandidatoLibertadores>,
+        anoAtual: Int,
+        campeaoLibertadores: Int?
+    ): Map<String, Int> {
+        val paisPorTime = candidatos.associate { it.timeId to it.pais }
+        val vagas = HashMap<String, Int>()
+
+        fun reservar(pais: String, timeId: Int?) {
+            if (timeId == null) return
+            // O clube tem de ser do país que está reservando a vaga.
+            if (paisPorTime[timeId] != pais) return
+            vagas[pais] = timeId
+        }
+
+        reservar(PAIS_BRASIL, campeaoLibertadores)
+        reservar(PAIS_ARGENTINA, campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_COPA_ARGENTINA))
+        return vagas
     }
 
     /** Campeão vigente registrado no Hall da Fama, ou null na primeira temporada. */
@@ -7264,15 +7319,32 @@ class GameRepository @Inject constructor(
         setOf(1, 5, 9) + RankingEuropa.DIVISOES_POOL
 
     /**
-     * Colocação final de cada clube nas primeiras divisões sul-americanas da
-     * temporada que encerra. É o que decide quem vai à Libertadores seguinte.
+     * Colocação de cada clube na TABELA ANUAL do seu país, na temporada que
+     * encerra. É o que decide quem vai à Libertadores seguinte: são os
+     * campeonatos nacionais do Brasil, da Argentina e do Uruguai que concedem as
+     * vagas.
      *
-     * Argentina e Uruguai têm mais de um torneio de primeira divisão por
-     * temporada (Apertura, Clausura, Intermediário), então vale a MELHOR
-     * colocação do clube entre eles.
+     * A tabela anual é construída somando os pontos de TODOS os torneios de
+     * primeira divisão daquele país na temporada, e não olhando um só:
      *
-     * Devolve um mapa vazio no primeiro ano de jogo, e aí a lista de acesso cai
-     * no coeficiente e na reputação.
+     *  - **Brasil** tem um torneio só, o Brasileirão Série A, então a tabela anual
+     *    é a tabela dele.
+     *  - **Argentina** tem Apertura e Clausura; é a soma dos dois, que é como a
+     *    Tabla Anual argentina distribui as vagas de verdade.
+     *  - **Uruguai** tem Apertura, Intermediário e Clausura, e a soma dos três é a
+     *    tabela anual dele.
+     *
+     * Somar é melhor que pegar a melhor colocação entre os torneios: quem foi
+     * regular o ano todo passa à frente de quem fez um torneio bom e um ruim, que
+     * é o que a classificação anual existe para medir.
+     *
+     * Duas aproximações ficam registradas. A fase de mata-mata dos torneios
+     * argentino e uruguaio não entra, então o campeão deles não sobe por ter
+     * vencido a final — vale o que somou nos pontos. E a soma mistura torneios de
+     * tamanhos diferentes, o que dá mais peso aos mais longos.
+     *
+     * Devolve um mapa vazio no primeiro ano de jogo, quando nenhum campeonato
+     * encerrou ainda, e aí a lista de acesso cai no coeficiente e na reputação.
      */
     private suspend fun posicoesFinaisDasLigasSulAmericanas(temporadaId: Int): Map<Int, Int> {
         if (temporadaId <= 0) return emptyMap()
@@ -7281,16 +7353,49 @@ class GameRepository @Inject constructor(
                 camp.tipo == TipoCampeonato.EXTRANGEIRO_DIVISAO1
             ehPrimeira && Continentes.ehAmericaDoSul(camp.pais)
         }
-        val posicoes = HashMap<Int, Int>()
+
+        // Acumula a campanha do ano de cada clube, agrupada pelo país do torneio:
+        // a tabela anual é por associação, e a vaga que ela concede também.
+        val porPais = HashMap<String, HashMap<Int, CampanhaAnual>>()
         for (liga in ligas) {
-            classificacaoDao.buscarTabelaOrdenada(liga.id).forEachIndexed { indice, linha ->
-                val posicao = indice + 1
-                val atual = posicoes[linha.timeId]
-                if (atual == null || posicao < atual) posicoes[linha.timeId] = posicao
+            val doPais = porPais.getOrPut(liga.pais.trim().lowercase()) { HashMap() }
+            for (linha in classificacaoDao.buscarTabelaOrdenada(liga.id)) {
+                val atual = doPais[linha.timeId] ?: CampanhaAnual()
+                doPais[linha.timeId] = atual.somar(linha)
             }
+        }
+
+        val posicoes = HashMap<Int, Int>()
+        for (tabelaDoPais in porPais.values) {
+            tabelaDoPais.entries
+                .sortedWith(ORDEM_TABELA_ANUAL)
+                .forEachIndexed { indice, (timeId, _) -> posicoes[timeId] = indice + 1 }
         }
         return posicoes
     }
+
+    /** Campanha somada de um clube nos torneios de primeira divisão do seu país. */
+    private data class CampanhaAnual(
+        val pontos: Int = 0,
+        val vitorias: Int = 0,
+        val saldoGols: Int = 0,
+        val golsPro: Int = 0
+    ) {
+        fun somar(linha: ClassificacaoEntity) = CampanhaAnual(
+            pontos    = pontos + linha.pontos,
+            vitorias  = vitorias + linha.vitorias,
+            saldoGols = saldoGols + linha.saldoGols,
+            golsPro   = golsPro + linha.golsPro
+        )
+    }
+
+    /** Os mesmos critérios de desempate das tabelas do jogo. */
+    private val ORDEM_TABELA_ANUAL =
+        compareByDescending<Map.Entry<Int, CampanhaAnual>> { it.value.pontos }
+            .thenByDescending { it.value.vitorias }
+            .thenByDescending { it.value.saldoGols }
+            .thenByDescending { it.value.golsPro }
+            .thenBy { it.key }
 
     /**
      * Cria a Libertadores de uma temporada, ou devolve -1 quando a lista de

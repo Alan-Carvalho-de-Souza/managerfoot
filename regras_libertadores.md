@@ -48,6 +48,10 @@ Libertadores vale 14 pontos, o mesmo peso da Champions.
 | Venezuela | 4 | 2 | 2 |
 | **Soma** | **45** | **26** | **19** |
 
+> **No jogo**, o Brasil reserva uma das suas vagas ao campeão da Libertadores e a
+> Argentina reserva uma das suas ao campeão da Copa Argentina — vagas de título
+> dentro da cota do país, não extras. Ver "A fiação", mais abaixo.
+
 **Vagas extras:** os campeões vigentes da **Libertadores** e da **Copa Sul-Americana**
 entram direto na fase de grupos da edição seguinte, independentemente do que fizeram na
 liga local. Isso pode aumentar temporariamente a representação do país deles.
@@ -188,6 +192,32 @@ mesmo padrão do play-off → oitavas da Champions. O rótulo de
 até o sorteio, e depois dele passa a ser o grupo A..H; é o que distingue, na Fase
 2, os 13 que entram direto dos 3 que vêm da Fase 1, sem tabela nova nem migração.
 
+**Quem concede as vagas são os campeonatos nacionais.** A classificação sai da
+**tabela anual** de cada país, somando os pontos de todos os torneios de primeira
+divisão daquela associação na temporada que encerrou: no Brasil é a tabela do
+Brasileirão Série A; na Argentina, Apertura + Clausura, como a Tabla Anual
+distribui as vagas de verdade; no Uruguai, Apertura + Intermediário + Clausura.
+Somar é melhor que pegar a melhor colocação entre os torneios, porque é a
+regularidade no ano que a classificação anual existe para medir.
+
+Duas associações reservam **uma das suas vagas a um título**, e não à colocação:
+o **Brasil** ao campeão da **Libertadores** e a **Argentina** ao campeão da **Copa
+Argentina**. O Uruguai não reserva nenhuma. A vaga sai da cota de grupos daquele
+país — não é uma vaga extra —, e quando o detentor não existe, não é clube daquele
+país ou já entrou por outra porta, ela **desce para o colocado seguinte** da liga.
+É a porta `VAGA_DE_TITULO`, no mesmo molde da vaga de copa da Europa League.
+
+Quando o campeão da Libertadores é brasileiro ele entra pela vaga de título do
+Brasil e **não** recebe também a vaga estrutural de campeão vigente, senão ocuparia
+duas. Sendo de outro país, a vaga do Brasil desce para o Brasileirão e ele entra
+pela estrutural — que é o que garante que o campeão vigente sempre disputa a
+edição seguinte.
+
+Na **primeira temporada** nenhum campeonato encerrou e nenhum título foi decidido,
+então não há tabela anual nem detentores: a lista de acesso cai no coeficiente e na
+reputação, e as vagas de título descem todas para a liga. Da segunda em diante são
+os campeonatos nacionais que mandam.
+
 **As duas vagas de campeão vigente**, que o documento chama de estruturais,
 ganharam a regra de queda que faltava: quando não têm titular — na primeira
 temporada não houve Libertadores, e a Copa Sul-Americana não existe no jogo — elas
@@ -226,6 +256,14 @@ sem que a Libertadores tenha gravado nada em lugar nenhum.
 "Libertadores". **Telas:** Rodadas (grupos e mata-mata), Classificação (8 tabelas
 de 4, pelo filtro de grupo que o `ClassificacaoDao` já tinha), Artilharia e
 Chaveamento. **Migração de banco: nenhuma.**
+
+### Aproximações registradas na distribuição de vagas
+
+1. **A fase de mata-mata dos torneios argentino e uruguaio não entra na tabela
+   anual.** O campeão deles não sobe por ter vencido a final: vale o que somou de
+   pontos na fase de grupos.
+2. **A soma mistura torneios de tamanhos diferentes**, o que dá mais peso aos mais
+   longos — no Uruguai, Apertura e Clausura pesam mais que o Intermediário.
 
 ## O que ainda falta
 

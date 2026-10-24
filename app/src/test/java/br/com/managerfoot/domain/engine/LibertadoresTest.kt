@@ -791,4 +791,198 @@ class LibertadoresTest {
         // E a fase de grupos nem passa por aqui: ela não tem nome de fase.
         assertTrue(formato.fasesMataMata.none { it == "" })
     }
+
+    // ── As vagas de título dentro da cota de cada país ───────────────────
+    //
+    // Os campeonatos nacionais concedem as vagas, mas duas associações reservam
+    // uma das suas a um título em vez de à colocação na liga: o Brasil ao campeão
+    // da Libertadores e a Argentina ao campeão da Copa Argentina. A vaga sai da
+    // cota do país — não é uma vaga extra — e desce para o colocado seguinte da
+    // liga quando o detentor não existe ou já entrou por outra porta.
+
+    /** Quantos clubes de [pais] entraram, e por qual porta. */
+    private fun porPortaDoPais(vagas: List<VagaLibertadores>, pais: String) =
+        vagas.filter { it.candidato.pais == pais }.groupBy { it.porta }
+
+    @Test
+    fun `a vaga de titulo do brasil vai ao campeao da libertadores`() {
+        val todos = candidatos()
+        // Um brasileiro que NÃO se classificaria pela liga: 30º do Brasileirão.
+        val campeao = todos.first { it.pais == "Brasil" && it.posicaoLiga == 30 }
+
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Brasil" to campeao.timeId),
+            fecharFaseDeGrupos = true
+        )
+        val doBrasil = porPortaDoPais(vagas, "Brasil")
+
+        // Ele entrou, e entrou pela porta do título.
+        assertEquals(
+            listOf(campeao.timeId),
+            doBrasil[PortaDaLibertadores.VAGA_DE_TITULO]?.map { it.candidato.timeId }
+        )
+        // E direto na fase de grupos, não na Pré.
+        assertTrue(acesso.diretosNosGrupos(vagas).any { it.timeId == campeao.timeId })
+        assertTrue(acesso.naPreLibertadores(vagas).none { it.timeId == campeao.timeId })
+    }
+
+    @Test
+    fun `a vaga de titulo sai da cota do pais, nao e uma vaga extra`() {
+        val todos = candidatos()
+        val campeao = todos.first { it.pais == "Brasil" && it.posicaoLiga == 30 }
+
+        val semTitulo = acesso.montar(todos, fecharFaseDeGrupos = true)
+        val comTitulo = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Brasil" to campeao.timeId),
+            fecharFaseDeGrupos = true
+        )
+
+        // O Brasil entra com o MESMO número de clubes nos grupos nas duas
+        // montagens: a vaga do título ocupou o lugar de um classificado da liga.
+        fun brasileirosNosGrupos(vagas: List<VagaLibertadores>) =
+            acesso.diretosNosGrupos(vagas).count { it.pais == "Brasil" }
+        assertEquals(brasileirosNosGrupos(semTitulo), brasileirosNosGrupos(comTitulo))
+
+        // E o total continua fechando os 32.
+        assertEquals(
+            acesso.CLUBES_NA_FASE_DE_GRUPOS - acesso.SOBREVIVENTES_DA_PRE,
+            acesso.diretosNosGrupos(comTitulo).size
+        )
+
+        // Quem perdeu a vaga foi o ÚLTIMO classificado de grupo do Brasil, e não
+        // o primeiro: a cota encurta por baixo.
+        val gruposSemTitulo = semTitulo
+            .filter { it.candidato.pais == "Brasil" && it.porta == PortaDaLibertadores.GRUPOS }
+            .map { it.candidato.posicaoLiga }
+        val gruposComTitulo = comTitulo
+            .filter { it.candidato.pais == "Brasil" && it.porta == PortaDaLibertadores.GRUPOS }
+            .map { it.candidato.posicaoLiga }
+        assertEquals(gruposSemTitulo.size - 1, gruposComTitulo.size)
+        assertEquals(gruposSemTitulo.dropLast(1), gruposComTitulo)
+    }
+
+    @Test
+    fun `a argentina reserva uma vaga ao campeao da copa argentina`() {
+        val todos = candidatos()
+        val campeaoCopa = todos.first { it.pais == "Argentina" && it.posicaoLiga == 25 }
+
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Argentina" to campeaoCopa.timeId),
+            fecharFaseDeGrupos = true
+        )
+        assertEquals(
+            listOf(campeaoCopa.timeId),
+            porPortaDoPais(vagas, "Argentina")[PortaDaLibertadores.VAGA_DE_TITULO]
+                ?.map { it.candidato.timeId }
+        )
+        // A vaga é da Argentina: nenhum outro país ganhou vaga de título.
+        assertEquals(1, vagas.count { it.porta == PortaDaLibertadores.VAGA_DE_TITULO })
+    }
+
+    @Test
+    fun `o uruguai nao reserva vaga de titulo, tudo sai da liga`() {
+        val vagas = acesso.montar(
+            candidatos(),
+            vagasDeTitulo      = mapOf("Brasil" to 1, "Argentina" to 41),
+            fecharFaseDeGrupos = true
+        )
+        assertTrue(
+            "o Uruguai nao devia ter vaga de titulo",
+            porPortaDoPais(vagas, "Uruguai")[PortaDaLibertadores.VAGA_DE_TITULO] == null
+        )
+    }
+
+    @Test
+    fun `as duas vagas de titulo convivem, uma por pais`() {
+        val todos = candidatos()
+        val campeaoLib = todos.first { it.pais == "Brasil" && it.posicaoLiga == 30 }
+        val campeaoCopa = todos.first { it.pais == "Argentina" && it.posicaoLiga == 25 }
+
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo = mapOf(
+                "Brasil" to campeaoLib.timeId,
+                "Argentina" to campeaoCopa.timeId
+            ),
+            fecharFaseDeGrupos = true
+        )
+        val titulos = vagas.filter { it.porta == PortaDaLibertadores.VAGA_DE_TITULO }
+        assertEquals(2, titulos.size)
+        assertEquals(
+            setOf(campeaoLib.timeId, campeaoCopa.timeId),
+            titulos.map { it.candidato.timeId }.toSet()
+        )
+        // Um por país.
+        assertEquals(2, titulos.map { it.candidato.pais }.distinct().size)
+        // E os grupos continuam fechando.
+        assertEquals(
+            acesso.CLUBES_NA_FASE_DE_GRUPOS - acesso.SOBREVIVENTES_DA_PRE,
+            acesso.diretosNosGrupos(vagas).size
+        )
+    }
+
+    @Test
+    fun `detentor que ja se classificou pela liga nao ocupa duas vagas`() {
+        val todos = candidatos()
+        // O campeão é o 1º do Brasileirão: entraria pela liga de qualquer jeito.
+        val campeao = todos.first { it.pais == "Brasil" && it.posicaoLiga == 1 }
+
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Brasil" to campeao.timeId),
+            fecharFaseDeGrupos = true
+        )
+        // Aparece uma vez só.
+        assertEquals(1, vagas.count { it.candidato.timeId == campeao.timeId })
+        // Pela porta do título, que é avaliada antes da liga.
+        assertEquals(
+            PortaDaLibertadores.VAGA_DE_TITULO,
+            vagas.first { it.candidato.timeId == campeao.timeId }.porta
+        )
+        // E a vaga de liga que ele deixou de ocupar desceu: o Brasil entra com o
+        // mesmo número de clubes de uma montagem sem vaga de título.
+        val semTitulo = acesso.montar(todos, fecharFaseDeGrupos = true)
+        assertEquals(
+            acesso.diretosNosGrupos(semTitulo).count { it.pais == "Brasil" },
+            acesso.diretosNosGrupos(vagas).count { it.pais == "Brasil" }
+        )
+    }
+
+    @Test
+    fun `sem detentor a vaga de titulo desce para a liga`() {
+        val todos = candidatos()
+        // Primeira temporada: nenhum título decidido ainda.
+        val semDetentor = acesso.montar(todos, fecharFaseDeGrupos = true)
+        // Um detentor que não existe entre os candidatos não muda nada.
+        val comDetentorInexistente = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Brasil" to 999_999),
+            fecharFaseDeGrupos = true
+        )
+        assertTrue(comDetentorInexistente.none { it.porta == PortaDaLibertadores.VAGA_DE_TITULO })
+        assertEquals(
+            semDetentor.map { it.candidato.timeId to it.porta },
+            comDetentorInexistente.map { it.candidato.timeId to it.porta }
+        )
+    }
+
+    @Test
+    fun `a vaga de titulo do brasil nao vai para um clube de outro pais`() {
+        val todos = candidatos()
+        val argentino = todos.first { it.pais == "Argentina" && it.posicaoLiga == 25 }
+        // montar recebe o detentor sob a chave "Brasil", mas o clube e argentino:
+        // a vaga so vale para clube do proprio pais, entao ela nao e concedida.
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo      = mapOf("Brasil" to argentino.timeId),
+            fecharFaseDeGrupos = true
+        )
+        assertTrue(
+            "a vaga do Brasil nao podia ir a um argentino",
+            porPortaDoPais(vagas, "Brasil")[PortaDaLibertadores.VAGA_DE_TITULO] == null
+        )
+    }
 }
