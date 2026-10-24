@@ -56,6 +56,7 @@ fun TabelaScreen(
     campeonatoSerieAId: Int = -1,
     campeonatoChampionsId: Int = -1,
     campeonatoEuropaId: Int = -1,
+    campeonatoLibertadoresId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -78,7 +79,7 @@ fun TabelaScreen(
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
         campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId, campeonatoEuropaId
+        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -96,6 +97,7 @@ fun TabelaScreen(
             campSerieAId = campeonatoSerieAId,
             campChampionsId = campeonatoChampionsId,
             campEuropaId = campeonatoEuropaId,
+            campLibertadoresId = campeonatoLibertadoresId,
             timeJogadorId = timeJogadorId
         )
     }
@@ -137,6 +139,11 @@ fun TabelaScreen(
         if (campeonatoChampionsId > 0) add(30 to "Champions League")
         if (campeonatoEuropaId > 0) add(31 to "Europa League")
     }
+    // A Libertadores manteve o formato tradicional: a classificação dela são 8
+    // tabelas de 4, não uma tabela única (ver regras_libertadores.md).
+    val opcoesAmericaDoSul = buildList {
+        if (campeonatoLibertadoresId > 0) add(40 to "Libertadores")
+    }
 
     val paises = buildList {
         if (opcoesBrasil.isNotEmpty()) add("Brasil")
@@ -146,6 +153,7 @@ fun TabelaScreen(
         if (opcoesEspanha.isNotEmpty()) add("Espanha")
         if (opcoesItalia.isNotEmpty()) add("Italia")
         if (opcoesEuropa.isNotEmpty()) add("Europa")
+        if (opcoesAmericaDoSul.isNotEmpty()) add("América do Sul")
     }
 
     // País selecionado: derivado da divisão atual
@@ -157,6 +165,7 @@ fun TabelaScreen(
             22 -> "Espanha"
             23 -> "Italia"
             30, 31 -> "Europa"
+            40 -> "América do Sul"
             else -> "Brasil"
         }
     }
@@ -167,13 +176,17 @@ fun TabelaScreen(
         "Espanha" -> opcoesEspanha
         "Italia" -> opcoesItalia
         "Europa" -> opcoesEuropa
+        "América do Sul" -> opcoesAmericaDoSul
         else -> opcoesBrasil
     }
     val labelDivisaoAtual = opcoesDivisaoPais.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoPais.firstOrNull()?.second ?: ""
 
     // Posição do clube do jogador (se na divisão atual e não em modo grupos)
-    val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 || divisaoSelecionada == 14
+    // 5 e 7 = Apertura/Clausura argentinos, 14 = Competencia uruguaio,
+    // 40 = fase de grupos da Libertadores (8 grupos de 4).
+    val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 ||
+        divisaoSelecionada == 14 || divisaoSelecionada == 40
     val posicaoJogador = remember(tabela, timeJogadorId, ehGrupos) {
         if (ehGrupos) null
         else {
@@ -218,6 +231,7 @@ fun TabelaScreen(
                                 "Espanha" -> opcoesEspanha.firstOrNull()?.first ?: 22
                                 "Italia" -> opcoesItalia.firstOrNull()?.first ?: 23
                                 "Europa" -> opcoesEuropa.firstOrNull()?.first ?: 30
+                                "América do Sul" -> opcoesAmericaDoSul.firstOrNull()?.first ?: 40
                                 else -> opcoesBrasil.firstOrNull()?.first ?: 1
                             }
                             vm.selecionarDivisao(primeiraDivisao)
@@ -434,6 +448,11 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao <= 24 -> PlayoffOrange      // play-off de acesso às oitavas
         else -> null                        // 25º–36º: eliminados
     }
+    40 -> when {                            // Grupo da Libertadores (4 clubes)
+        posicao <= 2 -> LibertadoresBlue    // avançam às oitavas
+        posicao == 3 -> SulAmericanaTeal    // 3º vai à Copa Sul-Americana
+        else -> null                        // 4º: eliminado
+    }
     20 -> when {                            // Premier League
         posicao <= 4 -> LibertadoresBlue   // Champions League
         posicao <= 6 -> SulAmericanaTeal   // Europa/Conference
@@ -484,6 +503,10 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
         30, 31 -> listOf(
             LibertadoresBlue to "G8 Oitavas",
             PlayoffOrange to "9º–24º Play-off"
+        )
+        40 -> listOf(
+            LibertadoresBlue to "G2 Oitavas",
+            SulAmericanaTeal to "3º Sul-Americana"
         )
         20 -> listOf(
             LibertadoresBlue to "G4 Champions League",
@@ -545,5 +568,6 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Espanha" -> "🇪🇸"
     "Italia" -> "🇮🇹"
     "Europa" -> "🇪🇺"
+    "América do Sul" -> "🌎"
     else -> ""
 }

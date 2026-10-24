@@ -46,6 +46,7 @@ fun CopaChaveamentoScreen(
     copaItalianaId: Int = -1,
     championsId: Int = -1,
     europaLeagueId: Int = -1,
+    libertadoresId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
@@ -57,9 +58,10 @@ fun CopaChaveamentoScreen(
     val partidasIta by vm.partidasIta.collectAsState()
     val partidasChampions by vm.partidasChampions.collectAsState()
     val partidasEuropa by vm.partidasEuropa.collectAsState()
+    val partidasLibertadores by vm.partidasLibertadores.collectAsState()
 
-    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId) {
-        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId)
+    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId) {
+        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId)
     }
 
     // Copa inicial exibida: prioriza a que existe (Brasil > Argentina > Inglaterra > Espanha > Itália)
@@ -71,6 +73,7 @@ fun CopaChaveamentoScreen(
         if (copaItalianaId > 0) add("Itália")
         if (championsId > 0) add("Champions")
         if (europaLeagueId > 0) add("Europa League")
+        if (libertadoresId > 0) add("Libertadores")
     }
     val mostrarFiltroPais = copasDisponiveis.size > 1
     var paisSelecionado by remember(copasDisponiveis) { mutableStateOf(copasDisponiveis.firstOrNull() ?: "Brasil") }
@@ -83,6 +86,7 @@ fun CopaChaveamentoScreen(
         "Itália" -> partidasIta
         "Champions" -> partidasChampions
         "Europa League" -> partidasEuropa
+        "Libertadores" -> partidasLibertadores
         else -> partidas
     }
     val fasesMotor = when (paisSelecionado) {
@@ -91,6 +95,7 @@ fun CopaChaveamentoScreen(
         "Espanha", "Itália" -> MotorCampeonato.COPA16_FASES
         "Champions" -> MotorCampeonato.CHAMPIONS_FASES
         "Europa League" -> MotorCampeonato.FORMATO_EUROPA_LEAGUE.fases
+        "Libertadores" -> MotorCampeonato.FORMATO_LIBERTADORES.fases
         else -> MotorCampeonato.COPA_FASES
     }
 
@@ -102,11 +107,14 @@ fun CopaChaveamentoScreen(
         mutableStateOf(faseDisponivel.lastOrNull() ?: "")
     }
 
-    // Detecta o campeão (se a Final foi concluída) — para a copa ativa
+    // Detecta o campeão (se a Final foi concluída) — para a copa ativa.
+    // O jogo único é propriedade do CONFRONTO, não da competição: um confronto com
+    // uma partida só é jogo único, com duas é ida e volta. É o que permite à
+    // Libertadores ter oitavas a semi em ida e volta e a final em jogo único.
     val campeao = remember(partidasAtivas, jogoUnicoAtivo) {
         val finais = partidasAtivas.filter { it.fase == "Final" }
         if (finais.isEmpty()) null
-        else computarVencedorConfronto(finais, jogoUnico = jogoUnicoAtivo)
+        else computarVencedorConfronto(finais, jogoUnico = jogoUnicoAtivo || finais.size == 1)
     }
 
     val tituloCopa = when (paisSelecionado) {
@@ -116,6 +124,7 @@ fun CopaChaveamentoScreen(
         "Itália" -> "Copa Italiana"
         "Champions" -> "Champions League"
         "Europa League" -> "Europa League"
+        "Libertadores" -> "Libertadores"
         else -> "Copa do Brasil"
     }
 
@@ -155,6 +164,7 @@ fun CopaChaveamentoScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     if (paisSelecionado == "Champions" || paisSelecionado == "Europa League") "Mata-mata ainda não sorteado — a Fase de Liga está em andamento"
+                    else if (paisSelecionado == "Libertadores") "Mata-mata ainda não sorteado — a fase de grupos está em andamento"
                     else "Copa ainda não iniciada",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -215,7 +225,7 @@ fun CopaChaveamentoScreen(
                         volta = volta,
                         timeJogadorId = timeJogadorId,
                         ehFinal = faseSelecionada == "Final",
-                        jogoUnico = jogoUnicoAtivo
+                        jogoUnico = jogoUnicoAtivo || jogos.size == 1
                     )
                 }
             }

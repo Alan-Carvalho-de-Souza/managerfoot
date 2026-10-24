@@ -61,6 +61,13 @@ interface RankingConmebolDao {
     @Query("SELECT COUNT(*) FROM ranking_conmebol WHERE deprecia = 0")
     suspend fun contarLancamentosHistoricos(): Int
 
+    /**
+     * Apaga os lancamentos de uma competicao num ano. Serve para reencerrar a
+     * mesma temporada nao duplicar a pontuacao, como faz o coeficiente da UEFA.
+     */
+    @Query("DELETE FROM ranking_conmebol WHERE ano = :ano AND competicao = :competicao")
+    suspend fun apagarLancamentos(ano: Int, competicao: String)
+
     @Query("DELETE FROM ranking_conmebol")
     suspend fun deleteAll()
 }

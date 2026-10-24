@@ -85,6 +85,12 @@ fun HallDaFamaScreen(
         31 to "Europa League",
         33 to "Supercopa da UEFA"
     )
+    // Competições continentais sul-americanas: a Libertadores é a 34, e a 35 fica
+    // reservada à Copa Sul-Americana, que ainda não existe no jogo.
+    val opcoesAmericaDoSul = listOf(
+        800 to "Todas",
+        34 to "Libertadores"
+    )
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
@@ -94,6 +100,7 @@ fun HallDaFamaScreen(
             22, 25, 28, 500 -> "Espanha"
             24, 26, 29, 600 -> "Italia"
             30, 31, 32, 33, 700 -> "Europa"
+            34, 35, 800 -> "América do Sul"
             0 -> "Todos"
             else -> "Brasil"
         }
@@ -107,6 +114,7 @@ fun HallDaFamaScreen(
         "Espanha" -> opcoesEspanha
         "Italia" -> opcoesItalia
         "Europa" -> opcoesEuropa
+        "América do Sul" -> opcoesAmericaDoSul
         "Brasil" -> opcoesBrasil
         else -> emptyList()
     }
@@ -124,7 +132,7 @@ fun HallDaFamaScreen(
         )
 
         // Filtro de país (chips horizontais)
-        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia", "Europa")
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia", "Europa", "América do Sul")
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -146,6 +154,7 @@ fun HallDaFamaScreen(
                             "Espanha" -> 500
                             "Italia" -> 600
                             "Europa" -> 700
+                            "América do Sul" -> 800
                             else -> 0
                         }
                         vm.selecionarDivisao(div)
@@ -506,5 +515,6 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Espanha" -> "🇪🇸"
     "Italia" -> "🇮🇹"
     "Europa" -> "🇪🇺"
+    "América do Sul" -> "🌎"
     else -> ""
 }

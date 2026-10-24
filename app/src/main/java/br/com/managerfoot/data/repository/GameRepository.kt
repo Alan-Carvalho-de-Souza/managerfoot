@@ -322,7 +322,7 @@ class GameRepository @Inject constructor(
             casa          = escalacaoFinalCasa,
             fora          = escalacaoFinalFora,
             timeJogadorId = timeJogadorId,
-            campoNeutro   = campeonatoDao.buscarPorId(campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
+            campoNeutro   = ehCampoNeutro(partidaDoJogador)
         )
         val notasPartida = persistirResultado(resultadoJogador)
 
@@ -460,7 +460,7 @@ class GameRepository @Inject constructor(
         }
 
         // Simula 1º tempo (minutos 1–45, fração = 0,5 dos gols esperados)
-        val campoNeutro = campeonatoDao.buscarPorId(campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
+        val campoNeutro = ehCampoNeutro(partidaDoJogador)
         val (estadoApos1H, eventos1H) = simulador.simularPeriodo(
             minInicio     = 1,
             minFim        = 45,
@@ -783,9 +783,14 @@ class GameRepository @Inject constructor(
         var golsAgregadoCasa = 0
         var golsAgregadoFora = 0
         val partidaDoJogador = partidaDao.buscarPorId(ctx.partidaDoJogadorId)
+        // Quantas partidas tem o confronto do jogador: 2 = ida e volta, 1 = jogo
+        // unico. E o que distingue a final da Libertadores, de jogo unico, das
+        // oitavas a semi dela, que sao ida e volta na MESMA competicao.
+        var jogosDoConfronto = 0
         if (partidaDoJogador?.confrontoId != null) {
             val todasDoConfronto = partidaDao.buscarTodasPorCampeonato(ctx.campeonatoId)
                 .filter { it.confrontoId == partidaDoJogador.confrontoId }
+            jogosDoConfronto = todasDoConfronto.size
             val ida   = todasDoConfronto.minByOrNull { it.rodada }
             val volta = todasDoConfronto.maxByOrNull { it.rodada }
             // Só trata como agregado quando há DOIS jogos (ida e volta). Copas de jogo
@@ -815,8 +820,12 @@ class GameRepository @Inject constructor(
             }
         }
 
-        // Argentine GRUPOS_E_MATA_MATA knockout: jogo único — empate decide por pênaltis
-        if (!precisaPenaltis && golsCasaFinal == golsForaFinal) {
+        // GRUPOS_E_MATA_MATA de jogo único — empate decide por pênaltis. É o
+        // mata-mata argentino e a FINAL da Libertadores. A condição de jogo único
+        // é obrigatória aqui: as oitavas, quartas e semis da Libertadores usam o
+        // mesmo formato mas são de ida e volta, e sem ela um empate na ida iria
+        // aos pênaltis em vez de ficar para a volta decidir.
+        if (!precisaPenaltis && golsCasaFinal == golsForaFinal && jogosDoConfronto < 2) {
             val formato = campeonatoDao.buscarPorId(ctx.campeonatoId)?.formato
             val fasePartida = partidaDoJogador?.fase
             if (formato == FormatoCampeonato.GRUPOS_E_MATA_MATA && fasePartida != null) {
@@ -850,7 +859,7 @@ class GameRepository @Inject constructor(
     ): ResultadoPartida {
         val escalacaoFinalCasa = escalacaoCasa ?: gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFinalFora = escalacaoFora ?: gerarEscalacaoIA(partida.timeForaId)
-        val campoNeutro = campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo == TipoCampeonato.SUPERCOPA
+        val campoNeutro = ehCampoNeutro(partida)
 
         val resultado = simulador.simular(
             partidaId   = partida.id,
@@ -1048,6 +1057,7 @@ class GameRepository @Inject constructor(
         val copaItalianaId: Int,          // Copa Italiana (Coppa Italia)
         val championsId: Int,             // UEFA Champions League
         val europaLeagueId: Int,          // UEFA Europa League
+        val libertadoresId: Int,          // CONMEBOL Libertadores
         val supercopaId: Int,
         val supercopaInglaterraId: Int,   // Supercopa da Inglaterra
         val supercopaEspanholaId: Int,    // Supercopa da Espanha
@@ -1077,6 +1087,7 @@ class GameRepository @Inject constructor(
         campeonatoSerieAId: Int = -1,       // Serie A italiana (divisao 14)
         championsId: Int = -1,              // UEFA Champions League da temporada que encerra
         europaLeagueId: Int = -1,           // UEFA Europa League da temporada que encerra
+        libertadoresId: Int = -1,           // CONMEBOL Libertadores da temporada que encerra
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -1539,6 +1550,14 @@ class GameRepository @Inject constructor(
             europaLeagueId, novoChampionsId, ano, temporadaId, novoTemporadaId, novoAno
         )
 
+        // E a Libertadores, que e independente das europeias: a lista de acesso
+        // dela so olha clubes sul-americanos. Conclui a que encerra antes de criar
+        // a nova, porque a vaga de campeao vigente sai do Hall da Fama e sem ela os
+        // 32 dos grupos nao fecham.
+        val novoLibertadoresId = encerrarECriarLibertadores(
+            libertadoresId, ano, temporadaId, novoTemporadaId, novoAno
+        )
+
         // Cria as Supercopas (Brasil/Inglaterra/Espanha/Itália) para a próxima temporada.
         // Extraído em helper para manter este método sob o limite de bytecode da JVM.
         val supers = criarSupercopasDaTemporada(ano, novoAno, novoTemporadaId)
@@ -1622,7 +1641,7 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoLibertadoresId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
     }
 
     // ── Reputação por mudança de divisão ────────────────────────
@@ -5870,6 +5889,32 @@ class GameRepository @Inject constructor(
         }
     }
 
+
+    /**
+     * Se a partida e disputada em campo neutro. Vale para as Supercopas e o
+     * Trofeu dos Campeoes, que sao jogo unico em sede neutra por definicao, e para
+     * uma FINAL de jogo unico de competicao continental — hoje a da Libertadores,
+     * que o enunciado manda jogar em estadio neutro pre-definido.
+     *
+     * Nao vale para a final de ida e volta de uma copa: la cada clube joga em casa
+     * uma vez, e e a soma que decide.
+     */
+    private suspend fun ehCampoNeutro(partida: PartidaEntity): Boolean {
+        val jogos = if (partida.confrontoId == null) 1
+        else partidaDao.buscarTodasPorCampeonato(partida.campeonatoId)
+            .count { it.confrontoId == partida.confrontoId }
+        return ehCampoNeutro(partida.campeonatoId, partida.fase, jogos)
+    }
+
+    private suspend fun ehCampoNeutro(campeonatoId: Int, fase: String?, jogosDoConfronto: Int): Boolean {
+        val camp = campeonatoDao.buscarPorId(campeonatoId) ?: return false
+        if (camp.tipo == TipoCampeonato.SUPERCOPA) return true
+        if (camp.tipo == TipoCampeonato.TROFEU_CAMPEOES) return true
+        return camp.tipo == TipoCampeonato.CONTINENTAL &&
+            fase == MotorCampeonato.FORMATO_LIBERTADORES.fasesMataMata.last() &&
+            jogosDoConfronto == 1
+    }
+
     private suspend fun simularPartidaInterna(partida: PartidaEntity): ResultadoPartida {
         val escalacaoCasa = gerarEscalacaoIA(partida.timeCasaId)
         val escalacaoFora = gerarEscalacaoIA(partida.timeForaId)
@@ -6928,6 +6973,779 @@ class GameRepository @Inject constructor(
                 )
             )
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CONMEBOL Libertadores — ver regras_libertadores.md
+    //
+    //  47 clubes: 19 na Pré-Libertadores (três fases eliminatórias, de onde só 4
+    //  sobrevivem), 26 diretos na fase de grupos e as 2 vagas dos campeões
+    //  vigentes, que são estruturais — sem elas os grupos teriam 30 e não 32.
+    //
+    //  Três coisas aqui NÃO são como nas competições europeias:
+    //    1. Os grupos são em TURNO E RETURNO — 8 grupos de 4, 96 partidas.
+    //    2. Das oitavas às semis, empate no agregado vai direto aos pênaltis.
+    //    3. A FINAL é de JOGO ÚNICO, em campo neutro.
+    //
+    //  O sorteio dos grupos só pode acontecer DEPOIS da Pré-Libertadores, porque
+    //  4 dos 32 clubes vêm dela. Então a competição nasce com a Pré, e os grupos
+    //  entram quando a Fase 3 termina — o mesmo padrão do play-off → oitavas da
+    //  Champions.
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Código de divisão da Libertadores no Hall da Fama. A faixa 30..33 é dos
+     * continentais europeus (30 Champions, 31 Europa League, 32 reservada à
+     * Conference, 33 Supercopa da UEFA); a 35 fica reservada à Copa
+     * Sul-Americana, que ainda não existe.
+     */
+    private val DIVISAO_HALL_LIBERTADORES = 34
+
+    /**
+     * Rótulo de porta de entrada, gravado em `CampeonatoTimeEntity.grupo` entre a
+     * criação da competição e o sorteio. Depois do sorteio os 32 recebem o grupo
+     * de verdade (A..H) e os 19 da Pré que caíram seguem com "P".
+     *
+     * Reaproveitar a coluna do grupo evita uma tabela nova — e com ela uma
+     * migração — para guardar algo que é temporário por natureza.
+     */
+    private val PORTA_GRUPOS = "G"
+    private val PORTA_PRE    = "P"
+
+    /**
+     * Monta a lista de acesso da Libertadores: os clubes sul-americanos elegíveis,
+     * com a colocação na liga nacional e o coeficiente do Ranking CONMEBOL já
+     * resolvidos, passados pelas cotas dos 10 países.
+     *
+     * Devolve menos de 47 vagas quando o jogo não tem clubes sul-americanos
+     * suficientes, e aí a competição não é criada.
+     */
+    suspend fun determinarParticipantesLibertadores(
+        anoAtual: Int,
+        temporadaAnteriorId: Int = -1
+    ): List<VagaLibertadores> {
+        val candidatos = candidatosSulAmericanos(anoAtual, temporadaAnteriorId)
+        return ListaDeAcessoLibertadores.montar(
+            candidatos          = candidatos,
+            campeaoLibertadores = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES),
+            // A Copa Sul-Americana ainda não existe no jogo. Quando existir, basta
+            // o seu código de Hall da Fama entrar aqui: a lista de acesso já trata
+            // a vaga do campeão vigente dela, inclusive a regra de queda.
+            campeaoSulAmericana = null,
+            // Fecha os 32 dos grupos: as vagas de campeao vigente sem titular descem
+            // para os proximos colocados. Sem isso a primeira temporada, que nao tem
+            // campeao vigente nenhum, teria 30 clubes nos grupos em vez de 32.
+            fecharFaseDeGrupos  = true
+        )
+    }
+
+    /** Campeão vigente registrado no Hall da Fama, ou null na primeira temporada. */
+    private suspend fun campeaoVigenteNoHall(anoAtual: Int, divisao: Int): Int? =
+        hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoAtual - 1, divisao)
+            ?.campeaoTimeId
+            ?.takeIf { it > 0 }
+
+    /**
+     * Clubes sul-americanos elegíveis à Libertadores, com o país já canonizado
+     * (o seed grava "Uruguay", e as cotas são indexadas por "Uruguai").
+     *
+     * O coeficiente de sorteio vem do Ranking CONMEBOL, que é o ranking por
+     * colocação da América do Sul — a contraparte do coeficiente da UEFA que
+     * ordena os potes da Champions. Na primeira temporada ele já nasce semeado
+     * pelo coeficiente histórico, derivado da reputação.
+     */
+    private suspend fun candidatosSulAmericanos(
+        anoAtual: Int,
+        temporadaAnteriorId: Int
+    ): List<CandidatoLibertadores> {
+        val coeficientes = rankingConmebolDao.observeRanking(anoAtual).first()
+            .associate { it.timeId to it.pontos }
+        val posicoes = posicoesFinaisDasLigasSulAmericanas(temporadaAnteriorId)
+        return timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.divisao in DIVISOES_ELEGIVEIS_LIBERTADORES }
+            .filter { Continentes.ehAmericaDoSul(it.pais) }
+            .mapNotNull { time ->
+                val pais = ListaDeAcessoLibertadores.paisCanonico(time.pais) ?: return@mapNotNull null
+                CandidatoLibertadores(
+                    timeId      = time.id,
+                    nome        = time.nome,
+                    pais        = pais,
+                    coeficiente = coeficientes[time.id] ?: 0.0,
+                    reputacao   = time.reputacao,
+                    posicaoLiga = posicoes[time.id]
+                )
+            }
+    }
+
+    /**
+     * Divisões de onde saem os candidatos: as primeiras divisões sul-americanas
+     * do seed — 1 = Brasileirão Série A, 5 = Primera argentina, 9 = Primera
+     * uruguaia — mais o pool de clubes sem liga, filtrado por continente, que é
+     * por onde os sete países que faltam vão entrar quando tiverem clubes.
+     */
+    private val DIVISOES_ELEGIVEIS_LIBERTADORES =
+        setOf(1, 5, 9) + RankingEuropa.DIVISOES_POOL
+
+    /**
+     * Colocação final de cada clube nas primeiras divisões sul-americanas da
+     * temporada que encerra. É o que decide quem vai à Libertadores seguinte.
+     *
+     * Argentina e Uruguai têm mais de um torneio de primeira divisão por
+     * temporada (Apertura, Clausura, Intermediário), então vale a MELHOR
+     * colocação do clube entre eles.
+     *
+     * Devolve um mapa vazio no primeiro ano de jogo, e aí a lista de acesso cai
+     * no coeficiente e na reputação.
+     */
+    private suspend fun posicoesFinaisDasLigasSulAmericanas(temporadaId: Int): Map<Int, Int> {
+        if (temporadaId <= 0) return emptyMap()
+        val ligas = campeonatoDao.buscarPorTemporadaId(temporadaId).filter { camp ->
+            val ehPrimeira = camp.tipo == TipoCampeonato.NACIONAL_DIVISAO1 ||
+                camp.tipo == TipoCampeonato.EXTRANGEIRO_DIVISAO1
+            ehPrimeira && Continentes.ehAmericaDoSul(camp.pais)
+        }
+        val posicoes = HashMap<Int, Int>()
+        for (liga in ligas) {
+            classificacaoDao.buscarTabelaOrdenada(liga.id).forEachIndexed { indice, linha ->
+                val posicao = indice + 1
+                val atual = posicoes[linha.timeId]
+                if (atual == null || posicao < atual) posicoes[linha.timeId] = posicao
+            }
+        }
+        return posicoes
+    }
+
+    /**
+     * Cria a Libertadores de uma temporada, ou devolve -1 quando a lista de
+     * acesso não fecha os 47 clubes.
+     */
+    suspend fun criarLibertadoresDaTemporada(
+        temporadaId: Int,
+        ano: Int,
+        temporadaAnteriorId: Int = -1
+    ): Int {
+        val vagas = determinarParticipantesLibertadores(ano, temporadaAnteriorId)
+        return criarLibertadores(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                // "Libertadores" no nome é o que dá a esta competição o peso 14 do
+                // Ranking Mundial da IFFHS — ver RankingMundial.pesoDaVitoria.
+                nome         = "Libertadores $ano",
+                tipo         = TipoCampeonato.CONTINENTAL,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.FORMATO_LIBERTADORES.totalRodadas,
+                // Torneio continental: não pertence a um país.
+                pais         = Continentes.AMERICA_DO_SUL
+            ),
+            vagas
+        )
+    }
+
+    /**
+     * Grava a Libertadores: participantes marcados pela porta de entrada e as
+     * partidas da Fase 1 da Pré-Libertadores.
+     *
+     * Só a Fase 1 entra agora. As Fases 2 e 3 dependem de quem vence a anterior,
+     * e a fase de grupos depende dos 4 sobreviventes — tudo isso é gerado por
+     * [verificarEAvancarFaseLibertadores] à medida que as fases terminam.
+     *
+     * Devolve -1 quando a lista de acesso não fecha os 47 clubes: em vez de criar
+     * um torneio incompleto, não criamos nada e o resto do jogo segue sem ele.
+     */
+    suspend fun criarLibertadores(
+        campeonato: CampeonatoEntity,
+        vagas: List<VagaLibertadores>
+    ): Int {
+        val diretos = ListaDeAcessoLibertadores.diretosNosGrupos(vagas)
+        val naPre   = ListaDeAcessoLibertadores.naPreLibertadores(vagas)
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+
+        // Os grupos precisam de 28 diretos (26 + 2 campeões) e dos 4 da Pré; a Pré
+        // precisa dos seus 19. Faltando qualquer um dos dois, o torneio não fecha.
+        val faltamGrupos = ListaDeAcessoLibertadores.CLUBES_NA_FASE_DE_GRUPOS -
+            ListaDeAcessoLibertadores.SOBREVIVENTES_DA_PRE
+        if (diretos.size < faltamGrupos) return -1
+        if (naPre.size < ListaDeAcessoLibertadores.NA_PRE_LIBERTADORES) return -1
+
+        val campeonatoId = campeonatoDao.inserir(campeonato).toInt()
+
+        // A porta de entrada fica gravada no rótulo de grupo até o sorteio: é o
+        // que distingue, na Fase 2, os 13 que entram direto dos 3 que vêm da Fase 1.
+        campeonatoDao.inserirParticipantes(
+            diretos.map { CampeonatoTimeEntity(campeonatoId, it.timeId, PORTA_GRUPOS) } +
+                naPre.map { CampeonatoTimeEntity(campeonatoId, it.timeId, PORTA_PRE) }
+        )
+
+        // Fase 1: os 6 clubes mais fracos da Pré. A fila está do melhor para o
+        // pior, então são os últimos — os outros 13 entram direto na Fase 2.
+        val filaPre = naPre.sortedWith(ListaDeAcessoChampions.ORDEM).map { it.timeId }
+        val fase1 = filaPre.takeLast(ListaDeAcessoLibertadores.PRE_FASE1_CLUBES)
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = campeonatoId,
+                pares             = paresSemeados(fase1),
+                fase              = formato.preFases[0],
+                rodadaIda         = formato.rodadaIdaDaPreFase(0),
+                confrontoIdInicio = 1,
+                ordemGlobalIda    = formato.ordemGlobalPre[0],
+                ordemGlobalVolta  = formato.ordemGlobalPre[1]
+            )
+        )
+        return campeonatoId
+    }
+
+    /**
+     * Pares semeados de uma fila ordenada do melhor para o pior: o 1º pega o
+     * último, o 2º o penúltimo, e assim por diante.
+     *
+     * Devolve (mandante da ida, visitante da ida) com o clube MAIS FRACO recebendo
+     * a ida, de modo que o mais forte decida em casa — a vantagem que a semeadura
+     * existe para dar.
+     */
+    private fun paresSemeados(fila: List<Int>): List<Pair<Int, Int>> {
+        val n = fila.size / 2
+        return (0 until n).map { i -> fila[fila.size - 1 - i] to fila[i] }
+    }
+
+    /**
+     * Avança a Libertadores, uma etapa por chamada. Devolve true quando a final
+     * foi concluída nesta chamada.
+     *
+     * A ordem das etapas: as três fases da Pré-Libertadores, o sorteio dos grupos
+     * quando a Fase 3 termina, as oitavas quando os grupos terminam, e daí o
+     * mata-mata até a final de jogo único.
+     */
+    suspend fun verificarEAvancarFaseLibertadores(
+        libertadoresId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (libertadoresId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(libertadoresId) ?: return false
+        if (camp.encerrado) return false
+        val todas = partidaDao.buscarTodasPorCampeonato(libertadoresId)
+        if (todas.isEmpty()) return false
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+
+        // ── Pré-Libertadores: três fases ida e volta ───────────────────
+        for ((indice, fase) in formato.preFases.withIndex()) {
+            val daFase = todas.filter { it.fase == fase }
+            if (daFase.isEmpty()) continue
+            if (!daFase.all { it.jogada }) return false
+            val proxima = formato.preFases.getOrNull(indice + 1)
+            if (proxima != null) {
+                if (todas.any { it.fase == proxima }) continue
+                gerarProximaPreFase(libertadoresId, todas, daFase, indice)
+                return false
+            }
+            // Fase 3 completa → é hora do sorteio dos grupos.
+            if (todas.any { it.fase == null }) break
+            sortearEGerarGrupos(libertadoresId, vencedoresDaFase(daFase), anoAtual)
+            return false
+        }
+
+        // ── Fase de grupos (fase = null), em turno e returno ───────────
+        val grupos = todas.filter { it.fase == null }
+        if (grupos.isEmpty() || !grupos.all { it.jogada }) return false
+
+        if (todas.none { it.fase == formato.fasesMataMata.first() }) {
+            gerarOitavasLibertadores(libertadoresId)
+            return false
+        }
+
+        // ── Oitavas → Final ───────────────────────────────────────────
+        return avancarMataMataLibertadores(
+            libertadoresId, todas, anoAtual, timeJogadorId, temporadaId
+        )
+    }
+
+    /**
+     * Gera a fase prévia seguinte: os vencedores da fase que acabou, mais os que
+     * entram direto nesta fase.
+     *
+     * Só a Fase 2 recebe entrantes diretos: 13 dos 19, que ficaram de fora da
+     * Fase 1 — é a entrada escalonada que resolve o 19 ser ímpar sem bye nenhum.
+     */
+    private suspend fun gerarProximaPreFase(
+        libertadoresId: Int,
+        todas: List<PartidaEntity>,
+        partidasDaFase: List<PartidaEntity>,
+        indiceFaseAtual: Int
+    ) {
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        val proximoIndice = indiceFaseAtual + 1
+        val vencedores = vencedoresDaFase(partidasDaFase)
+
+        // Quem já jogou alguma fase prévia não é entrante direto.
+        val jaJogaram = todas.filter { it.fase in formato.preFases }
+            .flatMap { listOf(it.timeCasaId, it.timeForaId) }
+            .toSet()
+        val entramAgora = if (proximoIndice == 1) {
+            campeonatoDao.buscarParticipantesComGrupo(libertadoresId)
+                .filter { it.grupo == PORTA_PRE && it.timeId !in jaJogaram }
+                .map { it.timeId }
+        } else emptyList()
+
+        // Os entrantes diretos são mais fortes que quem veio da fase anterior, e
+        // por isso ficam no topo da fila da semeadura.
+        val fila = ordenarPorForca(entramAgora) + vencedores
+        if (fila.size < 2) return
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = libertadoresId,
+                pares             = paresSemeados(fila),
+                fase              = formato.preFases[proximoIndice],
+                rodadaIda         = formato.rodadaIdaDaPreFase(proximoIndice),
+                confrontoIdInicio = (todas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
+                ordemGlobalIda    = formato.ordemGlobalPre[proximoIndice * 2],
+                ordemGlobalVolta  = formato.ordemGlobalPre[proximoIndice * 2 + 1]
+            )
+        )
+    }
+
+    /** Vencedores de uma fase ida e volta, na ordem dos confrontos. */
+    private suspend fun vencedoresDaFase(partidasDaFase: List<PartidaEntity>): List<Int> =
+        partidasDaFase
+            .groupBy { it.confrontoId }
+            .toSortedMap(compareBy { it ?: 0 })
+            .mapNotNull { (_, jogos) -> vencedorDoTie(jogos) }
+
+    /** Os ids pedidos, ordenados do mais forte para o mais fraco pela reputação. */
+    private suspend fun ordenarPorForca(timeIds: List<Int>): List<Int> {
+        if (timeIds.isEmpty()) return emptyList()
+        val alvo = timeIds.toSet()
+        return timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.id in alvo }
+            .map { it.id }
+    }
+
+    /**
+     * Sorteia a fase de grupos e grava as 96 partidas do turno e returno.
+     *
+     * Os 32 são os 28 diretos mais os 4 sobreviventes da Pré. O rótulo do grupo
+     * vai para os participantes e para a tabela, que é o que faz a tela de
+     * Classificação mostrar 8 tabelas de 4 em vez de uma de 32.
+     */
+    private suspend fun sortearEGerarGrupos(
+        libertadoresId: Int,
+        sobreviventesDaPre: List<Int>,
+        anoAtual: Int
+    ) {
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        val participantes = campeonatoDao.buscarParticipantesComGrupo(libertadoresId)
+        val diretos = participantes.filter { it.grupo == PORTA_GRUPOS }.map { it.timeId }
+        val nosGrupos = (diretos + sobreviventesDaPre).distinct()
+        if (nosGrupos.size != ListaDeAcessoLibertadores.CLUBES_NA_FASE_DE_GRUPOS) return
+
+        // O sorteio precisa de nome, país e coeficiente para montar os 4 potes.
+        val porId = timeRepository.buscarTodosOrdenadosPorReputacao().associateBy { it.id }
+        val coeficientes = rankingConmebolDao.observeRanking(anoAtual).first()
+            .associate { it.timeId to it.pontos }
+        val clubes = nosGrupos.mapNotNull { id ->
+            val time = porId[id] ?: return@mapNotNull null
+            ClubeChampions(
+                timeId      = time.id,
+                nome        = time.nome,
+                pais        = ListaDeAcessoLibertadores.paisCanonico(time.pais) ?: time.pais.trim(),
+                coeficiente = (coeficientes[time.id] ?: 0.0) + time.reputacao
+            )
+        }
+        val sorteio = SorteioLibertadores.sortear(clubes) ?: return
+
+        // Rótulo do grupo nos participantes (REPLACE na chave campeonatoId+timeId)
+        // e numa tabela inicial de 32 linhas, 4 por grupo.
+        campeonatoDao.inserirParticipantes(
+            sorteio.grupos.flatMap { grupo ->
+                grupo.clubes.map { CampeonatoTimeEntity(libertadoresId, it.timeId, grupo.rotulo) }
+            }
+        )
+        classificacaoDao.inserirTodos(
+            sorteio.grupos.flatMap { grupo ->
+                MotorCampeonato.gerarClassificacaoInicial(
+                    libertadoresId, grupo.clubes.map { it.timeId }, grupo.rotulo
+                )
+            }
+        )
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarGruposTurnoReturno(
+                campeonatoId         = libertadoresId,
+                grupos               = sorteio.grupos.map { g -> g.clubes.map { it.timeId } },
+                rodadaBase           = formato.rodadaBaseGrupos,
+                ordemGlobalPorRodada = formato.ordemGlobalGrupos
+            )
+        )
+    }
+
+    /**
+     * Oitavas: os 2 primeiros de cada grupo, com o 1º de um grupo contra o 2º de
+     * outro e decidindo em casa.
+     *
+     * Os TERCEIROS de cada grupo não são eliminados aqui: eles iriam aos playoffs
+     * da Copa Sul-Americana, que o jogo ainda não tem — ver
+     * [buscarClassificadosSulAmericana], que é o ponto de extensão.
+     */
+    private suspend fun gerarOitavasLibertadores(libertadoresId: Int) {
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        // Recalcula antes de ler: uma atualização incremental perdida viraria um
+        // chaveamento errado, e no mata-mata não há como corrigir depois.
+        recalcularClassificacao(libertadoresId)
+        val porGrupo = tabelasPorGrupo(libertadoresId)
+        if (porGrupo.size != ListaDeAcessoLibertadores.GRUPOS) return
+        if (porGrupo.any { it.value.size < ListaDeAcessoLibertadores.AVANCAM_POR_GRUPO }) return
+
+        val rotulos = porGrupo.keys.sorted()
+        val pares = MotorCampeonato.paresOitavasLibertadores(
+            primeiros = rotulos.map { porGrupo.getValue(it)[0].timeId },
+            segundos  = rotulos.map { porGrupo.getValue(it)[1].timeId }
+        )
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = libertadoresId,
+                pares             = pares,
+                fase              = formato.fasesMataMata.first(),
+                rodadaIda         = formato.rodadaIdaDeFaseMataMata(0),
+                confrontoIdInicio = (partidaDao.buscarTodasPorCampeonato(libertadoresId)
+                    .mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
+                ordemGlobalIda    = formato.ordemGlobalMataMata[0],
+                ordemGlobalVolta  = formato.ordemGlobalMataMata[1]
+            )
+        )
+    }
+
+    /** Tabela de cada grupo, já ordenada, indexada pelo rótulo do grupo. */
+    private suspend fun tabelasPorGrupo(libertadoresId: Int): Map<String, List<ClassificacaoEntity>> =
+        classificacaoDao.buscarTabelaOrdenada(libertadoresId)
+            .filter { it.grupo != null }
+            .groupBy { it.grupo!! }
+
+    /**
+     * Os TERCEIROS colocados de cada grupo, que na competição real são
+     * transferidos para os playoffs da Copa Sul-Americana.
+     *
+     * A Sul-Americana ainda não existe no jogo, e inventá-la não é o escopo desta
+     * fiação. Então a lista é DERIVADA das tabelas de grupo em vez de armazenada:
+     * quem for implementar a Sul-Americana chama esta função com o id da
+     * Libertadores da temporada e recebe os 8 clubes, sem precisar que a
+     * Libertadores tenha gravado nada em lugar nenhum. Vazia enquanto os grupos
+     * não tiverem sido sorteados.
+     */
+    suspend fun buscarClassificadosSulAmericana(libertadoresId: Int): List<Int> {
+        if (libertadoresId <= 0) return emptyList()
+        return tabelasPorGrupo(libertadoresId)
+            .toSortedMap()
+            .values
+            .mapNotNull { tabela -> tabela.getOrNull(ListaDeAcessoLibertadores.AVANCAM_POR_GRUPO)?.timeId }
+    }
+
+    /**
+     * Mata-mata da Libertadores, das oitavas à final.
+     *
+     * Não usa [verificarEAvancarFaseCopa] por um motivo só, mas decisivo: aquela
+     * máquina gera TODA fase em ida e volta, e aqui a final é de jogo único.
+     *
+     * O empate no agregado das oitavas às semis vai direto aos pênaltis, sem
+     * prorrogação, que é o que [vencedorDoTie] já faz — o jogo não simula
+     * prorrogação em competição nenhuma. Ver
+     * [MotorCampeonato.FormatoLibertadores.temProrrogacao], onde a regra fica
+     * registrada para quando a engine tiver prorrogação de verdade.
+     */
+    private suspend fun avancarMataMataLibertadores(
+        libertadoresId: Int,
+        todas: List<PartidaEntity>,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ): Boolean {
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        for ((indice, fase) in formato.fasesMataMata.withIndex()) {
+            val daFase = todas.filter { it.fase == fase }
+            if (daFase.isEmpty()) continue
+            if (!daFase.all { it.jogada }) return false
+
+            val proxima = formato.fasesMataMata.getOrNull(indice + 1)
+            if (proxima != null && todas.any { it.fase == proxima }) continue
+
+            if (proxima == null) {
+                encerrarLibertadores(libertadoresId, daFase, anoAtual, timeJogadorId, temporadaId)
+                return true
+            }
+
+            val vencedores = vencedoresDaFase(daFase)
+            if (vencedores.size < 2) return false
+            val confrontoIdInicio = (todas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1
+            val rodadaIda = formato.rodadaIdaDeFaseMataMata(indice + 1)
+            val novas = if (formato.ehFinal(proxima)) {
+                // A FINAL é de jogo único, em campo neutro. `fase == "Final"` é o
+                // que liga o campo neutro na simulação, e um confronto com uma só
+                // partida é o que faz o chaveamento e o desempate a tratarem como
+                // jogo único em vez de agregado.
+                MotorCampeonato.gerarFaseJogoUnico(
+                    campeonatoId      = libertadoresId,
+                    pares             = listOf(vencedores[0] to vencedores[1]),
+                    fase              = proxima,
+                    rodada            = rodadaIda,
+                    confrontoIdInicio = confrontoIdInicio,
+                    ordemGlobal       = formato.ordemGlobalMataMata.last()
+                )
+            } else {
+                MotorCampeonato.gerarFaseIdaVolta(
+                    campeonatoId      = libertadoresId,
+                    pares             = MotorCampeonato.sortearPares(vencedores),
+                    fase              = proxima,
+                    rodadaIda         = rodadaIda,
+                    confrontoIdInicio = confrontoIdInicio,
+                    ordemGlobalIda    = formato.ordemGlobalMataMata[(indice + 1) * 2],
+                    ordemGlobalVolta  = formato.ordemGlobalMataMata[(indice + 1) * 2 + 1]
+                )
+            }
+            partidaDao.inserirTodas(novas)
+            return false
+        }
+        return false
+    }
+
+    /**
+     * Final concluída: Hall da Fama, premiação, reputação, campanhas no Ranking
+     * CONMEBOL e competição encerrada.
+     *
+     * A final é de jogo único, então o campeão é quem venceu os 90 minutos — ou
+     * os pênaltis, no empate.
+     */
+    private suspend fun encerrarLibertadores(
+        libertadoresId: Int,
+        partidasDaFinal: List<PartidaEntity>,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        val decisao = partidasDaFinal.minByOrNull { it.rodada } ?: return
+        val campeaoId = vencedorDoJogoUnico(decisao) ?: return
+        val viceId = if (campeaoId == decisao.timeCasaId) decisao.timeForaId else decisao.timeCasaId
+
+        val campeao    = timeRepository.buscarEntityPorId(campeaoId)
+        val vice       = timeRepository.buscarEntityPorId(viceId)
+        val entidade   = campeonatoDao.buscarPorId(libertadoresId)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(libertadoresId)
+        val assistente = partidaDao.buscarAssisteTop1(libertadoresId)
+
+        inserirNoHallDaFamaComTecnico(
+            HallDaFamaEntity(
+                ano                 = anoAtual,
+                nomeCampeonato      = entidade?.nome ?: "Libertadores $anoAtual",
+                campeaoTimeId       = campeaoId,
+                campeaoNome         = campeao?.nome ?: "",
+                campeaoEscudo       = campeao?.escudoRes ?: "",
+                viceTimeId          = viceId,
+                viceNome            = vice?.nome ?: "",
+                viceEscudo          = vice?.escudoRes ?: "",
+                artilheiroId        = artilheiro?.jogadorId ?: -1,
+                artilheiroNome      = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols      = artilheiro?.total ?: 0,
+                artilheiroNomeTime  = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo    = artilheiro?.escudoRes ?: "",
+                assistenteId        = assistente?.jogadorId ?: -1,
+                assistenteNome      = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
+                assistenciasTotais  = assistente?.total ?: 0,
+                assistenteNomeTime  = assistente?.nomeTime ?: "",
+                assistenteEscudo    = assistente?.escudoRes ?: "",
+                divisao             = DIVISAO_HALL_LIBERTADORES
+            )
+        )
+
+        val rankBase = rankingGeralDao.buscarPorTime(campeaoId)
+            ?: RankingGeralEntity(
+                timeId = campeaoId, nomeTime = campeao?.nome ?: "",
+                escudoRes = campeao?.escudoRes ?: "", divisaoAtual = campeao?.divisao ?: 1
+            )
+        rankingGeralDao.inserirOuAtualizar(rankBase.copy(copasVencidas = rankBase.copasVencidas + 1))
+
+        campeonatoDao.encerrar(libertadoresId)
+
+        val nomePremio = entidade?.nome ?: "Libertadores $anoAtual"
+        val premios = listOf(
+            campeaoId to (PREMIO_CAMPEAO_LIBERTADORES to "Campeão"),
+            viceId    to (PREMIO_VICE_LIBERTADORES    to "Vice-campeão")
+        )
+        for ((timePremiado, info) in premios) {
+            val (valor, posicao) = info
+            if (timeJogadorId > 0 && timePremiado == timeJogadorId) {
+                timeRepository.creditarSaldo(timeJogadorId, valor)
+                financaDao.inserir(
+                    FinancaEntity(
+                        timeId            = timeJogadorId,
+                        temporadaId       = temporadaId,
+                        mes               = 13,
+                        receitaPremiacoes = valor,
+                        descricaoPremio   = "$nomePremio — $posicao",
+                        saldoFinal        = valor
+                    )
+                )
+            }
+        }
+
+        campeao?.let {
+            val bonus = (it.reputacao * 0.04f).coerceAtLeast(0.1f)
+            timeRepository.atualizarReputacao(it.id, it.reputacao + bonus)
+        }
+
+        registrarCampanhasLibertadores(libertadoresId, anoAtual, campeaoId, viceId)
+    }
+
+    /** Prêmios da Libertadores, na mesma ordem de grandeza dos da Champions. */
+    private val PREMIO_CAMPEAO_LIBERTADORES = 60_000_000_00L
+    private val PREMIO_VICE_LIBERTADORES    = 30_000_000_00L
+
+    /**
+     * Vencedor de uma partida de jogo único: quem fez mais gols ou, no empate,
+     * quem venceu os pênaltis. Simula os pênaltis para um confronto IA×IA que
+     * chegou aqui sem eles persistidos.
+     */
+    private suspend fun vencedorDoJogoUnico(jogo: PartidaEntity): Int? {
+        val golsCasa = jogo.golsCasa ?: return null
+        val golsFora = jogo.golsFora ?: return null
+        if (golsCasa > golsFora) return jogo.timeCasaId
+        if (golsFora > golsCasa) return jogo.timeForaId
+        val pCasa = jogo.penaltisCasa
+        val pFora = jogo.penaltisForaId
+        if (pCasa != null && pFora != null) {
+            return if (pCasa > pFora) jogo.timeCasaId else jogo.timeForaId
+        }
+        return simularEPersistirPenaltisIA(jogo, jogo)
+    }
+
+    /**
+     * Registra a campanha de cada participante no Ranking CONMEBOL: pontos fixos
+     * pela fase final atingida mais 80 por vitória e 40 por empate.
+     *
+     * As vitórias e empates contam da FASE DE GRUPOS em diante, como manda o
+     * documento — as partidas da Pré-Libertadores pontuam só pela fase prévia
+     * alcançada. Jogo decidido nos pênaltis entra como empate, que é exatamente
+     * o que o placar dos 90 minutos devolve.
+     *
+     * Apaga os lançamentos do ano antes de registrar, para reencerrar a mesma
+     * temporada não duplicar a pontuação.
+     */
+    private suspend fun registrarCampanhasLibertadores(
+        libertadoresId: Int,
+        ano: Int,
+        campeaoId: Int,
+        viceId: Int
+    ) {
+        rankingConmebolDao.apagarLancamentos(ano, CompeticaoConmebol.LIBERTADORES.name)
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        val partidas = partidaDao.buscarTodasPorCampeonato(libertadoresId).filter { it.jogada }
+        val participantes = campeonatoDao.buscarIdsParticipantes(libertadoresId)
+
+        for (timeId in participantes) {
+            val doClube = partidas.filter { it.timeCasaId == timeId || it.timeForaId == timeId }
+            if (doClube.isEmpty()) continue
+            // Da fase de grupos em diante: os grupos têm fase = null e o mata-mata
+            // tem nome de fase; só a Pré-Libertadores fica de fora.
+            val pontuaveis = doClube.filter { it.fase !in formato.preFases }
+            var vitorias = 0
+            var empates  = 0
+            for (partida in pontuaveis) {
+                val pro    = if (partida.timeCasaId == timeId) partida.golsCasa else partida.golsFora
+                val contra = if (partida.timeCasaId == timeId) partida.golsFora else partida.golsCasa
+                if (pro == null || contra == null) continue
+                when {
+                    pro > contra  -> vitorias++
+                    pro == contra -> empates++
+                }
+            }
+            registrarCampanhaContinental(
+                timeId     = timeId,
+                ano        = ano,
+                competicao = CompeticaoConmebol.LIBERTADORES,
+                fase       = faseConmebolAlcancada(doClube, timeId, campeaoId, viceId),
+                vitorias   = vitorias,
+                empates    = empates
+            )
+        }
+    }
+
+    /**
+     * Fase final atingida por um clube, no vocabulário do Ranking CONMEBOL.
+     *
+     * Campeão e vice são sabidos de fora, porque os dois jogaram a mesma final e
+     * o nome da fase não os distingue. Os demais vêm da fase mais avançada em que
+     * o clube entrou em campo; quem não passou da Pré leva a preliminar
+     * correspondente, que vale de 4 a 12 pontos.
+     */
+    private fun faseConmebolAlcancada(
+        partidasDoClube: List<PartidaEntity>,
+        timeId: Int,
+        campeaoId: Int,
+        viceId: Int
+    ): FaseConmebol {
+        if (timeId == campeaoId) return FaseConmebol.CAMPEAO
+        if (timeId == viceId) return FaseConmebol.VICE
+        val fases = partidasDoClube.map { it.fase }.toSet()
+        return when {
+            "Semi" in fases    -> FaseConmebol.SEMIFINAL
+            "Quartas" in fases -> FaseConmebol.QUARTAS
+            "Oitavas" in fases -> FaseConmebol.OITAVAS
+            // fase = null é a fase de grupos.
+            null in fases      -> FaseConmebol.FASE_DE_GRUPOS
+            "Fase 3" in fases  -> FaseConmebol.PRELIMINAR_3
+            "Fase 2" in fases  -> FaseConmebol.PRELIMINAR_2
+            else               -> FaseConmebol.PRELIMINAR_1
+        }
+    }
+
+    /**
+     * Mantém a Libertadores andando quando o jogador não tem jogo pendente nela:
+     * uma rodada de grupo por chamada, como as ligas nacionais, e as rodadas
+     * pendentes das fases eliminatórias de uma vez.
+     */
+    suspend fun simularProximaRodadaLibertadoresSeNecessario(
+        libertadoresId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) {
+        if (libertadoresId <= 0) return
+        val camp = campeonatoDao.buscarPorId(libertadoresId) ?: return
+        if (camp.encerrado) return
+        val todas = partidaDao.buscarTodasPorCampeonato(libertadoresId)
+        // Jogador com jogo pendente → não interferir, ele joga quando chegar a vez.
+        if (todas.any { !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId) }) return
+
+        val pendentesGrupos = todas.filter { !it.jogada && it.fase == null }
+        if (pendentesGrupos.isNotEmpty()) {
+            simularRodada(libertadoresId, pendentesGrupos.minOf { it.rodada })
+        } else {
+            todas.filter { !it.jogada && it.fase != null }
+                .map { it.rodada }.toSortedSet()
+                .forEach { rodada -> simularRodada(libertadoresId, rodada) }
+        }
+        verificarEAvancarFaseLibertadores(libertadoresId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /**
+     * Conclui a Libertadores da temporada que encerra e cria a da temporada nova.
+     *
+     * A conclusão forçada é necessária porque, quando o jogador não a disputa (ou
+     * caiu cedo), ela pode chegar ao fim da temporada inacabada — e sem o campeão
+     * registrado não há título no Hall da Fama nem a vaga de campeão vigente na
+     * edição seguinte, que é estrutural para os 32 dos grupos.
+     */
+    private suspend fun encerrarECriarLibertadores(
+        libertadoresIdAnterior: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int
+    ): Int {
+        concluirCompeticaoContinental(libertadoresIdAnterior) {
+            simularProximaRodadaLibertadoresSeNecessario(libertadoresIdAnterior, -1, ano, temporadaId)
+        }
+        return try {
+            criarLibertadoresDaTemporada(novoTemporadaId, novoAno, temporadaAnteriorId = temporadaId)
+        } catch (_: Exception) { -1 }
     }
 }
 

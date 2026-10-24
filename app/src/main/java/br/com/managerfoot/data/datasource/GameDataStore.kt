@@ -41,6 +41,7 @@ data class SaveState(
     val copaItalianaId: Int,          // ID da Copa Italiana (Coppa Italia) ativa (-1 se não houver)
     val championsId: Int,             // ID da UEFA Champions League ativa (-1 se não houver)
     val europaLeagueId: Int,          // ID da UEFA Europa League ativa (-1 se não houver)
+    val libertadoresId: Int,          // ID da CONMEBOL Libertadores ativa (-1 se não houver)
     val supercopaId: Int,            // ID da Supercopa Rei ativa (-1 se não houver)
     val supercopaInglaterraId: Int,  // ID da Supercopa da Inglaterra ativa (-1 se não houver)
     val supercopaEspanholaId: Int,   // ID da Supercopa da Espanha ativa (-1 se não houver)
@@ -91,6 +92,7 @@ class GameDataStore @Inject constructor(
         val KEY_COPA_ITA_ID     = intPreferencesKey("copa_italiana_id")
         val KEY_CHAMPIONS_ID    = intPreferencesKey("champions_id")
         val KEY_EUROPA_LEAGUE_ID = intPreferencesKey("europa_league_id")
+        val KEY_LIBERTADORES_ID  = intPreferencesKey("libertadores_id")
         val KEY_SUPERCOPA_ID    = intPreferencesKey("supercopa_id")
         val KEY_SUPERCOPA_ING_ID = intPreferencesKey("supercopa_inglaterra_id")
         val KEY_SUPERCOPA_ESP_ID = intPreferencesKey("supercopa_espanhola_id")
@@ -139,6 +141,7 @@ class GameDataStore @Inject constructor(
                 copaItalianaId    = prefs[KEY_COPA_ITA_ID]      ?: -1,
                 championsId       = prefs[KEY_CHAMPIONS_ID]     ?: -1,
                 europaLeagueId    = prefs[KEY_EUROPA_LEAGUE_ID] ?: -1,
+                libertadoresId    = prefs[KEY_LIBERTADORES_ID]  ?: -1,
                 supercopaId       = prefs[KEY_SUPERCOPA_ID]    ?: -1,
                 supercopaInglaterraId = prefs[KEY_SUPERCOPA_ING_ID] ?: -1,
                 supercopaEspanholaId  = prefs[KEY_SUPERCOPA_ESP_ID] ?: -1,
@@ -173,6 +176,7 @@ class GameDataStore @Inject constructor(
         copaEspanholaId: Int = -1, copaItalianaId: Int = -1,
         championsId: Int = -1,
         europaLeagueId: Int = -1,
+        libertadoresId: Int = -1,
         supercopaId: Int = -1,
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
         supercopaUefaId: Int = -1,
@@ -205,6 +209,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_COPA_ITA_ID]     = copaItalianaId
             prefs[KEY_CHAMPIONS_ID]    = championsId
             prefs[KEY_EUROPA_LEAGUE_ID] = europaLeagueId
+            prefs[KEY_LIBERTADORES_ID]  = libertadoresId
             prefs[KEY_SUPERCOPA_ID]    = supercopaId
             prefs[KEY_SUPERCOPA_ING_ID] = supercopaInglaterraId
             prefs[KEY_SUPERCOPA_ESP_ID] = supercopaEspanholaId
@@ -251,6 +256,7 @@ class GameDataStore @Inject constructor(
         copaEspanholaId: Int = -1, copaItalianaId: Int = -1,
         championsId: Int = -1,
         europaLeagueId: Int = -1,
+        libertadoresId: Int = -1,
         supercopaId: Int = -1,
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
         supercopaUefaId: Int = -1,
@@ -281,6 +287,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_COPA_ITA_ID]     = copaItalianaId
             prefs[KEY_CHAMPIONS_ID]    = championsId
             prefs[KEY_EUROPA_LEAGUE_ID] = europaLeagueId
+            prefs[KEY_LIBERTADORES_ID]  = libertadoresId
             prefs[KEY_SUPERCOPA_ID]    = supercopaId
             prefs[KEY_SUPERCOPA_ING_ID] = supercopaInglaterraId
             prefs[KEY_SUPERCOPA_ESP_ID] = supercopaEspanholaId

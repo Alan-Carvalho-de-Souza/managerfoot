@@ -867,4 +867,211 @@ object MotorCampeonato {
             vencedor to cabeca      // vencedor recebe a ida; cabeça decide em casa
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CONMEBOL Libertadores — ver regras_libertadores.md
+    //
+    //  A contraparte sul-americana, e uma contraparte de verdade: enquanto a
+    //  Europa migrou para a liga única de 36, a Libertadores manteve o formato
+    //  tradicional de 8 grupos de 4 em TURNO E RETURNO, mata-mata das oitavas
+    //  à final, e uma final de JOGO ÚNICO em campo neutro.
+    //
+    //  É por isso que FormatoContinental não serve aqui: ele assume liga única
+    //  de 36 e os cortes 8/24. O formato do banco é GRUPOS_E_MATA_MATA.
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Parâmetros da Libertadores. Um data class próprio, e não [FormatoContinental],
+     * porque as duas máquinas não têm as mesmas peças: aqui há fases prévias, há
+     * grupos em vez de tabela única, e a final é de jogo único.
+     */
+    data class FormatoLibertadores(
+        val nome: String,
+        /** As três fases da Pré-Libertadores, ida e volta, nas rodadas 1..6. */
+        val preFases: List<String>,
+        /** Primeira rodada da fase de grupos. */
+        val rodadaBaseGrupos: Int,
+        /** Rodadas da fase de grupos: 6, porque é turno e returno de grupos de 4. */
+        val rodadasGrupos: Int,
+        /** Deslocamento das rodadas do mata-mata, longe das rodadas de grupo. */
+        val rodadaBaseMataMata: Int,
+        val fasesMataMata: List<String>,
+        val ordemGlobalPre: IntArray,
+        val ordemGlobalGrupos: IntArray,
+        /** Ida/volta de Oitavas, Quartas e Semi, mais a casa única da Final. */
+        val ordemGlobalMataMata: IntArray
+    ) {
+        /** Todas as fases nomeadas, na ordem — usada pelo chaveamento na UI. */
+        val fases: List<String> get() = preFases + fasesMataMata
+
+        /** A final é de JOGO ÚNICO, então a última rodada é a dela. */
+        val totalRodadas: Int
+            get() = rodadaBaseMataMata + rodadaIdaDeFase(fasesMataMata.lastIndex)
+
+        /** rodada de ida da fase prévia de índice [faseIndex] (0 = Fase 1). */
+        fun rodadaIdaDaPreFase(faseIndex: Int): Int = rodadaIdaDeFase(faseIndex)
+
+        /** rodadaIda de uma fase do mata-mata (0 = Oitavas). */
+        fun rodadaIdaDeFaseMataMata(faseIndex: Int): Int =
+            rodadaBaseMataMata + rodadaIdaDeFase(faseIndex)
+
+        /**
+         * A final é a última fase do mata-mata e, diferente de todas as outras
+         * fases de mata-mata do jogo, é decidida em UM jogo só, em campo neutro.
+         */
+        fun ehFinal(fase: String): Boolean = fase == fasesMataMata.last()
+
+        /**
+         * Se o empate desta fase passa pela prorrogação antes dos pênaltis. Das
+         * oitavas às semis vai direto aos pênaltis; só a final tem prorrogação.
+         *
+         * O jogo hoje não simula prorrogação em nenhuma competição — todo empate
+         * de mata-mata vai aos pênaltis —, então esta função ainda não muda o
+         * resultado de nada. Ela existe porque a regra é da competição, não do
+         * motor, e é aqui que a prorrogação se encaixa quando a engine a tiver.
+         */
+        fun temProrrogacao(fase: String): Boolean = ehFinal(fase)
+    }
+
+    /**
+     * A Libertadores joga no meio de semana, como as europeias, mas em casas de
+     * ordemGlobal próprias: nenhuma coincide com as da Champions (27/67/.../373)
+     * nem com as da Europa League (as mesmas +1), e nenhuma é múltiplo de 10,
+     * que é o que as rodadas das ligas nacionais usam.
+     *
+     * As rodadas são por campeonato, então a base 20 do mata-mata não conflita
+     * com a base 20 da Champions — mas as faixas aqui são separadas entre si: a
+     * Pré ocupa 1..6, os grupos 11..16 e o mata-mata 21..27.
+     */
+    val FORMATO_LIBERTADORES = FormatoLibertadores(
+        nome                = "Libertadores",
+        preFases            = ListaDeAcessoLibertadores.PRE_FASES,
+        rodadaBaseGrupos    = 11,
+        rodadasGrupos       = (ListaDeAcessoLibertadores.CLUBES_POR_GRUPO - 1) * 2,  // 6
+        rodadaBaseMataMata  = 20,
+        fasesMataMata       = listOf("Oitavas", "Quartas", "Semi", "Final"),
+        //   Fase 1 15/19, Fase 2 25/29, Fase 3 35/39 — antes dos grupos
+        ordemGlobalPre      = intArrayOf(15, 19, 25, 29, 35, 39),
+        ordemGlobalGrupos   = intArrayOf(45, 75, 105, 135, 165, 195),
+        //   Oitavas 265/275, Quartas 295/305, Semi 335/345, Final 385 (jogo único)
+        ordemGlobalMataMata = intArrayOf(265, 275, 295, 305, 335, 345, 385)
+    )
+
+    /**
+     * Gera a fase de grupos em TURNO E RETURNO e devolve as partidas de todos os
+     * grupos juntas.
+     *
+     * É a peça que faltava: [gerarTurnoUnicoGrupo] faz turno único (3 rodadas num
+     * grupo de 4) e [gerarCalendarioPontosCorridos] faz turno e returno mas trata
+     * a lista inteira como uma liga só. Aqui o round-robin é aplicado GRUPO A
+     * GRUPO, e as rodadas dos oito grupos são alinhadas: a rodada 1 de todos os
+     * grupos é a mesma rodada do calendário.
+     *
+     * Para 8 grupos de 4 isso dá 6 rodadas, 12 partidas por grupo e 96 no total,
+     * com 6 partidas por clube — exatamente o que o enunciado pede.
+     *
+     * As partidas saem com `fase = null`, porque é o que faz a classificação ser
+     * alimentada pelo caminho normal. O rótulo do grupo não vive na partida:
+     * `PartidaEntity` não tem essa coluna, e quem o carrega é
+     * `CampeonatoTimeEntity.grupo` e `ClassificacaoEntity.grupo`.
+     */
+    fun gerarGruposTurnoReturno(
+        campeonatoId: Int,
+        grupos: List<List<Int>>,
+        rodadaBase: Int = 1,
+        ordemGlobalPorRodada: IntArray = intArrayOf()
+    ): List<PartidaEntity> {
+        val partidas = mutableListOf<PartidaEntity>()
+        for (participantes in grupos) {
+            // O turno sai do round-robin de rotação; o returno é o turno com o
+            // mando invertido, uma volta inteira depois.
+            val turno = rodadasDoTurno(participantes)
+            turno.forEachIndexed { idx, jogos ->
+                val rodadaTurno   = rodadaBase + idx
+                val rodadaReturno = rodadaBase + idx + turno.size
+                jogos.forEach { (casa, fora) ->
+                    partidas += PartidaEntity(
+                        campeonatoId = campeonatoId,
+                        rodada       = rodadaTurno,
+                        timeCasaId   = casa,
+                        timeForaId   = fora,
+                        ordemGlobal  = ordemGlobalDaRodadaGrupo(rodadaTurno, rodadaBase, ordemGlobalPorRodada)
+                    )
+                    partidas += PartidaEntity(
+                        campeonatoId = campeonatoId,
+                        rodada       = rodadaReturno,
+                        timeCasaId   = fora,     // mando invertido no returno
+                        timeForaId   = casa,
+                        ordemGlobal  = ordemGlobalDaRodadaGrupo(rodadaReturno, rodadaBase, ordemGlobalPorRodada)
+                    )
+                }
+            }
+        }
+        return partidas
+    }
+
+    /** ordemGlobal de uma rodada de grupo, com fallback para rodadas além da tabela. */
+    private fun ordemGlobalDaRodadaGrupo(
+        rodada: Int,
+        rodadaBase: Int,
+        casas: IntArray
+    ): Int {
+        if (casas.isEmpty()) return rodada * 10
+        return casas.getOrElse(rodada - rodadaBase) {
+            casas.last() + (rodada - rodadaBase - casas.size + 1) * 2
+        }
+    }
+
+    /**
+     * Rodadas do turno de um grupo: round-robin de rotação com o primeiro time
+     * fixo, alternando o mando a cada rodada para ninguém jogar tudo em casa.
+     * Para N ímpar entra um bye (-1), que não gera partida.
+     */
+    private fun rodadasDoTurno(participantes: List<Int>): List<List<Pair<Int, Int>>> {
+        val times = participantes.toMutableList()
+        if (times.size % 2 != 0) times.add(-1)
+        val metade = times.size / 2
+        val rodadas = mutableListOf<List<Pair<Int, Int>>>()
+        repeat(times.size - 1) { idx ->
+            val jogos = mutableListOf<Pair<Int, Int>>()
+            for (i in 0 until metade) {
+                val a = times[i]
+                val b = times[times.size - 1 - i]
+                if (a != -1 && b != -1) {
+                    jogos += if (idx % 2 == 0) a to b else b to a
+                }
+            }
+            rodadas += jogos
+            val ultimo = times.removeAt(times.size - 1)
+            times.add(1, ultimo)
+        }
+        return rodadas
+    }
+
+    /**
+     * Cruzamento das oitavas da Libertadores: o 1º de um grupo contra o 2º de
+     * OUTRO, com o primeiro colocado decidindo em casa (ele é o visitante da ida).
+     *
+     * [primeiros] e [segundos] vêm na ordem dos grupos A..H. O deslocamento de
+     * meia volta — grupo i contra o grupo (i + 4) % 8 — garante por construção
+     * que ninguém reencontra um adversário do próprio grupo, sem depender de um
+     * sorteio que pudesse não ter solução.
+     *
+     * Devolve os pares como (mandante da ida, visitante da ida).
+     */
+    fun paresOitavasLibertadores(
+        primeiros: List<Int>,
+        segundos: List<Int>
+    ): List<Pair<Int, Int>> {
+        require(primeiros.size == segundos.size) {
+            "primeiros (${primeiros.size}) e segundos (${segundos.size}) tem de ter o mesmo tamanho"
+        }
+        val n = primeiros.size
+        if (n == 0) return emptyList()
+        val deslocamento = n / 2
+        return primeiros.indices.map { i ->
+            // O 2º colocado recebe a ida; o 1º colocado decide em casa na volta.
+            segundos[(i + deslocamento) % n] to primeiros[i]
+        }
+    }
 }

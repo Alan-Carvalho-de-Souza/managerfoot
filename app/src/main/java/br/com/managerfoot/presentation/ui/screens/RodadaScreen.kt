@@ -52,6 +52,7 @@ fun RodadaScreen(
     campeonatoSerieAId: Int = -1,
     campeonatoChampionsId: Int = -1,
     campeonatoEuropaId: Int = -1,
+    campeonatoLibertadoresId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -63,13 +64,14 @@ fun RodadaScreen(
 
     val esMataMataDivisao =
         divisaoSelecionada == 8 || divisaoSelecionada == 9 ||
-            divisaoSelecionada == 31 || divisaoSelecionada == 33
+            divisaoSelecionada == 31 || divisaoSelecionada == 33 ||
+            divisaoSelecionada == 41
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId, campeonatoEuropaId
+        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
@@ -81,7 +83,8 @@ fun RodadaScreen(
             campLaLigaId = campeonatoLaLigaId,
             campSerieAId = campeonatoSerieAId,
             campChampionsId = campeonatoChampionsId,
-            campEuropaId = campeonatoEuropaId
+            campEuropaId = campeonatoEuropaId,
+            campLibertadoresId = campeonatoLibertadoresId
         )
     }
 
@@ -142,14 +145,25 @@ fun RodadaScreen(
             add(33 to "Europa League — Mata-Mata")
         }
     }
+    // A Libertadores é sul-americana, então ganha o seu próprio filtro de país.
+    // A fase de grupos tem rodadas (11 a 16) e entra como calendário; a
+    // Pré-Libertadores e o mata-mata são confrontos e entram na visão de chaves.
+    val opcoesAmericaDoSul = buildList {
+        if (campeonatoLibertadoresId > 0) {
+            add(40 to "Libertadores — Grupos")
+            add(41 to "Libertadores — Mata-Mata")
+        }
+    }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
     val temInglaterra = opcoesInglaterra.isNotEmpty()
     val temEspanha = opcoesEspanha.isNotEmpty()
     val temItalia = opcoesItalia.isNotEmpty()
     val temEuropa = opcoesEuropa.isNotEmpty()
+    val temAmericaDoSul = opcoesAmericaDoSul.isNotEmpty()
     val temOutrosPaises =
-        temArgentina || temUruguai || temInglaterra || temEspanha || temItalia || temEuropa
+        temArgentina || temUruguai || temInglaterra || temEspanha || temItalia ||
+            temEuropa || temAmericaDoSul
 
     var paisSelecionado by remember {
         mutableStateOf(
@@ -160,6 +174,7 @@ fun RodadaScreen(
                 divisaoSelecionada == 22      -> "Espanha"
                 divisaoSelecionada == 23      -> "Italia"
                 divisaoSelecionada in 30..33  -> "Europa"
+                divisaoSelecionada in 40..41  -> "América do Sul"
                 else -> "Brasil"
             }
         )
@@ -172,6 +187,7 @@ fun RodadaScreen(
             divisaoSelecionada == 22      -> "Espanha"
             divisaoSelecionada == 23      -> "Italia"
             divisaoSelecionada in 30..33  -> "Europa"
+            divisaoSelecionada in 40..41  -> "América do Sul"
             else -> "Brasil"
         }
     }
@@ -183,6 +199,7 @@ fun RodadaScreen(
         "Espanha"    -> opcoesEspanha
         "Italia"     -> opcoesItalia
         "Europa"     -> opcoesEuropa
+        "América do Sul" -> opcoesAmericaDoSul
         else         -> opcoesBrasil
     }
 
@@ -226,6 +243,7 @@ fun RodadaScreen(
                         if (temEspanha)   add("Espanha")
                         if (temItalia)    add("Italia")
                         if (temEuropa)    add("Europa")
+                        if (temAmericaDoSul) add("América do Sul")
                     },
                     onSelect = { pais ->
                         paisSelecionado = pais
@@ -237,6 +255,7 @@ fun RodadaScreen(
                             "Espanha"    -> opcoesEspanha
                             "Italia"     -> opcoesItalia
                             "Europa"     -> opcoesEuropa
+                            "América do Sul" -> opcoesAmericaDoSul
                             else         -> opcoesBrasil
                         }
                         primeiraOpcao.firstOrNull()?.let { vm.selecionarDivisao(it.first) }

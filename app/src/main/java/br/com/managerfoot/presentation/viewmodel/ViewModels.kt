@@ -409,6 +409,11 @@ class InicioViewModel @Inject constructor(
                 championsId = championsId
             )
 
+            // ── CONMEBOL Libertadores — Pré-Libertadores + 8 grupos de 4 ────────
+            // Devolve -1 enquanto o jogo não tiver os 47 clubes sul-americanos
+            // (19 na Pré, 26 diretos e as 2 vagas de campeão vigente).
+            val libertadoresId = gameRepository.criarLibertadoresDaTemporada(temporadaId, 2026)
+
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)
             val divJogador = timeEntity2?.divisao ?: 1
@@ -452,6 +457,7 @@ class InicioViewModel @Inject constructor(
                 copaItalianaId = copaItalianaId,
                 championsId = championsId,
                 europaLeagueId = europaLeagueId,
+                libertadoresId = libertadoresId,
                 supercopaId = supercopaId,
                 ano = 2026
             )
@@ -1010,6 +1016,28 @@ class DashboardViewModel @Inject constructor(
                             anoAtual = save.anoAtual, temporadaId = save.temporadaId
                         )
                     }
+                    // ── CONMEBOL Libertadores (Pré + grupos + mata-mata) ────────────
+                    if (save.libertadoresId > 0 && ctx.campeonatoId == save.libertadoresId && !resultadoFinal.precisaPenaltis) {
+                        gameRepository.verificarEAvancarFaseLibertadores(
+                            libertadoresId = save.libertadoresId, anoAtual = save.anoAtual,
+                            timeJogadorId = save.timeIdJogador, temporadaId = save.temporadaId
+                        )
+                    }
+                    if (save.libertadoresId > 0 && ctx.campeonatoId == save.libertadoresId && resultadoFinal.precisaPenaltis) {
+                        _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                            copaId = save.libertadoresId, voltaPartidaId = resultadoFinal.partidaId,
+                            timeJogadorId = save.timeIdJogador
+                        )
+                    }
+                    // Fora da partida do jogador, a Libertadores anda sozinha: uma
+                    // rodada de grupo por partida dele, como as ligas nacionais, e as
+                    // fases eliminatórias pendentes de uma vez.
+                    if (ctx.campeonatoId != save.libertadoresId && save.libertadoresId > 0) {
+                        gameRepository.simularProximaRodadaLibertadoresSeNecessario(
+                            libertadoresId = save.libertadoresId, timeJogadorId = save.timeIdJogador,
+                            anoAtual = save.anoAtual, temporadaId = save.temporadaId
+                        )
+                    }
                     // ── Supercopas (Brasil / Inglaterra / Espanha / Itália) ─────────
                     val supercopasIds = listOf(
                         save.supercopaId, save.supercopaInglaterraId,
@@ -1413,6 +1441,7 @@ class DashboardViewModel @Inject constructor(
         val copaItaId = if (save.copaItalianaId > 0 && _contextoSimulacao?.campeonatoId == save.copaItalianaId) save.copaItalianaId else -1
         val championsId = if (save.championsId > 0 && _contextoSimulacao?.campeonatoId == save.championsId) save.championsId else -1
         val europaLeagueId = if (save.europaLeagueId > 0 && _contextoSimulacao?.campeonatoId == save.europaLeagueId) save.europaLeagueId else -1
+        val libertadoresId = if (save.libertadoresId > 0 && _contextoSimulacao?.campeonatoId == save.libertadoresId) save.libertadoresId else -1
         try {
             val penaltis = when {
                 _penaltisParaSupercopa -> {
@@ -1479,6 +1508,25 @@ class DashboardViewModel @Inject constructor(
                         avancoAlternativo    = {
                             gameRepository.verificarEAvancarFaseEuropa(
                                 europaLeagueId = europaLeagueId,
+                                anoAtual       = save.anoAtual,
+                                timeJogadorId  = save.timeIdJogador,
+                                temporadaId    = save.temporadaId
+                            )
+                        }
+                    )
+                }
+                libertadoresId > 0 -> {
+                    gameRepository.simularEPersistirPenaltisJogador(
+                        copaId               = libertadoresId,
+                        anoAtual             = save.anoAtual,
+                        voltaPartidaId       = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        temporadaId          = save.temporadaId,
+                        avancoAlternativo    = {
+                            gameRepository.verificarEAvancarFaseLibertadores(
+                                libertadoresId = libertadoresId,
                                 anoAtual       = save.anoAtual,
                                 timeJogadorId  = save.timeIdJogador,
                                 temporadaId    = save.temporadaId
@@ -1554,6 +1602,7 @@ class DashboardViewModel @Inject constructor(
                 campeonatoSerieAId        = save.campeonatoSerieAId,
                 championsId               = save.championsId,
                 europaLeagueId            = save.europaLeagueId,
+                libertadoresId            = save.libertadoresId,
                 temporadaId              = save.temporadaId,
                 ano                      = anoTemporada,
                 timeJogadorId            = save.timeIdJogador
@@ -1598,6 +1647,7 @@ class DashboardViewModel @Inject constructor(
                 copaItalianaId = novaInfo.copaItalianaId,
                 championsId    = novaInfo.championsId,
                 europaLeagueId = novaInfo.europaLeagueId,
+                libertadoresId = novaInfo.libertadoresId,
                 supercopaId   = novaInfo.supercopaId,
                 supercopaInglaterraId = novaInfo.supercopaInglaterraId,
                 supercopaEspanholaId  = novaInfo.supercopaEspanholaId,
@@ -2280,6 +2330,7 @@ class TabelaViewModel @Inject constructor(
     private var campeonatoSerieAId: Int = -1
     private var championsId: Int = -1
     private var europaLeagueId: Int = -1
+    private var libertadoresId: Int = -1
     private var copaId: Int = -1
 
     // timeId do campeão da Copa do Brasil corrente (-1 enquanto não encerrada)
@@ -2293,7 +2344,7 @@ class TabelaViewModel @Inject constructor(
     // Job do collector ativo — cancelado sempre que a divisão muda
     private var coletaJob: kotlinx.coroutines.Job? = null
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2312,13 +2363,14 @@ class TabelaViewModel @Inject constructor(
         campeonatoSerieAId = campSerieAId
         championsId = campChampionsId
         europaLeagueId = campEuropaId
+        libertadoresId = campLibertadoresId
         copaId = copaIdBrasil
         // Busca o campeão da Copa do Brasil se já encerrada
         _copaChampeaoTimeId.value = gameRepository.buscarCampeaoCopaSeEncerrada(copaIdBrasil)
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais
         listOf(campAId, campBId, campCId, campDId, campArgAId, campArgBId, campArgClausuraId,
-               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId, campChampionshipId, campLaLigaId, campSerieAId, campChampionsId, campEuropaId).filter { it > 0 }.forEach { id ->
+               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId, campChampionshipId, campLaLigaId, campSerieAId, campChampionsId, campEuropaId, campLibertadoresId).filter { it > 0 }.forEach { id ->
             gameRepository.recalcularClassificacao(id)
         }
         // Determina a divisão inicial pelo time do jogador; usa Série A como fallback.
@@ -2364,6 +2416,9 @@ class TabelaViewModel @Inject constructor(
         23 -> campeonatoSerieAId
         30 -> championsId          // Fase de Liga da Champions: tabela única de 36
         31 -> europaLeagueId       // Fase de Liga da Europa League, idem
+        // 40 = fase de grupos da Libertadores: 8 tabelas de 4, filtradas pelo
+        // rótulo do grupo em ClassificacaoEntity (ver coletarTabela).
+        40 -> libertadoresId
         else -> campeonatoArgAId
     }
 
@@ -2442,7 +2497,9 @@ class TabelaViewModel @Inject constructor(
         coletaJob = viewModelScope.launch {
             if (campId <= 0) { _tabela.value = emptyList(); return@launch }
             gameRepository.observarTabela(campId).collect { lista ->
-                val ehGrupos = divisao == 5 || divisao == 7
+                // 5 e 7 = Apertura/Clausura argentinos; 40 = fase de grupos da
+                // Libertadores, que são 8 grupos de 4.
+                val ehGrupos = divisao == 5 || divisao == 7 || divisao == 40
                 _tabela.value = if (ehGrupos) {
                     lista.sortedWith(
                         compareBy<ClassificacaoEntity> { it.grupo ?: "Z" }
@@ -2513,6 +2570,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var campeonatoAmistososId: Int = -1
     private var championsId: Int = -1
     private var europaLeagueId: Int = -1
+    private var libertadoresId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -2520,7 +2578,7 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2543,6 +2601,7 @@ class ArtilheirosViewModel @Inject constructor(
         campeonatoAmistososId = campAmistosos
         championsId = campChampionsId
         europaLeagueId = campEuropaId
+        libertadoresId = campLibertadoresId
         _divisaoSelecionada.value = divisaoInicial
         coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
@@ -2573,6 +2632,7 @@ class ArtilheirosViewModel @Inject constructor(
         34 -> campeonatoSerieAId
         35 -> championsId   // Champions League (Fase de Liga + mata-mata)
         36 -> europaLeagueId // Europa League, idem
+        37 -> libertadoresId // Libertadores (Pré + grupos + mata-mata)
         else -> -1 // div=6,25,26 (combinados) e div=0,100,200,300 (todos) tratados em coletarArtilheiros
     }
 
@@ -2587,6 +2647,9 @@ class ArtilheirosViewModel @Inject constructor(
         // A Champions nao pertence a um pais: o campeonato e gravado com
         // pais = Continentes.EUROPA, e e por isso que o historico casa aqui.
         35, 36              -> Continentes.EUROPA
+        // A Libertadores e gravada com pais = Continentes.AMERICA_DO_SUL, pelo
+        // mesmo motivo: um torneio continental nao pertence a um pais.
+        37                  -> Continentes.AMERICA_DO_SUL
         else                -> null
     }
 
@@ -2608,6 +2671,7 @@ class ArtilheirosViewModel @Inject constructor(
         34          -> listOf("NACIONAL_DIVISAO1")    // Serie A italiana
         35          -> listOf("CONTINENTAL")          // Champions League
         36          -> listOf("CONTINENTAL")          // Europa League
+        37          -> listOf("CONTINENTAL")          // Libertadores
         else -> emptyList()
     }
 
@@ -2621,7 +2685,7 @@ class ArtilheirosViewModel @Inject constructor(
                            campeonatoUruBId, campeonatoUruBCompetId,
                            campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId,
                            campeonatoSerieAId, copaInglaterraId, campeonatoAmistososId,
-                           championsId, europaLeagueId).filter { it > 0 }
+                           championsId, europaLeagueId, libertadoresId).filter { it > 0 }
             // Combinados por país
             100  -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId).filter { it > 0 }
             200  -> listOf(campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, copaArgId).filter { it > 0 }
@@ -2704,6 +2768,7 @@ class HallDaFamaViewModel @Inject constructor(
                 500  -> lista.filter { it.divisao == 22 || it.divisao == 25 || it.divisao == 28 }       // Espanha (La Liga + Copa + Supercopa)
                 600  -> lista.filter { it.divisao == 24 || it.divisao == 26 || it.divisao == 29 }       // Italia (Serie A + Copa + Supercopa)
                 700  -> lista.filter { it.divisao in 30..33 }                                          // Europa (Champions, Europa League, Supercopa da UEFA e futura Conference)
+                800  -> lista.filter { it.divisao in 34..35 }                                          // América do Sul (Libertadores e futura Sul-Americana)
                 else -> lista.filter { it.divisao == div }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -3002,6 +3067,12 @@ class CopaChaveamentoViewModel @Inject constructor(
     private val _partidasEuropa = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
     val partidasEuropa: StateFlow<List<CopaPartidaDto>> = _partidasEuropa.asStateFlow()
 
+    // Chaveamento da Libertadores: as três fases da Pré-Libertadores e o mata-mata
+    // das oitavas à final. A fase de grupos não entra — observeCopaPartidas filtra
+    // fase e confrontoId não-nulos, e as partidas de grupo têm fase = null.
+    private val _partidasLibertadores = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasLibertadores: StateFlow<List<CopaPartidaDto>> = _partidasLibertadores.asStateFlow()
+
     fun carregar(copaId: Int) = viewModelScope.launch {
         if (copaId <= 0) return@launch
         gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it }
@@ -3011,7 +3082,8 @@ class CopaChaveamentoViewModel @Inject constructor(
         copaId: Int, copaArgId: Int, copaInglaterraId: Int,
         copaEspanholaId: Int = -1, copaItalianaId: Int = -1,
         championsId: Int = -1,
-        europaLeagueId: Int = -1
+        europaLeagueId: Int = -1,
+        libertadoresId: Int = -1
     ) = viewModelScope.launch {
         if (copaId > 0) {
             launch { gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it } }
@@ -3033,6 +3105,9 @@ class CopaChaveamentoViewModel @Inject constructor(
         }
         if (europaLeagueId > 0) {
             launch { gameRepository.observarCopaPartidas(europaLeagueId).collect { _partidasEuropa.value = it } }
+        }
+        if (libertadoresId > 0) {
+            launch { gameRepository.observarCopaPartidas(libertadoresId).collect { _partidasLibertadores.value = it } }
         }
     }
 }
@@ -3697,13 +3772,15 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoSerieAId = -1
     private var campeonatoChampionsId = -1
     private var campeonatoEuropaId = -1
+    private var campeonatoLibertadoresId = -1
 
     private var coletarJob: Job? = null
 
     fun carregar(campAId: Int, campBId: Int, campCId: Int, campDId: Int, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1,
                  campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1,
                  campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1,
-                 campChampionsId: Int = -1, campEuropaId: Int = -1) = viewModelScope.launch {
+                 campChampionsId: Int = -1, campEuropaId: Int = -1,
+                 campLibertadoresId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -3722,6 +3799,7 @@ class RodadaViewModel @Inject constructor(
         campeonatoSerieAId = campSerieAId
         campeonatoChampionsId = campChampionsId
         campeonatoEuropaId = campEuropaId
+        campeonatoLibertadoresId = campLibertadoresId
         atualizarMaxEColetar()
     }
 
@@ -3743,11 +3821,12 @@ class RodadaViewModel @Inject constructor(
         // Divisões de mata-mata, que compartilham o campeonatoId da fase anterior:
         // 8 e 9 = Apertura/Clausura argentinos, 31 = play-off e mata-mata da Champions,
         // 33 = o mesmo na Europa League.
-        if (div == 8 || div == 9 || div == 31 || div == 33) {
+        if (div == 8 || div == 9 || div == 31 || div == 33 || div == 41) {
             val campId = when (div) {
                 8    -> campeonatoArgAId
                 9    -> campeonatoArgClausuraId
                 33   -> campeonatoEuropaId
+                41   -> campeonatoLibertadoresId
                 else -> campeonatoChampionsId
             }
             _partidas.value = emptyList()
@@ -3797,6 +3876,10 @@ class RodadaViewModel @Inject constructor(
         30 -> campeonatoChampionsId
         // 32 = Fase de Liga da Europa League, nas mesmas condições.
         32 -> campeonatoEuropaId
+        // 40 = fase de grupos da Libertadores. As partidas dela também têm
+        // fase = null, mas as rodadas vão de 11 a 16, e não de 1 a 6 — a Pré
+        // ocupa as rodadas 1..6 e aparece na visão de mata-mata (código 41).
+        40 -> campeonatoLibertadoresId
         else -> campeonatoArgAId
     }
 
@@ -3810,6 +3893,9 @@ class RodadaViewModel @Inject constructor(
     fun fasesDaDivisao(divisao: Int): List<String> = when (divisao) {
         31   -> MotorCampeonato.FORMATO_CHAMPIONS.fases
         33   -> MotorCampeonato.FORMATO_EUROPA_LEAGUE.fases
+        // A Libertadores começa nas três fases da Pré-Libertadores, que antecedem
+        // os grupos, e segue das oitavas à final.
+        41   -> MotorCampeonato.FORMATO_LIBERTADORES.fases
         else -> ARG_FASES_ORDER
     }
 }

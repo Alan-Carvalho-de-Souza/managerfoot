@@ -48,4 +48,12 @@ interface CampeonatoDao {
 
     @Query("SELECT timeId FROM campeonato_times WHERE campeonatoId = :campeonatoId")
     suspend fun buscarIdsParticipantes(campeonatoId: Int): List<Int>
+
+    /**
+     * Participantes COM o rotulo de grupo. A Libertadores usa esse rotulo em duas
+     * etapas: antes do sorteio ele diz por qual porta o clube entrou ("G" direto
+     * nos grupos, "P" na Pre-Libertadores) e, depois do sorteio, o grupo A..H.
+     */
+    @Query("SELECT * FROM campeonato_times WHERE campeonatoId = :campeonatoId")
+    suspend fun buscarParticipantesComGrupo(campeonatoId: Int): List<CampeonatoTimeEntity>
 }
