@@ -7480,7 +7480,8 @@ class GameRepository @Inject constructor(
         campeonato: CampeonatoEntity,
         vagas: List<VagaLibertadores>,
         ano: Int = 0,
-        timeJogadorId: Int = -1
+        timeJogadorId: Int = -1,
+        random: kotlin.random.Random = kotlin.random.Random.Default
     ): Int {
         val diretos = ListaDeAcessoLibertadores.diretosNosGrupos(vagas)
         val naPre   = ListaDeAcessoLibertadores.naPreLibertadores(vagas)
@@ -7502,14 +7503,18 @@ class GameRepository @Inject constructor(
                 naPre.map { CampeonatoTimeEntity(campeonatoId, it.timeId, PORTA_PRE) }
         )
 
-        // Fase 1: os 6 clubes mais fracos da Pré. A fila está do melhor para o
-        // pior, então são os últimos — os outros 13 entram direto na Fase 2.
-        val filaPre = naPre.sortedWith(ListaDeAcessoChampions.ORDEM).map { it.timeId }
+        // Fase 1: os 6 piores ranqueados da Pré. Os outros 13 entram direto na
+        // Fase 2 — é a entrada escalonada que resolve o 19 ser ímpar sem bye.
+        //
+        // O sorteio divide esses 6 em dois potes de 3 pelo Ranking de Clubes da
+        // CONMEBOL: quem do Pote 2 pega quem do Pote 1 é sorteado, e o do Pote 1
+        // decide em casa. Ver SorteioLibertadores.sortearFase1.
+        val filaPre = naPre.sortedWith(ListaDeAcessoChampions.ORDEM)
         val fase1 = filaPre.takeLast(ListaDeAcessoLibertadores.PRE_FASE1_CLUBES)
         partidaDao.inserirTodas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = campeonatoId,
-                pares             = paresSemeados(fase1),
+                pares             = SorteioLibertadores.sortearFase1(paraSorteio(fase1), random),
                 fase              = formato.preFases[0],
                 rodadaIda         = formato.rodadaIdaDaPreFase(0),
                 confrontoIdInicio = 1,
@@ -7556,17 +7561,28 @@ class GameRepository @Inject constructor(
         }
     }
 
+    /** Os candidatos no formato que SorteioLibertadores consome. */
+    private fun paraSorteio(candidatos: List<CandidatoLibertadores>): List<ClubeChampions> =
+        candidatos.map { ClubeChampions(it.timeId, it.nome, it.pais, it.coeficiente) }
+
     /**
-     * Pares semeados de uma fila ordenada do melhor para o pior: o 1º pega o
-     * último, o 2º o penúltimo, e assim por diante.
-     *
-     * Devolve (mandante da ida, visitante da ida) com o clube MAIS FRACO recebendo
-     * a ida, de modo que o mais forte decida em casa — a vantagem que a semeadura
-     * existe para dar.
+     * O mesmo, a partir de ids: a Pré avança com ids de time, e o sorteio precisa
+     * do país e do coeficiente de cada um para montar os potes.
      */
-    private fun paresSemeados(fila: List<Int>): List<Pair<Int, Int>> {
-        val n = fila.size / 2
-        return (0 until n).map { i -> fila[fila.size - 1 - i] to fila[i] }
+    private suspend fun paraSorteioPorId(timeIds: List<Int>, anoAtual: Int): List<ClubeChampions> {
+        val alvo = timeIds.toSet()
+        val coeficientes = rankingConmebolDao.observeRanking(anoAtual).first()
+            .associate { it.timeId to it.pontos }
+        return timeRepository.buscarTodosOrdenadosPorReputacao()
+            .filter { it.id in alvo }
+            .map { time ->
+                ClubeChampions(
+                    timeId      = time.id,
+                    nome        = time.nome,
+                    pais        = ListaDeAcessoLibertadores.paisCanonico(time.pais) ?: time.pais.trim(),
+                    coeficiente = (coeficientes[time.id] ?: 0.0) + time.reputacao
+                )
+            }
     }
 
     /**
@@ -7598,7 +7614,7 @@ class GameRepository @Inject constructor(
             val proxima = formato.preFases.getOrNull(indice + 1)
             if (proxima != null) {
                 if (todas.any { it.fase == proxima }) continue
-                gerarProximaPreFase(libertadoresId, todas, daFase, indice)
+                gerarProximaPreFase(libertadoresId, todas, daFase, indice, anoAtual)
                 return false
             }
             // Fase 3 completa → é hora do sorteio dos grupos.
@@ -7633,7 +7649,9 @@ class GameRepository @Inject constructor(
         libertadoresId: Int,
         todas: List<PartidaEntity>,
         partidasDaFase: List<PartidaEntity>,
-        indiceFaseAtual: Int
+        indiceFaseAtual: Int,
+        anoAtual: Int,
+        random: kotlin.random.Random = kotlin.random.Random.Default
     ) {
         val formato = MotorCampeonato.FORMATO_LIBERTADORES
         val proximoIndice = indiceFaseAtual + 1
@@ -7649,14 +7667,28 @@ class GameRepository @Inject constructor(
                 .map { it.timeId }
         } else emptyList()
 
-        // Os entrantes diretos são mais fortes que quem veio da fase anterior, e
-        // por isso ficam no topo da fila da semeadura.
-        val fila = ordenarPorForca(entramAgora) + vencedores
+        // ── O sorteio de cada fase prévia ──────────────────────────────
+        // Fase 2: Pote A são os 8 melhores ranqueados ENTRE OS 13 pré-classificados
+        // e decidem a volta em casa; o Pote B são os outros 5 mais os 3 que vieram
+        // da Fase 1, e as bolinhas dele são sorteadas contra o Pote A.
+        //
+        // Fase 3: NÃO há sorteio. Os 8 vencedores da Fase 2 se enfrentam em
+        // chaveamento pré-definido — C1×C8, C2×C7, C3×C6, C4×C5.
+        val fila = entramAgora + vencedores
         if (fila.size < 2) return
+        val pares = if (proximoIndice == 1) {
+            SorteioLibertadores.sortearFase2(
+                clubes        = paraSorteioPorId(fila, anoAtual),
+                vindosDaFase1 = vencedores.toSet(),
+                random        = random
+            )
+        } else {
+            SorteioLibertadores.chavearFase3(vencedores)
+        }
         partidaDao.inserirTodas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = libertadoresId,
-                pares             = paresSemeados(fila),
+                pares             = pares,
                 fase              = formato.preFases[proximoIndice],
                 rodadaIda         = formato.rodadaIdaDaPreFase(proximoIndice),
                 confrontoIdInicio = (todas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
@@ -7672,15 +7704,6 @@ class GameRepository @Inject constructor(
             .groupBy { it.confrontoId }
             .toSortedMap(compareBy { it ?: 0 })
             .mapNotNull { (_, jogos) -> vencedorDoTie(jogos) }
-
-    /** Os ids pedidos, ordenados do mais forte para o mais fraco pela reputação. */
-    private suspend fun ordenarPorForca(timeIds: List<Int>): List<Int> {
-        if (timeIds.isEmpty()) return emptyList()
-        val alvo = timeIds.toSet()
-        return timeRepository.buscarTodosOrdenadosPorReputacao()
-            .filter { it.id in alvo }
-            .map { it.id }
-    }
 
     /**
      * Sorteia a fase de grupos e grava as 96 partidas do turno e returno.
@@ -7713,7 +7736,14 @@ class GameRepository @Inject constructor(
                 coeficiente = (coeficientes[time.id] ?: 0.0) + time.reputacao
             )
         }
-        val sorteio = SorteioLibertadores.sortear(clubes) ?: return
+        // O sorteio principal: 4 potes pelo Ranking de Clubes da CONMEBOL, o
+        // campeão vigente na posição A1, bloqueio de países e a exceção do Pote 4
+        // para os 4 que vieram da Pré. Ver SorteioLibertadores.sortearGrupos.
+        val sorteio = SorteioLibertadores.sortearGrupos(
+            clubes             = clubes,
+            sobreviventesDaPre = sobreviventesDaPre.toSet(),
+            campeaoVigente     = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES)
+        ) ?: return
 
         // Rótulo do grupo nos participantes (REPLACE na chave campeonatoId+timeId)
         // e numa tabela inicial de 32 linhas, 4 por grupo.

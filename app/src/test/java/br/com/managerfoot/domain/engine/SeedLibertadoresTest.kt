@@ -186,49 +186,51 @@ class SeedLibertadoresTest {
     // ── O sorteio com as dez associações ─────────────────────────────────
 
     @Test
-    fun `com as dez associacoes o sorteio quase zera os compatriotas`() {
+    fun `o sorteio real sobre o seed respeita o bloqueio de paises`() {
         val vagas = acesso.montar(candidatos(), fecharFaseDeGrupos = true)
         val diretos = acesso.diretosNosGrupos(vagas)
-
-        // Os 4 sobreviventes da Pré-Libertadores. O teste não simula as fases
-        // prévias, então escolhe os das associações MENOS representadas nos
-        // grupos, o que mantém a composição dentro do limite em que a separação
-        // por país é possível — ver o teste do limite, logo abaixo.
-        val porPaisNosGrupos = diretos.groupingBy { it.pais }.eachCount()
+        // Os 4 sobreviventes da Pré. O teste não simula as fases prévias, então
+        // toma os 4 melhores dela — e eles vão ao Pote 4 por esse caminho, não
+        // pelo ranking, que é justamente a regra a exercitar.
         val sobreviventes = acesso.naPreLibertadores(vagas)
-            .sortedBy { porPaisNosGrupos[it.pais] ?: 0 }
-            .distinctBy { it.pais }
+            .sortedWith(ListaDeAcessoChampions.ORDEM)
             .take(acesso.SOBREVIVENTES_DA_PRE)
-
+        val idsDaPre = sobreviventes.map { it.timeId }.toSet()
         val clubes = (diretos + sobreviventes).map { c ->
-            ClubeChampions(c.timeId, c.nome, c.pais, c.reputacao.toDouble())
+            ClubeChampions(c.timeId, c.nome, c.pais, c.coeficiente)
         }
         assertEquals(SorteioLibertadores.CLUBES, clubes.size)
-        assertTrue(
-            "composicao com pais acima de 8 clubes nao seria separavel",
-            clubes.groupingBy { it.pais }.eachCount().values.all { it <= SorteioLibertadores.GRUPOS }
-        )
+        // O campeão vigente: o melhor ranqueado entre os diretos.
+        val campeao = diretos.maxByOrNull { it.coeficiente }!!.timeId
 
-        // Com 3 associações a separação era IMPOSSÍVEL: um grupo de 4 precisa de
-        // 4 países, e sobravam 13 pares de compatriotas. Com as 10 ela passa a
-        // ser quase completa — mas não exatamente zero, e isso é do ALGORITMO,
-        // não da contagem: SorteioLibertadores escolhe, pote a pote, o grupo com
-        // menos compatriotas e nunca volta atrás, então uma escolha cedo pode
-        // encurralar uma depois. Um sorteio com retrocesso zeraria; o guloso
-        // existe para nunca falhar, que é o que importa para criar o torneio.
-        var pior = 0
-        for (semente in 1..20) {
-            val resultado = SorteioLibertadores.sortear(clubes, Random(semente))!!
+        var piorBloqueavel = 0
+        for (semente in 1..30) {
+            val r = SorteioLibertadores.sortearGrupos(clubes, idsDaPre, campeao, Random(semente))!!
             assertTrue(
-                "sorteio inválido na semente $semente: ${SorteioLibertadores.validar(resultado)}",
-                SorteioLibertadores.validar(resultado).isEmpty()
+                "sorteio invalido na semente $semente: ${SorteioLibertadores.validar(r)}",
+                SorteioLibertadores.validar(r).isEmpty()
             )
-            pior = maxOf(pior, SorteioLibertadores.paresDeCompatriotas(resultado))
+            // A posicao A1 e do campeao vigente, em toda semente.
+            assertTrue(
+                "o campeao devia estar no Grupo A (semente $semente)",
+                r.grupos[0].clubes.any { it.timeId == campeao }
+            )
+            piorBloqueavel = maxOf(
+                piorBloqueavel,
+                SorteioLibertadores.paresDeCompatriotasBloqueaveis(r, idsDaPre)
+            )
         }
+
+        // Com 3 associacoes sobravam 13 pares e a separacao era impossivel por
+        // contagem. Com as 10 e o bloqueio de paises sobra no maximo 1 par — e o
+        // que sobra e do sorteio ser SEQUENCIAL: a bolinha anda para o proximo
+        // grupo disponivel e nunca volta atras, entao uma escolha cedo pode
+        // encurralar a ultima. A troca de desfazerCompatriotas desfaz a maior
+        // parte dos nos, mas so permuta clubes do MESMO pote, para cada grupo
+        // continuar com um de cada — e esse limite e o que deixa o residuo.
         assertTrue(
-            "o sorteio deixou $pior pares de compatriotas; com as 10 associacoes " +
-                "o esperado e no maximo 2",
-            pior <= 2
+            "o sorteio deixou $piorBloqueavel pares que a regra proibe; esperado no maximo 1",
+            piorBloqueavel <= 1
         )
     }
 
@@ -243,8 +245,10 @@ class SeedLibertadoresTest {
      * que tendem a ser brasileiros. No pior caso o Brasil chega a 9 e a trava
      * geografica deixa de caber.
      *
-     * E por isso que SorteioLibertadores MINIMIZA compatriotas em vez de proibir:
-     * uma trava rigida poderia nao ter solucao e travaria a criacao do torneio.
+     * O sorteio BLOQUEIA compatriotas — a bolinha anda para o proximo grupo
+     * disponivel —, mas nunca falha: esgotados os grupos ele aceita o conflito em
+     * vez de travar a criacao do torneio. Com um pais acima de 8 clubes esse e o
+     * unico desfecho possivel.
      */
     @Test
     fun `a separacao por pais depende de ninguem passar de 8 clubes`() {

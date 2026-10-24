@@ -105,6 +105,80 @@ o formato `GRUPOS_E_MATA_MATA`, que já existe no jogo.
 
 ---
 
+## 4. O sorteio
+
+O sorteio tem **dois momentos**, e o critério de divisão em ambos é um só: o
+**Ranking de Clubes da CONMEBOL**. No jogo esse ranking é o
+[Ranking CONMEBOL](ranking_conmebol.md), somado à reputação como desempate dos
+clubes que ainda não acumularam campanha.
+
+### 4.1 As fases prévias
+
+**Fase 1 — 6 clubes.** Divididos em dois potes de 3 pelo ranking. Os 3 do Pote 1
+enfrentam os 3 do Pote 2; qual pega qual é sorteado, e o do Pote 1 decide em
+casa. Os três vencedores avançam.
+
+**Fase 2 — 16 clubes:** os 13 pré-classificados mais os 3 sobreviventes da Fase 1.
+
+| Pote | Quem | Mando |
+|---|---|---|
+| **A** | os 8 melhores ranqueados **entre os 13 pré-classificados** | decidem o jogo de volta em casa |
+| **B** | os outros 5 pré-classificados + os 3 vindos da Fase 1 | — |
+
+As bolinhas do Pote B são sorteadas para enfrentar as do Pote A. Note que os 3 da
+Fase 1 vão ao Pote B **pelo caminho que percorreram, e não pelo ranking**: por
+isso `sortearFase2` recebe quem veio da Fase 1 em separado, em vez de deduzir
+pela ordenação.
+
+**Fase 3 — 8 clubes. Não há sorteio.** Os 8 vencedores da Fase 2 se enfrentam em
+chaveamento pré-definido: **C1×C8, C2×C7, C3×C6, C4×C5**, onde C1..C8 são os
+confrontos da Fase 2 na ordem do Pote A. O C1 decide em casa. Os 4 vencedores vão
+aos grupos.
+
+### 4.2 A fase de grupos
+
+Com os 32 definidos — 28 diretos e 4 da Pré —, **4 potes de 8** pelo ranking:
+
+| Pote | Quem |
+|---|---|
+| **1** | o campeão vigente da Libertadores, **automaticamente na posição A1**, e as outras 7 vagas com os melhores ranqueados |
+| **2** | os 8 seguintes |
+| **3** | os 8 seguintes |
+| **4** | os **4 de menor ranking** + os **4 sobreviventes da Pré**, independentemente do ranking deles |
+
+**O sorteio é sequencial:** todo o Pote 1 primeiro, definindo os cabeças de chave
+do Grupo A ao H, depois o Pote 2, o Pote 3 e o Pote 4.
+
+**Bloqueio de países.** Dois clubes do mesmo país não podem ficar no mesmo grupo.
+A bolinha cai num grupo ao acaso e, se aquele grupo já tem um compatriota, **é
+movida para o próximo grupo disponível**.
+
+**A exceção do Pote 4.** Os 4 que vieram da Pré **podem** enfrentar clubes do
+mesmo país: eles não estavam definidos quando os potes fecharam, então o bloqueio
+não se aplica a eles. É regra da competição, não concessão do algoritmo — e é por
+isso que existem duas métricas, `paresDeCompatriotas` (todos) e
+`paresDeCompatriotasBloqueaveis` (só os que a regra proíbe). A segunda é a medida
+de qualidade; a primeira mistura defeito com regra.
+
+### 4.3 O que o sorteio garante, e o que não garante
+
+Garante: 8 grupos de 4, um clube de cada pote em cada grupo, o campeão vigente no
+Grupo A em **toda** semente, e **nunca falha** — esgotados os grupos, aceita o
+conflito em vez de travar a criação do torneio.
+
+Não garante zero compatriotas. Medido sobre o seed, sobra **no máximo 1 par** que
+a regra proibiria, e a razão é o sorteio ser **sequencial**: a bolinha anda para o
+próximo grupo disponível e nunca volta atrás, então uma escolha cedo pode
+encurralar a última. Uma troca (`desfazerCompatriotas`) desfaz a maior parte dos
+nós, mas só permuta clubes do **mesmo pote**, para cada grupo continuar com um de
+cada — e é esse limite que deixa o resíduo. O sorteio real da CONMEBOL tem a
+mesma propriedade, e é por isso que a mesa às vezes precisa reordenar bolinhas.
+
+Há também um limite de contagem que nenhum algoritmo vence: são 8 grupos, então um
+país com mais de 8 clubes tem de repetir em algum deles.
+
+---
+
 ## Pré-requisito resolvido: as 10 associações
 
 O seed tinha **170 clubes sul-americanos de apenas 3 associações** — Brasil (80),
@@ -139,22 +213,20 @@ a tabela da seção 2 manda: Brasil 5 + 2, Argentina 5 + 1, os outros oito 2 + 2
 > `escudo_res` sai vazio e o app cai no escudo genérico até o PNG existir em
 > `res/drawable`.
 
-### A trava geográfica agora cabe — quase inteira
+### O bloqueio de países passou a caber
 
 Com 3 associações a separação por país era **impossível por construção**: um grupo
-de 4 precisa de 4 países distintos, e sobravam 13 pares de compatriotas. Com as 10
-ela passa a ser quase completa — no máximo 2 pares, e às vezes zero.
+de 4 precisa de 4 países distintos, e sobravam 13 pares de compatriotas. É por isso
+que o bloqueio não existia — ele não teria solução.
 
-Não é exatamente zero, e a razão é o **algoritmo, não a contagem**:
-`SorteioLibertadores` escolhe, pote a pote, o grupo com menos compatriotas, e nunca
-volta atrás; uma escolha cedo pode encurralar uma depois. Um sorteio com retrocesso
-zeraria. O guloso existe para **nunca falhar**, que é o que importa para o torneio
-poder ser criado.
+Com as 10 associações ele passa a caber, e virou a regra que a seção 4.2 descreve.
+O que sobra, e por quê, está em **4.3**: no máximo 1 par que a regra proibiria,
+resíduo do sorteio ser sequencial.
 
-Há também um limite de contagem que nenhum algoritmo vence: são 8 grupos, então um
-país com mais de 8 clubes tem de repetir em algum deles. O Brasil pode chegar a 9 —
-5 da cota, 2 da Pré que sobrevivam e até 2 das vagas de campeão vigente sem titular
-(ver abaixo). É por isso que o sorteio minimiza em vez de proibir.
+Resta o limite de contagem que nenhum algoritmo vence: são 8 grupos, então um país
+com mais de 8 clubes tem de repetir em algum deles. O Brasil pode chegar a 8 — 5 da
+cota, 1 remanejada e os 2 da Pré que sobrevivam —, o que ainda cabe; passando disso,
+o conflito é aritmético.
 
 ## Estado da implementação
 
@@ -173,15 +245,10 @@ Ela continua valendo como rede de proteção, para o caso de uma associação fi
 elegíveis. Antes do pool, com 3 países, repartia as 28 vagas órfãs preservando a hierarquia
 (Brasil ≥ Argentina ≥ Uruguai).
 
-**O sorteio dos grupos** — `SorteioLibertadores.kt`: 4 potes de 8 por coeficiente, 8 grupos
-de 4 com um clube de cada pote. A separação por país é um objetivo, não uma trava: o sorteio
-escolhe sempre o grupo com menos compatriotas, então **nunca falha**.
-
-Com um campo bem espalhado — no máximo 4 clubes por país — um teste confirma que ele separa
-todos os compatriotas. Sobre o campo REAL do seed ele não chega a zero: ficam até 2 pares,
-porque o Brasil entra com 7 clubes nos grupos e o guloso não volta atrás. Antes do pool,
-com 3 países, sobravam 13 — a separação era impossível por contagem, já que um grupo de 4
-não cabe em 3 países. Ver "A trava geográfica agora cabe — quase inteira", acima.
+**O sorteio** — `SorteioLibertadores.kt`, nos dois momentos que a competição tem: as
+fases prévias e a fase de grupos, com o Ranking de Clubes da CONMEBOL como critério único
+de divisão. Potes, mandos, bloqueio de países, a posição A1 do campeão vigente e a exceção
+do Pote 4 estão todos na **seção 4**, acima.
 
 ### Resolvido pelo caminho
 
@@ -284,23 +351,25 @@ sem que a Libertadores tenha gravado nada em lugar nenhum.
 de 4, pelo filtro de grupo que o `ClassificacaoDao` já tinha), Artilharia e
 Chaveamento. **Migração de banco: nenhuma.**
 
-### O fechamento dos grupos distorce a cota do Brasil
+### O fechamento dos grupos respeita a hierarquia das cotas
 
-Medido sobre o seed, com as cotas oficiais em vigor: o Brasil entra com **7 vagas
-diretas nos grupos, e não 5**. As 26 vagas nacionais de grupo saem corretas, mas as
-2 vagas de campeão vigente nunca têm titular — a Copa Sul-Americana não existe no
-jogo e na primeira temporada não houve Libertadores —, e o fechamento as entrega
-aos **melhores clubes restantes por ordem global**, que são brasileiros.
+As duas vagas de campeão vigente nunca têm titular — a Copa Sul-Americana não
+existe no jogo e na primeira temporada não houve Libertadores —, então o
+fechamento precisa remanejá-las. **Elas descem respeitando a hierarquia das
+cotas:** são oferecidas às associações na ordem da cota (Brasil 7, Argentina 6, os
+outros 4), **uma por país**, e cada uma leva o próximo clube da sua fila.
 
-Antes do pool a distorção era pior e mais arbitrária: as sobras iam para o 11º e o
-12º do Uruguai, clubes que não entravam nem na cota uruguaia, porque a ordenação
-compara `posicaoLiga` entre países como se fosse a mesma escala e as ligas têm
-tamanhos diferentes. Com o pool as sobras vão para clubes brasileiros de reputação
-alta, o que é defensável, mas ainda assim **passa por cima da tabela de cotas**.
+Medido sobre o seed: Brasil e Argentina entram com **6** vagas diretas cada (5 da
+cota + 1 remanejada) e os outros oito com 2, fechando os 28. A vaga remanejada tem
+porta própria, `VAGA_DE_CAMPEAO_REMANEJADA`, e não se confunde com a cota de liga
+— sem isso era impossível ler quantas vagas um país recebeu de verdade pela liga.
 
-O conserto natural é o fechamento repartir as vagas órfãs respeitando a hierarquia
-das cotas, como `cotasEfetivas` já faz, em vez de ordenar por posição global. Fica
-registrado como pendência porque é uma mudança de comportamento na distribuição.
+> **O que havia antes.** O fechamento ordenava os candidatos restantes pela
+> `posicaoLiga`, comparando-a entre países como se fosse a mesma escala. Com ligas
+> de tamanhos diferentes o resultado era arbitrário: as duas sobras iam para o 11º
+> e o 12º do Uruguai, clubes que não entravam nem na cota uruguaia, enquanto o 12º
+> do Brasileirão ia para a Pré. Depois do pool sul-americano as duas passaram a ir
+> ao Brasil, que entrava com 7 vagas diretas em vez das 5 da tabela.
 
 ### Aproximações registradas na distribuição de vagas
 
@@ -314,16 +383,14 @@ registrado como pendência porque é uma mudança de comportamento na distribui�
 
 Mantido como registro do que continua valendo como evolução.
 
-1. **O fechamento dos grupos respeitar as cotas**, em vez de dar as vagas de
-   campeão vigente sem titular aos melhores restantes por ordem global — ver acima.
-2. **Um sorteio com retrocesso**, para a separação por país fechar em zero pares
-   quando a composição permite. O guloso atual deixa no máximo 2.
-3. **Elencos reais para o pool sul-americano**, clube a clube, em `ROSTERS`.
-4. **Escudos do pool** em `res/drawable` (`escudo_res` está vazio nos 42 clubes).
-5. **A Copa Sul-Americana**, para onde vão os terceiros de cada grupo. A lista está
+1. **Um sorteio com retrocesso**, para a separação por país fechar em zero pares
+   quando a composição permite. O sequencial atual deixa no máximo 1 — ver 4.3.
+2. **Elencos reais para o pool sul-americano**, clube a clube, em `ROSTERS`.
+3. **Escudos do pool** em `res/drawable` (`escudo_res` está vazio nos 42 clubes).
+4. **A Copa Sul-Americana**, para onde vão os terceiros de cada grupo. A lista está
    pronta e derivada; falta a competição que a consome — e, com ela, a segunda vaga
    de campeão vigente, que hoje desce para o próximo colocado.
-6. **A prorrogação como segmento interativo.** Os 30 minutos são simulados de uma vez
+5. **A prorrogação como segmento interativo.** Os 30 minutos são simulados de uma vez
    quando a final do jogador termina empatada; a tela da partida não oferece um
    período de prorrogação para ele mexer no time, como faz no intervalo. O placar
    exibido é o dos 120 minutos, com os gols nos minutos 91 a 120.

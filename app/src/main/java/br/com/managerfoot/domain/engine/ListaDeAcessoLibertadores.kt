@@ -31,7 +31,16 @@ enum class PortaDaLibertadores {
      * uma das suas vagas ao campeão da Libertadores e a Argentina reserva uma das
      * suas ao campeão da Copa Argentina.
      */
-    VAGA_DE_TITULO
+    VAGA_DE_TITULO,
+    /**
+     * Vaga de campeão vigente que não tinha titular e foi REMANEJADA a uma
+     * associação, respeitando a hierarquia das cotas.
+     *
+     * Tem porta própria porque não é uma vaga de cota: ela entra depois, por fora
+     * da tabela de distribuição, e misturá-la com [GRUPOS] tornava impossível ler
+     * quantas vagas um país recebeu de verdade pela liga.
+     */
+    VAGA_DE_CAMPEAO_REMANEJADA
 }
 
 data class VagaLibertadores(
@@ -270,17 +279,43 @@ object ListaDeAcessoLibertadores {
             vagas.count {
                 it.porta == PortaDaLibertadores.GRUPOS ||
                     it.porta == PortaDaLibertadores.VAGA_DE_TITULO ||
-                    it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE
+                    it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE ||
+                    it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA
             }
         if (faltamNosGrupos > 0) {
-            candidatos
-                .filter { it.timeId !in escolhidos }
-                .sortedWith(ListaDeAcessoChampions.ORDEM)
-                .take(faltamNosGrupos)
-                .forEach {
-                    vagas += VagaLibertadores(it, PortaDaLibertadores.GRUPOS)
-                    escolhidos += it.timeId
+            // A vaga órfã desce RESPEITANDO A HIERARQUIA DAS COTAS: ela é oferecida
+            // às associações na ordem da cota (Brasil 7, Argentina 6, os outros 4),
+            // uma por país, e cada uma leva o próximo clube da fila daquele país.
+            //
+            // Antes isto ordenava os candidatos restantes por ORDEM, que compara a
+            // `posicaoLiga` entre países como se fosse a mesma escala. Com ligas de
+            // tamanhos diferentes o resultado era arbitrário: as duas sobras iam
+            // para o 11º e o 12º do Uruguai, clubes que não entravam nem na cota
+            // uruguaia, enquanto o 12º do Brasileirão ia para a Pré. E depois do
+            // pool sul-americano iam as duas para o Brasil, que passava a entrar
+            // com 7 vagas diretas nos grupos em vez das 5 da tabela.
+            //
+            // Uma por país por volta, e não todas ao mesmo país: com duas vagas
+            // órfãs, Brasil e Argentina ganham uma cada.
+            val ordemDasCotas = cotas.keys.sortedWith(
+                compareByDescending<String> { cotas.getValue(it).total }
+                    .thenBy { COTAS_OFICIAIS.keys.indexOf(it) }
+            )
+            var restam = faltamNosGrupos
+            var volta = 0
+            while (restam > 0 && volta < CLUBES_NA_FASE_DE_GRUPOS) {
+                volta++
+                for (pais in ordemDasCotas) {
+                    if (restam == 0) break
+                    val proximo = porPais[pais].orEmpty()
+                        .firstOrNull { it.timeId !in escolhidos } ?: continue
+                    vagas += VagaLibertadores(
+                        proximo, PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA
+                    )
+                    escolhidos += proximo.timeId
+                    restam--
                 }
+            }
         }
         return vagas
     }
@@ -293,7 +328,8 @@ object ListaDeAcessoLibertadores {
         vagas.filter {
             it.porta == PortaDaLibertadores.GRUPOS ||
                 it.porta == PortaDaLibertadores.VAGA_DE_TITULO ||
-                it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE
+                it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE ||
+                it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA
         }.map { it.candidato }
 
     /** Os clubes que começam na Pré-Libertadores. */

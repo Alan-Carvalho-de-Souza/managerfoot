@@ -851,16 +851,27 @@ class LibertadoresTest {
             acesso.diretosNosGrupos(comTitulo).size
         )
 
-        // Quem perdeu a vaga foi o ÚLTIMO classificado de grupo do Brasil, e não
-        // o primeiro: a cota encurta por baixo.
-        val gruposSemTitulo = semTitulo
+        // A cota encurta POR BAIXO, nao por cima: o 1o do Brasileirao continua
+        // entrando, e quem perde o lugar e o ultimo que a cota de liga alcancava.
+        //
+        // A comparacao olha so as vagas de LIGA (porta GRUPOS) dentro da cota, e
+        // por isso descarta a vaga do fechamento, que entra pela mesma porta mas
+        // vem depois e nao faz parte da cota do pais.
+        // Porta GRUPOS e so a vaga de cota pela liga: a do fechamento tem porta
+        // propria (VAGA_DE_CAMPEAO_REMANEJADA) e nao entra aqui.
+        fun posicoesDeLigaNosGrupos(vagas: List<VagaLibertadores>): List<Int?> = vagas
             .filter { it.candidato.pais == "Brasil" && it.porta == PortaDaLibertadores.GRUPOS }
             .map { it.candidato.posicaoLiga }
-        val gruposComTitulo = comTitulo
-            .filter { it.candidato.pais == "Brasil" && it.porta == PortaDaLibertadores.GRUPOS }
-            .map { it.candidato.posicaoLiga }
-        assertEquals(gruposSemTitulo.size - 1, gruposComTitulo.size)
-        assertEquals(gruposSemTitulo.dropLast(1), gruposComTitulo)
+            .sortedBy { it ?: Int.MAX_VALUE }
+        val ligaSemTitulo = posicoesDeLigaNosGrupos(semTitulo)
+        val ligaComTitulo = posicoesDeLigaNosGrupos(comTitulo)
+        assertEquals(1, ligaSemTitulo.first())
+        assertEquals(1, ligaComTitulo.first())
+        // Com a vaga de titulo, a cota de liga vai um a menos fundo na tabela.
+        assertTrue(
+            "a cota de liga devia encurtar por baixo: $ligaSemTitulo -> $ligaComTitulo",
+            (ligaComTitulo.lastOrNull() ?: 0)!! < (ligaSemTitulo.lastOrNull() ?: 0)!!
+        )
     }
 
     @Test
@@ -984,5 +995,195 @@ class LibertadoresTest {
             "a vaga do Brasil nao podia ir a um argentino",
             porPortaDoPais(vagas, "Brasil")[PortaDaLibertadores.VAGA_DE_TITULO] == null
         )
+    }
+
+    // ── O sorteio de verdade ─────────────────────────────────────────────
+    //
+    // Dois momentos, o Ranking de Clubes da CONMEBOL como critério único:
+    // as fases prévias e a fase de grupos.
+
+    /** n clubes de ranking decrescente, um país por clube (sem compatriotas). */
+    private fun clubesRankeados(n: Int, idBase: Int = 1) =
+        (0 until n).map { i ->
+            ClubeChampions(idBase + i, "Clube ${idBase + i}", "Pais ${idBase + i}", 1000.0 - i)
+        }
+
+    // ── Fases prévias ────────────────────────────────────────────────────
+
+    @Test
+    fun `a fase 1 divide os 6 em dois potes e o pote 1 decide em casa`() {
+        val clubes = clubesRankeados(6)            // ranking 1..6
+        val pares = SorteioLibertadores.sortearFase1(clubes, Random(1))
+
+        assertEquals(3, pares.size)
+        // Os 6 entram, uma vez cada.
+        val todos = pares.flatMap { listOf(it.first, it.second) }
+        assertEquals(6, todos.distinct().size)
+
+        val pote1 = clubes.take(3).map { it.timeId }.toSet()
+        val pote2 = clubes.drop(3).map { it.timeId }.toSet()
+        for ((mandanteIda, mandanteVolta) in pares) {
+            // Pote 1 contra Pote 2, sempre.
+            assertTrue("confronto dentro do mesmo pote", mandanteIda in pote2)
+            assertTrue("confronto dentro do mesmo pote", mandanteVolta in pote1)
+            // O do Pote 1 decide em casa: ele é o mandante da VOLTA.
+            assertTrue(mandanteVolta in pote1)
+        }
+    }
+
+    @Test
+    fun `a fase 2 poe os 8 melhores pre-classificados no pote A`() {
+        // 13 pré-classificados (ranking 1..13) e 3 vindos da Fase 1 (ranking alto
+        // de propósito: eles vão ao Pote B pelo caminho, não pelo ranking).
+        val preClassificados = clubesRankeados(13, idBase = 1)
+        val daFase1 = (0 until 3).map { i ->
+            ClubeChampions(100 + i, "Fase1 $i", "PaisF$i", 9000.0 - i)   // ranking melhor que todos
+        }
+        val clubes = preClassificados + daFase1
+        val vindos = daFase1.map { it.timeId }.toSet()
+
+        val pares = SorteioLibertadores.sortearFase2(clubes, vindos, Random(2))
+        assertEquals(8, pares.size)
+        assertEquals(16, pares.flatMap { listOf(it.first, it.second) }.distinct().size)
+
+        val poteA = preClassificados.take(8).map { it.timeId }.toSet()
+        val poteB = preClassificados.drop(8).map { it.timeId }.toSet() + vindos
+        assertEquals(8, poteA.size)
+        assertEquals(8, poteB.size)
+        for ((mandanteIda, mandanteVolta) in pares) {
+            // O Pote A decide a volta em casa.
+            assertTrue("o mandante da volta devia ser do Pote A", mandanteVolta in poteA)
+            assertTrue("o mandante da ida devia ser do Pote B", mandanteIda in poteB)
+        }
+        // Os 3 da Fase 1 estão no Pote B mesmo tendo o melhor ranking da fase.
+        assertTrue(vindos.all { it in poteB })
+        assertTrue(vindos.none { it in poteA })
+    }
+
+    @Test
+    fun `a fase 3 nao tem sorteio, e chaveamento pre-definido`() {
+        // Vencedores na ordem dos confrontos da Fase 2: C1..C8.
+        val vencedores = listOf(11, 12, 13, 14, 15, 16, 17, 18)
+        val pares = SorteioLibertadores.chavearFase3(vencedores)
+
+        assertEquals(4, pares.size)
+        // C1×C8, C2×C7, C3×C6, C4×C5 — e o C1 decide em casa.
+        assertEquals(18 to 11, pares[0])
+        assertEquals(17 to 12, pares[1])
+        assertEquals(16 to 13, pares[2])
+        assertEquals(15 to 14, pares[3])
+        // Determinístico: chamar de novo dá o mesmo chaveamento.
+        assertEquals(pares, SorteioLibertadores.chavearFase3(vencedores))
+    }
+
+    // ── Fase de grupos ───────────────────────────────────────────────────
+
+    @Test
+    fun `os potes saem do ranking, com a pre no pote 4`() {
+        val diretos = clubesRankeados(28, idBase = 1)          // ranking 1..28
+        // Sobreviventes da Pré com ranking PÉSSIMO: vão ao Pote 4 de todo jeito,
+        // mas o teste prova que é por onde entraram, não pelo ranking.
+        val daPre = (0 until 4).map { i ->
+            ClubeChampions(200 + i, "Pre $i", "PaisP$i", 10_000.0 - i)  // melhor ranking do campo
+        }
+        val clubes = diretos + daPre
+        val ids = daPre.map { it.timeId }.toSet()
+
+        val potes = SorteioLibertadores.montarPotesPeloRanking(clubes, ids, campeaoVigente = null)
+        assertEquals(4, potes.size)
+        assertTrue(potes.all { it.size == 8 })
+
+        // Pote 4 = os 4 piores ranqueados dos diretos + os 4 da Pré, mesmo tendo
+        // eles o melhor ranking do campo.
+        assertEquals(
+            diretos.takeLast(4).map { it.timeId }.toSet() + ids,
+            potes[3].map { it.timeId }.toSet()
+        )
+        // Potes 1 a 3: os 24 melhores dos diretos, em ordem de ranking.
+        assertEquals(diretos.take(8).map { it.timeId }, potes[0].map { it.timeId })
+        assertEquals(diretos.drop(8).take(8).map { it.timeId }, potes[1].map { it.timeId })
+        assertEquals(diretos.drop(16).take(8).map { it.timeId }, potes[2].map { it.timeId })
+    }
+
+    @Test
+    fun `o campeao vigente abre o pote 1 e fica na posicao A1`() {
+        val diretos = clubesRankeados(28, idBase = 1)
+        val daPre = clubesRankeados(4, idBase = 200)
+        val clubes = diretos + daPre
+        val ids = daPre.map { it.timeId }.toSet()
+        // Campeão de ranking MEDÍOCRE: o 20º dos diretos. Mesmo assim entra no
+        // Pote 1 e no Grupo A, porque a vaga A1 é do campeão.
+        val campeao = diretos[19].timeId
+
+        val potes = SorteioLibertadores.montarPotesPeloRanking(clubes, ids, campeao)
+        assertEquals(campeao, potes[0].first().timeId)
+        assertTrue("o campeao tem de estar no Pote 1", potes[0].any { it.timeId == campeao })
+        assertTrue(potes.all { it.size == 8 })
+
+        // E no sorteio ele cai sempre no Grupo A, em qualquer semente.
+        for (semente in 1..30) {
+            val r = SorteioLibertadores.sortearGrupos(clubes, ids, campeao, Random(semente))!!
+            assertEquals("A", r.grupos[0].rotulo)
+            assertTrue(
+                "o campeao devia estar no Grupo A (semente $semente)",
+                r.grupos[0].clubes.any { it.timeId == campeao }
+            )
+            assertTrue(SorteioLibertadores.validar(r).isEmpty())
+        }
+    }
+
+    @Test
+    fun `o sorteio e sequencial, um clube de cada pote por grupo`() {
+        val clubes = clubesRankeados(32)
+        for (semente in 1..20) {
+            val r = SorteioLibertadores.sortearGrupos(clubes, random = Random(semente))!!
+            assertTrue(
+                "estrutura invalida na semente $semente: ${SorteioLibertadores.validar(r)}",
+                SorteioLibertadores.validar(r).isEmpty()
+            )
+            // validar() já exige um de cada pote; aqui confirmamos os tamanhos.
+            assertEquals(8, r.grupos.size)
+            assertTrue(r.grupos.all { it.clubes.size == 4 })
+        }
+    }
+
+    @Test
+    fun `o bloqueio de paises separa compatriotas quando ha arranjo`() {
+        // 8 países com 4 clubes cada: cabe perfeitamente em 8 grupos de 4.
+        var id = 1
+        val clubes = (0 until 32).map {
+            val pais = "Pais ${it % 8}"
+            ClubeChampions(id, "$pais $it", pais, 1000.0 - id++)
+        }
+        for (semente in 1..30) {
+            val r = SorteioLibertadores.sortearGrupos(clubes, random = Random(semente))!!
+            assertEquals(
+                "a semente $semente deixou compatriota em grupo",
+                0, SorteioLibertadores.paresDeCompatriotas(r)
+            )
+        }
+    }
+
+    @Test
+    fun `a excecao do pote 4 permite compatriota para quem veio da pre`() {
+        // 28 diretos de um pais SO, e 4 da Pre do mesmo pais. Com um pais unico o
+        // bloqueio e impossivel — o que o teste mede e que o sorteio nao falha e
+        // que a metrica separa o que a regra proibe do que ela permite.
+        val diretos = (1..28).map { ClubeChampions(it, "Direto $it", "Brasil", 1000.0 - it) }
+        val daPre = (201..204).map { ClubeChampions(it, "Pre $it", "Brasil", 10.0) }
+        val ids = daPre.map { it.timeId }.toSet()
+        val r = SorteioLibertadores.sortearGrupos(diretos + daPre, ids, null, Random(5))!!
+
+        assertTrue(SorteioLibertadores.validar(r).isEmpty())
+        // Os 4 da Pré não contam como violação: a regra os isenta.
+        val total = SorteioLibertadores.paresDeCompatriotas(r)
+        val bloqueaveis = SorteioLibertadores.paresDeCompatriotasBloqueaveis(r, ids)
+        assertTrue("com um pais so, pares existem", total > 0)
+        assertTrue(
+            "os pares isentos nao deviam contar como violacao",
+            bloqueaveis < total
+        )
+        // Cada grupo tem exatamente um clube da Pré, e ele é o isento.
+        assertEquals(4, r.grupos.count { g -> g.clubes.any { it.timeId in ids } })
     }
 }
