@@ -195,15 +195,24 @@ temporada não houve Libertadores, e a Copa Sul-Americana não existe no jogo �
 `montar`. Sem isso a fase de grupos nasceria com 30 clubes e a competição nunca
 seria criada.
 
-**O desempate:** das oitavas às semis o empate no agregado vai direto aos
-pênaltis. Isso já era o comportamento de todo o jogo, que não simula prorrogação
-em competição nenhuma; o que a Libertadores acrescenta é a regra registrada em
-`FormatoLibertadores.temProrrogacao`, onde a prorrogação se encaixa quando a
-engine a tiver, e a **final de jogo único**, que é mesmo nova. Um confronto com
-uma partida só é o que faz o chaveamento, o desempate e o campo neutro a tratarem
-como jogo único em vez de agregado — e foi preciso corrigir a regra de pênaltis de
-`GRUPOS_E_MATA_MATA`, que decidia no empate de qualquer partida com fase e levaria
-a ida das oitavas aos pênaltis.
+**O desempate:** toda fase eliminatória é de **ida e volta** — as três da Pré e as
+oitavas, quartas e semis —, e o empate no agregado vai **direto aos pênaltis**, sem
+prorrogação e sem gol fora de casa. Só a **final** é de jogo único, e nela o empate no
+tempo normal leva a **30 minutos de prorrogação em dois tempos de 15**; persistindo o
+empate, pênaltis.
+
+A prorrogação foi implementada: `SimuladorPartida.simularProrrogacao` joga os minutos
+91–105 e 106–120 como dois períodos de verdade, e não um bloco de 30, porque o estado
+atravessa o intervalo — um vermelho no primeiro tempo da prorrogação pesa no segundo.
+Os gols entram no placar da própria partida, como na súmula, e contam para a
+artilharia; só o placar é atualizado, porque o público e a receita já foram creditados
+no apito dos 90 minutos.
+
+Quem decide se uma fase tem prorrogação é `FormatoLibertadores.temProrrogacao`, e o
+gatilho exige **confronto de jogo único**: é o que separa a final das oitavas, que
+usam a mesma competição e o mesmo formato de banco mas são de ida e volta. Pela mesma
+razão foi preciso corrigir a regra de pênaltis de `GRUPOS_E_MATA_MATA`, que decidia no
+empate de qualquer partida com fase e levaria a **ida** das oitavas aos pênaltis.
 
 **A ponte com a Copa Sul-Americana** não inventou a competição. Os terceiros de
 cada grupo são **derivados** das tabelas por
@@ -230,5 +239,7 @@ Mantido como registro do que continua valendo como evolução.
 2. **A Copa Sul-Americana**, para onde vão os terceiros de cada grupo. A lista está
    pronta e derivada; falta a competição que a consome — e, com ela, a segunda vaga
    de campeão vigente, que hoje desce para o próximo colocado.
-3. **A prorrogação**, que a engine não tem em competição nenhuma. A regra da
-   Libertadores já está registrada por fase; falta o motor simular os 30 minutos.
+3. **A prorrogação como segmento interativo.** Os 30 minutos são simulados de uma vez
+   quando a final do jogador termina empatada; a tela da partida não oferece um
+   período de prorrogação para ele mexer no time, como faz no intervalo. O placar
+   exibido é o dos 120 minutos, com os gols nos minutos 91 a 120.

@@ -3754,6 +3754,15 @@ class RodadaViewModel @Inject constructor(
     private val _maxRodada = MutableStateFlow(38)
     val maxRodada: StateFlow<Int> = _maxRodada.asStateFlow()
 
+    /**
+     * Primeira rodada que a divisão selecionada ocupa. É 1 em quase tudo, mas a
+     * fase de grupos da Libertadores começa na 11: as rodadas 1 a 6 são da
+     * Pré-Libertadores e a partir da 21 é mata-mata, e nenhuma das duas pertence
+     * à aba de grupos.
+     */
+    private val _rodadaMinima = MutableStateFlow(1)
+    val rodadaMinima: StateFlow<Int> = _rodadaMinima.asStateFlow()
+
     private var campeonatoAId = -1
     private var campeonatoBId = -1
     private var campeonatoCId = -1
@@ -3837,12 +3846,35 @@ class RodadaViewModel @Inject constructor(
             return
         }
         val campId = campIdAtual()
-        if (campId <= 0) { _partidas.value = emptyList(); _maxRodada.value = 38; return }
-        val max = partidaDao.maxRodada(campId).coerceAtLeast(1)
-        _maxRodada.value = max
-        val rodada = _rodadaSelecionada.value.coerceIn(1, max)
+        if (campId <= 0) {
+            _partidas.value = emptyList(); _maxRodada.value = 38; _rodadaMinima.value = 1; return
+        }
+        val (minimaDaDivisao, maximaDaDivisao) = faixaDeRodadas(div, campId)
+        _rodadaMinima.value = minimaDaDivisao
+        _maxRodada.value = maximaDaDivisao
+        val rodada = _rodadaSelecionada.value.coerceIn(minimaDaDivisao, maximaDaDivisao)
         _rodadaSelecionada.value = rodada
         coletar(campId, rodada)
+    }
+
+    /**
+     * Faixa de rodadas que a divisão ocupa dentro do seu campeonato.
+     *
+     * O caso geral é 1 até a última rodada que existe. A fase de grupos da
+     * Libertadores é a exceção: ela ocupa uma faixa no MEIO do campeonato, porque
+     * a Pré-Libertadores vem antes e o mata-mata depois, todos no mesmo
+     * campeonatoId. Sem esta faixa a aba "Grupos" abriria na rodada 1, que é um
+     * jogo da Pré.
+     */
+    private suspend fun faixaDeRodadas(div: Int, campId: Int): Pair<Int, Int> {
+        val ultima = partidaDao.maxRodada(campId).coerceAtLeast(1)
+        if (div != 40) return 1 to ultima
+        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        val primeira = formato.rodadaBaseGrupos
+        val fim = primeira + formato.rodadasGrupos - 1
+        // Enquanto os grupos não forem sorteados, a última rodada que existe é da
+        // Pré: aí a faixa fica vazia e o seletor mostra só a primeira de grupo.
+        return primeira to maxOf(primeira, minOf(fim, ultima))
     }
 
     private fun coletar(campId: Int, rodada: Int) {

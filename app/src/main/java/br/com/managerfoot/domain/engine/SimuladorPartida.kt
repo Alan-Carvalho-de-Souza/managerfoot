@@ -106,6 +106,20 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
 
     companion object {
         private const val MEDIA_GOLS_JOGO = 2.7   // média histórica do futebol brasileiro
+
+        // ── Prorrogação ──────────────────────────────────────────────────
+        // 30 minutos divididos em dois tempos de 15, jogados quando o tempo
+        // normal termina empatado numa decisão de jogo único. Hoje só a final da
+        // Libertadores usa isto; ver MotorCampeonato.FormatoLibertadores.
+        /** Os 90 minutos regulamentares. A prorrogação começa no minuto seguinte. */
+        const val MINUTOS_TEMPO_NORMAL = 90
+        const val MINUTOS_POR_TEMPO_EXTRA = 15
+        const val PRORROGACAO_1T_INICIO = MINUTOS_TEMPO_NORMAL + 1
+        const val PRORROGACAO_1T_FIM    = PRORROGACAO_1T_INICIO + MINUTOS_POR_TEMPO_EXTRA - 1   // 105
+        const val PRORROGACAO_2T_INICIO = PRORROGACAO_1T_FIM + 1                                // 106
+        const val PRORROGACAO_2T_FIM    = PRORROGACAO_2T_INICIO + MINUTOS_POR_TEMPO_EXTRA - 1   // 120
+        /** Minutos totais da prorrogação: os dois tempos somados. */
+        const val MINUTOS_DE_PRORROGACAO = MINUTOS_POR_TEMPO_EXTRA * 2                          // 30
         private const val PROB_CARTAO_AMARELO = 0.12
         // Probabilidade base de lesão (fisico=50 ≈ risco neutro).
         // fisico=99 → ~1.25% | fisico=50 → ~2.5% | fisico=1 → ~3.75%
@@ -945,6 +959,64 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             timeCasaId = timeCasaId,
             timeForaId = timeForaId
         )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  simularProrrogacao — os 30 minutos extra, em dois tempos de 15
+    // ─────────────────────────────────────────────────────────────
+    /**
+     * Simula a prorrogação: **30 minutos divididos em dois tempos de 15**, dos
+     * minutos 91 a 105 e 106 a 120.
+     *
+     * São dois períodos de verdade, e não um bloco de 30, porque é assim que a
+     * regra define e porque [simularPeriodo] acumula o estado entre eles: um
+     * cartão vermelho no primeiro tempo da prorrogação pesa no segundo.
+     *
+     * A média de gols de cada tempo sai da mesma fração que o tempo normal usa —
+     * 15 de 90 minutos —, então a prorrogação rende, em média, um terço dos gols
+     * de uma partida inteira, o que é o esperado para 30 dos 90 minutos.
+     *
+     * Não há substituição aqui: as janelas de [escolherMinutosSubs] terminam no
+     * minuto 88, e nenhuma alcança os minutos da prorrogação.
+     *
+     * Devolve o estado ao fim dos 120 minutos e os eventos dos dois tempos, já na
+     * ordem do minuto. Quem chama soma os gols destes eventos ao placar dos 90
+     * minutos: persistindo o empate, a decisão é por pênaltis.
+     */
+    fun simularProrrogacao(
+        escalacaoCasa: Escalacao,
+        escalacaoFora: Escalacao,
+        estado: EstadoMetade,
+        timeJogadorId: Int = -1,
+        campoNeutro: Boolean = false
+    ): Pair<EstadoMetade, List<EventoSimulado>> {
+        val fracaoPorTempo = MINUTOS_POR_TEMPO_EXTRA.toDouble() / 90.0
+
+        val (estadoApos1T, eventos1T) = simularPeriodo(
+            minInicio     = PRORROGACAO_1T_INICIO,
+            minFim        = PRORROGACAO_1T_FIM,
+            fracaoGols    = fracaoPorTempo,
+            escalacaoCasa = escalacaoCasa,
+            escalacaoFora = escalacaoFora,
+            estado        = estado,
+            timeJogadorId = timeJogadorId,
+            campoNeutro   = campoNeutro
+        )
+
+        // O segundo tempo parte do estado real do primeiro: squad, expulsões e
+        // penalizações acumuladas atravessam o intervalo da prorrogação.
+        val (estadoApos2T, eventos2T) = simularPeriodo(
+            minInicio     = PRORROGACAO_2T_INICIO,
+            minFim        = PRORROGACAO_2T_FIM,
+            fracaoGols    = fracaoPorTempo,
+            escalacaoCasa = escalacaoCasa,
+            escalacaoFora = escalacaoFora,
+            estado        = estadoApos1T,
+            timeJogadorId = timeJogadorId,
+            campoNeutro   = campoNeutro
+        )
+
+        return Pair(estadoApos2T, (eventos1T + eventos2T).sortedBy { it.minuto })
     }
 
     // ─────────────────────────────────────────────────────────────

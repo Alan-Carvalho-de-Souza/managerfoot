@@ -133,6 +133,14 @@ interface PartidaDao {
     """)
     suspend fun registrarResultado(partidaId: Int, golsCasa: Int, golsFora: Int, torcedores: Int = 0, receitaPartida: Long = 0L)
 
+    /**
+     * Atualiza SO o placar, sem tocar em torcedores nem na receita de bilheteria.
+     * E o que a prorrogacao precisa: os gols dos 30 minutos extra entram no placar
+     * de uma partida que ja foi registrada, e o publico nao muda por isso.
+     */
+    @Query("UPDATE partidas SET golsCasa = :golsCasa, golsFora = :golsFora WHERE id = :partidaId")
+    suspend fun atualizarPlacar(partidaId: Int, golsCasa: Int, golsFora: Int)
+
     @Query("""
         UPDATE partidas
         SET penaltisCasa = :pCasa, penaltisForaId = :pFora

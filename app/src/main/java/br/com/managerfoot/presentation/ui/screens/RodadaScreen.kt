@@ -61,6 +61,7 @@ fun RodadaScreen(
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
     val rodadaSelecionada  by vm.rodadaSelecionada.collectAsState()
     val maxRodada          by vm.maxRodada.collectAsState()
+    val rodadaMinima       by vm.rodadaMinima.collectAsState()
 
     val esMataMataDivisao =
         divisaoSelecionada == 8 || divisaoSelecionada == 9 ||
@@ -209,7 +210,9 @@ fun RodadaScreen(
 
     val labelSerie = opcoesDivisaoAtual.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoAtual.firstOrNull()?.second ?: "Série A"
-    val opcoesRodada = (1..maxRodada).toList()
+    // A faixa começa na primeira rodada da divisão, não em 1: a fase de grupos da
+    // Libertadores ocupa as rodadas 11 a 16 do seu campeonato.
+    val opcoesRodada = (rodadaMinima..maxRodada).toList()
 
     Column(
         Modifier

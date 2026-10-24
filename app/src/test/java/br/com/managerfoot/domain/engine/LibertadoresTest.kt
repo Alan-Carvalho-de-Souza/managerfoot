@@ -643,4 +643,152 @@ class LibertadoresTest {
         assertEquals(semFechamento.size, comFechamento.size)
         assertEquals(acesso.TOTAL_DE_CLUBES, comFechamento.size)
     }
+
+    // ── Ida e volta, pênaltis e a prorrogação da final ───────────────────
+    //
+    // O que estes testes travam: toda fase eliminatória é de ida e volta, com o
+    // empate no agregado indo aos pênaltis; e só a final é de jogo único, com 30
+    // minutos de prorrogação em dois tempos de 15 antes dos pênaltis.
+
+    @Test
+    fun `as tres fases da pre-libertadores sao de ida e volta`() {
+        // A Fase 1 tem 6 clubes (3 confrontos), a Fase 2 tem 16 (8) e a Fase 3
+        // tem 8 (4). Cada confronto, em qualquer delas, é de duas partidas.
+        val tamanhos = listOf(
+            acesso.PRE_FASE1_CLUBES,
+            acesso.PRE_FASE2_CLUBES,
+            acesso.PRE_FASE3_CLUBES
+        )
+        formato.preFases.forEachIndexed { indice, fase ->
+            val clubes = (1..tamanhos[indice]).toList()
+            val pares = (0 until clubes.size / 2).map { i -> clubes[clubes.size - 1 - i] to clubes[i] }
+            val partidas = MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = 1,
+                pares             = pares,
+                fase              = fase,
+                rodadaIda         = formato.rodadaIdaDaPreFase(indice),
+                confrontoIdInicio = 1,
+                ordemGlobalIda    = formato.ordemGlobalPre[indice * 2],
+                ordemGlobalVolta  = formato.ordemGlobalPre[indice * 2 + 1]
+            )
+            // Duas partidas por confronto, em rodadas consecutivas.
+            val porConfronto = partidas.groupBy { it.confrontoId }
+            assertEquals("$fase: confrontos", clubes.size / 2, porConfronto.size)
+            assertTrue("$fase: devia ser ida e volta", porConfronto.values.all { it.size == 2 })
+            for (jogos in porConfronto.values) {
+                val ida = jogos.minByOrNull { it.rodada }!!
+                val volta = jogos.maxByOrNull { it.rodada }!!
+                assertEquals("$fase: volta na rodada seguinte", ida.rodada + 1, volta.rodada)
+                // O mando se inverte: quem recebeu a ida visita na volta.
+                assertEquals(ida.timeCasaId, volta.timeForaId)
+                assertEquals(ida.timeForaId, volta.timeCasaId)
+            }
+            assertTrue("$fase: nenhuma partida devia ser de jogo unico",
+                porConfronto.values.none { it.size == 1 })
+        }
+    }
+
+    @Test
+    fun `das oitavas as semis e ida e volta, e so a final e jogo unico`() {
+        val idaVolta = formato.fasesMataMata.dropLast(1)   // Oitavas, Quartas, Semi
+        assertEquals(listOf("Oitavas", "Quartas", "Semi"), idaVolta)
+
+        idaVolta.forEachIndexed { indice, fase ->
+            val partidas = MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = 1,
+                pares             = listOf(1 to 2, 3 to 4),
+                fase              = fase,
+                rodadaIda         = formato.rodadaIdaDeFaseMataMata(indice),
+                confrontoIdInicio = 1,
+                ordemGlobalIda    = formato.ordemGlobalMataMata[indice * 2],
+                ordemGlobalVolta  = formato.ordemGlobalMataMata[indice * 2 + 1]
+            )
+            assertTrue("$fase: devia ser ida e volta",
+                partidas.groupBy { it.confrontoId }.values.all { it.size == 2 })
+            assertTrue("$fase nao e a final", !formato.ehFinal(fase))
+        }
+
+        // A final: um confronto, uma partida.
+        val finalUnica = MotorCampeonato.gerarFaseJogoUnico(
+            campeonatoId      = 1,
+            pares             = listOf(1 to 2),
+            fase              = formato.fasesMataMata.last(),
+            rodada            = formato.rodadaIdaDeFaseMataMata(formato.fasesMataMata.lastIndex),
+            confrontoIdInicio = 1,
+            ordemGlobal       = formato.ordemGlobalMataMata.last()
+        )
+        assertEquals(1, finalUnica.groupBy { it.confrontoId }.size)
+        assertTrue(finalUnica.groupBy { it.confrontoId }.values.all { it.size == 1 })
+        assertTrue(formato.ehFinal(finalUnica[0].fase!!))
+    }
+
+    @Test
+    fun `o empate no agregado vai aos penaltis em toda fase de ida e volta`() {
+        // determinarVencedorTie devolve null exatamente quando o agregado empata,
+        // e null e o sinal de "decide nos penaltis". Nao ha gol fora de casa.
+        //
+        // Lembrando o mando: na volta o time A (casa na ida) e o VISITANTE, entao
+        // o agregado de A e golsCasaIda + golsForaVolta.
+        val empates = listOf(
+            // ida 0x0, volta 0x0 -> 0x0
+            intArrayOf(0, 0, 0, 0),
+            // ida 1x2, volta 1x2 -> A: 1+2=3, B: 2+1=3
+            intArrayOf(1, 2, 1, 2),
+            // ida 3x1, volta 2x0 -> A: 3+0=3, B: 1+2=3
+            intArrayOf(3, 1, 2, 0)
+        )
+        for (e in empates) {
+            assertNull(
+                "agregado empatado (${e[0]}x${e[1]} / ${e[2]}x${e[3]}) devia ir aos penaltis",
+                MotorCampeonato.determinarVencedorTie(1, 2, e[0], e[1], e[2], e[3])
+            )
+        }
+        // E quando nao empata, ha vencedor direto: ida 2x0, volta 1x0
+        // -> A: 2+0 = 2, B: 0+1 = 1.
+        assertEquals(
+            1, MotorCampeonato.determinarVencedorTie(1, 2, 2, 0, 1, 0)
+        )
+        // ida 0x2, volta 0x1 -> A: 0+1 = 1, B: 2+0 = 2.
+        assertEquals(
+            2, MotorCampeonato.determinarVencedorTie(1, 2, 0, 2, 0, 1)
+        )
+    }
+
+    @Test
+    fun `a prorrogacao e de 30 minutos em dois tempos de 15`() {
+        assertEquals(15, SimuladorPartida.MINUTOS_POR_TEMPO_EXTRA)
+        assertEquals(30, SimuladorPartida.MINUTOS_DE_PRORROGACAO)
+        // 1º tempo: 91 a 105. 2º tempo: 106 a 120.
+        assertEquals(91, SimuladorPartida.PRORROGACAO_1T_INICIO)
+        assertEquals(105, SimuladorPartida.PRORROGACAO_1T_FIM)
+        assertEquals(106, SimuladorPartida.PRORROGACAO_2T_INICIO)
+        assertEquals(120, SimuladorPartida.PRORROGACAO_2T_FIM)
+
+        // Os dois tempos têm 15 minutos cada e são contíguos, sem sobreposição.
+        val primeiro = SimuladorPartida.PRORROGACAO_1T_INICIO..SimuladorPartida.PRORROGACAO_1T_FIM
+        val segundo = SimuladorPartida.PRORROGACAO_2T_INICIO..SimuladorPartida.PRORROGACAO_2T_FIM
+        assertEquals(SimuladorPartida.MINUTOS_POR_TEMPO_EXTRA, primeiro.count())
+        assertEquals(SimuladorPartida.MINUTOS_POR_TEMPO_EXTRA, segundo.count())
+        assertEquals(SimuladorPartida.MINUTOS_DE_PRORROGACAO, primeiro.count() + segundo.count())
+        assertTrue("os tempos nao podem se sobrepor", primeiro.last < segundo.first)
+        assertEquals("o 2o tempo comeca logo depois do 1o", primeiro.last + 1, segundo.first)
+        // E começam depois dos 90 minutos do tempo normal.
+        assertTrue(primeiro.first > 90)
+    }
+
+    @Test
+    fun `so a final tem prorrogacao, e as outras fases vao direto aos penaltis`() {
+        // Das oitavas às semis, e em toda a Pré, o empate vai DIRETO aos pênaltis.
+        for (fase in formato.preFases + formato.fasesMataMata.dropLast(1)) {
+            assertTrue(
+                "$fase nao devia ter prorrogacao",
+                !formato.temProrrogacao(fase)
+            )
+        }
+        // Só a final.
+        assertTrue(formato.temProrrogacao("Final"))
+        assertEquals("Final", formato.fasesMataMata.last())
+        // E a fase de grupos nem passa por aqui: ela não tem nome de fase.
+        assertTrue(formato.fasesMataMata.none { it == "" })
+    }
 }

@@ -609,6 +609,61 @@ class GameRepository @Inject constructor(
     }
 
     /**
+     * Joga a prorrogação da partida do jogador, se a decisão pedir, e devolve o
+     * contexto e o placar dos 120 minutos.
+     *
+     * Quando não há prorrogação a fazer — o caso de quase toda partida do jogo —
+     * devolve o que recebeu, sem tocar em nada.
+     *
+     * Os 30 minutos são jogados de uma vez, e não como dois períodos interativos:
+     * a tela da partida não tem um segmento de prorrogação para o jogador mexer no
+     * time. O que ela mostra é o placar dos 120 minutos, com os gols da
+     * prorrogação nos minutos 91 a 120 da lista de eventos, e a disputa de
+     * pênaltis só aparece se o empate persistir.
+     */
+    private suspend fun jogarProrrogacaoComJogadorSeNecessario(
+        ctx: ContextoSimulacaoMetade,
+        golsCasa90: Int,
+        golsFora90: Int
+    ): Triple<ContextoSimulacaoMetade, Int, Int> {
+        if (golsCasa90 != golsFora90) return Triple(ctx, golsCasa90, golsFora90)
+        val partida = partidaDao.buscarPorId(ctx.partidaDoJogadorId)
+            ?: return Triple(ctx, golsCasa90, golsFora90)
+        if (jaJogouProrrogacao(partida)) return Triple(ctx, golsCasa90, golsFora90)
+        if (!temProrrogacao(partida)) return Triple(ctx, golsCasa90, golsFora90)
+
+        val escalacaoCasa = if (ctx.ehMandante) ctx.escalacaoJogadorOriginal else ctx.escalacaoAdversario
+        val escalacaoFora = if (ctx.ehMandante) ctx.escalacaoAdversario else ctx.escalacaoJogadorOriginal
+        // O squad que entra na prorrogação é o do fim do segundo tempo, não o
+        // inicial: é o que ctx.estadoMetade1 carrega depois do último período.
+        val escalacaoCasaAtual = escalacaoCasa.copy(
+            titulares = ctx.estadoMetade1.titsCasa,
+            reservas  = ctx.estadoMetade1.resCasa
+        )
+        val escalacaoForaAtual = escalacaoFora.copy(
+            titulares = ctx.estadoMetade1.titsFora,
+            reservas  = ctx.estadoMetade1.resFora
+        )
+
+        val (estadoFinal, eventosExtra) = simulador.simularProrrogacao(
+            escalacaoCasa = escalacaoCasaAtual,
+            escalacaoFora = escalacaoForaAtual,
+            estado        = ctx.estadoMetade1,
+            timeJogadorId = ctx.timeJogadorId,
+            campoNeutro   = ctx.campoNeutro
+        )
+
+        val golsCasaExtra = eventosExtra.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoCasa.time.id }
+        val golsForaExtra = eventosExtra.count { it.tipo == TipoEvento.GOL && it.timeId == escalacaoFora.time.id }
+
+        val ctxComProrrogacao = ctx.copy(
+            estadoMetade1     = estadoFinal,
+            eventosAcumulados = (ctx.eventosAcumulados + eventosExtra).sortedBy { it.minuto }
+        )
+        return Triple(ctxComProrrogacao, golsCasa90 + golsCasaExtra, golsFora90 + golsForaExtra)
+    }
+
+    /**
      * Simula um período da partida com a escalação atualizada pelo jogador.
      * Deve ser chamado após o intervalo e opcionalmente após cada "Mexer no Time".
      * Retorna o contexto atualizado (com eventos acumulados) e os eventos do período.
@@ -715,21 +770,31 @@ class GameRepository @Inject constructor(
         val escalacaoCasa = if (ctx.ehMandante) ctx.escalacaoJogadorOriginal else ctx.escalacaoAdversario
         val escalacaoFora = if (ctx.ehMandante) ctx.escalacaoAdversario else ctx.escalacaoJogadorOriginal
 
-        val rngStats = kotlin.random.Random(ctx.partidaDoJogadorId.toLong() * 131 + golsCasaFinal * 7L + golsForaFinal)
+        // ── Prorrogação, quando a decisão de jogo único empata no tempo normal ──
+        // Acontece ANTES de persistir: o placar que vai para o banco, as notas, o
+        // chaveamento e a decisão de pênaltis são todos os dos 120 minutos.
+        //
+        // O estado do squad vem de ctx.estadoMetade1, que depois do segundo tempo
+        // é o estado real do apito dos 90 — com as substituições, expulsões e
+        // lesões da partida. A prorrogação continua dali, não de um time novo.
+        val (ctxDecidido, golsCasa120, golsFora120) =
+            jogarProrrogacaoComJogadorSeNecessario(ctx, golsCasaFinal, golsForaFinal)
+
+        val rngStats = kotlin.random.Random(ctxDecidido.partidaDoJogadorId.toLong() * 131 + golsCasa120 * 7L + golsFora120)
         val posseCasaFinal = SimuladorPartida.estimarPosseCasa(
             escalacaoCasa.titulares, escalacaoFora.titulares,
             escalacaoCasa.time.estiloJogo, escalacaoFora.time.estiloJogo,
             mandante = true, rng = rngStats
         )
         val resultadoBase = ResultadoPartida(
-            partidaId        = ctx.partidaDoJogadorId,
+            partidaId        = ctxDecidido.partidaDoJogadorId,
             timeCasaId       = escalacaoCasa.time.id,
             timeForaId       = escalacaoFora.time.id,
-            golsCasa         = golsCasaFinal,
-            golsFora         = golsForaFinal,
-            eventos          = ctx.eventosAcumulados,
-            estatisticasCasa = estatisticasDeEventos(ctx.eventosAcumulados, escalacaoCasa.time.id, escalacaoFora.time.id, golsCasaFinal, escalacaoCasa.titulares, posseCasaFinal, rngStats),
-            estatisticasFora = estatisticasDeEventos(ctx.eventosAcumulados, escalacaoFora.time.id, escalacaoCasa.time.id, golsForaFinal, escalacaoFora.titulares, 100 - posseCasaFinal, rngStats)
+            golsCasa         = golsCasa120,
+            golsFora         = golsFora120,
+            eventos          = ctxDecidido.eventosAcumulados,
+            estatisticasCasa = estatisticasDeEventos(ctxDecidido.eventosAcumulados, escalacaoCasa.time.id, escalacaoFora.time.id, golsCasa120, escalacaoCasa.titulares, posseCasaFinal, rngStats),
+            estatisticasFora = estatisticasDeEventos(ctxDecidido.eventosAcumulados, escalacaoFora.time.id, escalacaoCasa.time.id, golsFora120, escalacaoFora.titulares, 100 - posseCasaFinal, rngStats)
         )
 
         val notasPartida = persistirResultado(resultadoBase)
@@ -801,13 +866,13 @@ class GameRepository @Inject constructor(
                     timeForaIdaId = ida.timeForaId,
                     golsCasaIda   = ida.golsCasa ?: 0,
                     golsForaIda   = ida.golsFora ?: 0,
-                    golsCasaVolta = golsCasaFinal,
-                    golsForaVolta = golsForaFinal
+                    golsCasaVolta = golsCasa120,
+                    golsForaVolta = golsFora120
                 )
                 if (vencedor == null) {
                     precisaPenaltis  = true
-                    golsAgregadoCasa = (ida.golsFora ?: 0) + golsCasaFinal
-                    golsAgregadoFora = (ida.golsCasa ?: 0) + golsForaFinal
+                    golsAgregadoCasa = (ida.golsFora ?: 0) + golsCasa120
+                    golsAgregadoFora = (ida.golsCasa ?: 0) + golsFora120
                 }
             }
         }
@@ -815,7 +880,7 @@ class GameRepository @Inject constructor(
         // Supercopa: jogo único — empate nos 90min decide por pênaltis
         if (!precisaPenaltis) {
             val tipoDoJogo = campeonatoDao.buscarPorId(ctx.campeonatoId)?.tipo
-            if (tipoDoJogo == TipoCampeonato.SUPERCOPA && golsCasaFinal == golsForaFinal) {
+            if (tipoDoJogo == TipoCampeonato.SUPERCOPA && golsCasa120 == golsFora120) {
                 precisaPenaltis = true
             }
         }
@@ -825,7 +890,7 @@ class GameRepository @Inject constructor(
         // é obrigatória aqui: as oitavas, quartas e semis da Libertadores usam o
         // mesmo formato mas são de ida e volta, e sem ela um empate na ida iria
         // aos pênaltis em vez de ficar para a volta decidir.
-        if (!precisaPenaltis && golsCasaFinal == golsForaFinal && jogosDoConfronto < 2) {
+        if (!precisaPenaltis && golsCasa120 == golsFora120 && jogosDoConfronto < 2) {
             val formato = campeonatoDao.buscarPorId(ctx.campeonatoId)?.formato
             val fasePartida = partidaDoJogador?.fase
             if (formato == FormatoCampeonato.GRUPOS_E_MATA_MATA && fasePartida != null) {
@@ -834,7 +899,7 @@ class GameRepository @Inject constructor(
         }
 
         // Copa da Inglaterra (MATA_MATA_SIMPLES): jogo único — empate decide por pênaltis
-        if (!precisaPenaltis && golsCasaFinal == golsForaFinal) {
+        if (!precisaPenaltis && golsCasa120 == golsFora120) {
             val formato = campeonatoDao.buscarPorId(ctx.campeonatoId)?.formato
             val fasePartida = partidaDoJogador?.fase
             if (formato == FormatoCampeonato.MATA_MATA_SIMPLES && fasePartida != null) {
@@ -5890,6 +5955,118 @@ class GameRepository @Inject constructor(
     }
 
 
+
+    // ══════════════════════════════════════════════════════════════
+    //  Prorrogação — ver regras_libertadores.md
+    //
+    //  30 minutos em dois tempos de 15, jogados quando uma decisão de JOGO ÚNICO
+    //  termina empatada no tempo normal. Persistindo o empate, pênaltis.
+    //
+    //  Hoje só a final da Libertadores usa isto. As outras fases de mata-mata dela
+    //  — a Pré e das oitavas às semis — são de ida e volta e vão direto aos
+    //  pênaltis quando o agregado empata, sem prorrogação; é o que
+    //  FormatoLibertadores.temProrrogacao decide, por fase.
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Se esta partida vai à prorrogação quando terminar empatada.
+     *
+     * Exige as três coisas juntas: competição continental, a fase ser uma em que o
+     * formato manda jogar prorrogação, e o confronto ser de jogo único. A última é
+     * o que separa a final da Libertadores das oitavas dela, que usam a mesma
+     * competição e o mesmo formato de banco mas são de ida e volta — e onde o
+     * empate de uma ida não decide nada.
+     */
+    private suspend fun temProrrogacao(partida: PartidaEntity, jogosDoConfronto: Int): Boolean {
+        if (jogosDoConfronto != 1) return false
+        val fase = partida.fase ?: return false
+        if (!MotorCampeonato.FORMATO_LIBERTADORES.temProrrogacao(fase)) return false
+        return campeonatoDao.buscarPorId(partida.campeonatoId)?.tipo == TipoCampeonato.CONTINENTAL
+    }
+
+    /** O mesmo, descobrindo o tamanho do confronto a partir da própria partida. */
+    private suspend fun temProrrogacao(partida: PartidaEntity): Boolean {
+        val jogos = if (partida.confrontoId == null) 1
+        else partidaDao.buscarTodasPorCampeonato(partida.campeonatoId)
+            .count { it.confrontoId == partida.confrontoId }
+        return temProrrogacao(partida, jogos)
+    }
+
+    /**
+     * Se esta partida JÁ jogou a prorrogação, para não jogá-la duas vezes.
+     *
+     * Há uma janela em que isso importa: a final do jogador termina empatada nos
+     * 120 minutos, fica esperando ele cobrar os pênaltis, e nesse meio tempo o
+     * avanço automático da competição passa por aqui. Sem esta checagem a
+     * prorrogação seria simulada de novo e somaria gols a um placar que já é o dos
+     * 120 minutos.
+     *
+     * O marcador são os eventos depois do minuto 90, que é onde a prorrogação
+     * grava os seus gols e cartões. Fica de fora o caso de uma prorrogação que não
+     * produziu evento nenhum — 0x0 sem cartão —, e aí os 30 minutos podem ser
+     * refeitos; é raro e o placar de entrada é o mesmo, então o efeito se limita a
+     * um gol que poderia não ter existido.
+     */
+    private suspend fun jaJogouProrrogacao(partida: PartidaEntity): Boolean {
+        if (partida.penaltisCasa != null && partida.penaltisForaId != null) return true
+        return partidaDao.buscarEventos(partida.id)
+            .any { it.minuto > SimuladorPartida.MINUTOS_TEMPO_NORMAL }
+    }
+
+    /**
+     * Joga a prorrogação de uma partida da IA que terminou empatada e devolve a
+     * partida com o placar dos 120 minutos.
+     *
+     * Os gols da prorrogação entram no placar da própria partida, como manda a
+     * contabilidade do futebol: um 2x1 na prorrogação é um 2x1 na súmula, e os
+     * gols contam para a artilharia. Só o placar é atualizado — o público e a
+     * receita de bilheteria já foram creditados no apito final dos 90 minutos e
+     * não mudam.
+     *
+     * O estado do squad para os 30 minutos extra é remontado das escalações da IA,
+     * porque o caminho da IA simula os 90 minutos num bloco só e não guarda um
+     * EstadoMetade. Quem joga a prorrogação do jogador é
+     * [finalizarPartidaComJogador], que tem o estado real do fim do segundo tempo.
+     */
+    private suspend fun jogarProrrogacaoIA(partida: PartidaEntity): PartidaEntity {
+        val escalacaoCasa = gerarEscalacaoIA(partida.timeCasaId)
+        val escalacaoFora = gerarEscalacaoIA(partida.timeForaId)
+        val estado = EstadoMetade(
+            titsCasa     = escalacaoCasa.titulares,
+            titsFora     = escalacaoFora.titulares,
+            resCasa      = escalacaoCasa.reservas,
+            resFora      = escalacaoFora.reservas,
+            entryMinutes = (escalacaoCasa.titulares + escalacaoFora.titulares)
+                .associate { it.jogador.id to 0 }
+        )
+
+        val (_, eventos) = simulador.simularProrrogacao(
+            escalacaoCasa = escalacaoCasa,
+            escalacaoFora = escalacaoFora,
+            estado        = estado,
+            campoNeutro   = ehCampoNeutro(partida)
+        )
+
+        val golsCasaExtra = eventos.count { it.tipo == TipoEvento.GOL && it.timeId == partida.timeCasaId }
+        val golsForaExtra = eventos.count { it.tipo == TipoEvento.GOL && it.timeId == partida.timeForaId }
+        val golsCasa = (partida.golsCasa ?: 0) + golsCasaExtra
+        val golsFora = (partida.golsFora ?: 0) + golsForaExtra
+
+        partidaDao.inserirEventos(
+            eventos.filter { it.jogadorId > 0 }.map { ev ->
+                EventoPartidaEntity(
+                    partidaId = partida.id,
+                    jogadorId = ev.jogadorId,
+                    minuto    = ev.minuto,
+                    tipo      = ev.tipo,
+                    descricao = ev.descricao
+                )
+            }
+        )
+        partidaDao.atualizarPlacar(partida.id, golsCasa, golsFora)
+        return partida.copy(golsCasa = golsCasa, golsFora = golsFora)
+    }
+
     /**
      * Se a partida e disputada em campo neutro. Vale para as Supercopas e o
      * Trofeu dos Campeoes, que sao jogo unico em sede neutra por definicao, e para
@@ -7604,16 +7781,29 @@ class GameRepository @Inject constructor(
      * chegou aqui sem eles persistidos.
      */
     private suspend fun vencedorDoJogoUnico(jogo: PartidaEntity): Int? {
-        val golsCasa = jogo.golsCasa ?: return null
-        val golsFora = jogo.golsFora ?: return null
-        if (golsCasa > golsFora) return jogo.timeCasaId
-        if (golsFora > golsCasa) return jogo.timeForaId
-        val pCasa = jogo.penaltisCasa
-        val pFora = jogo.penaltisForaId
+        if (jogo.golsCasa == null || jogo.golsFora == null) return null
+
+        // Empate no tempo normal numa decisão de jogo único: PRORROGAÇÃO de 30
+        // minutos antes dos pênaltis. Se os pênaltis já estão persistidos, a
+        // prorrogação já foi jogada nesta partida — não se joga duas vezes.
+        val decisao =
+            if (jogo.golsCasa == jogo.golsFora &&
+                !jaJogouProrrogacao(jogo) &&
+                temProrrogacao(jogo)
+            ) jogarProrrogacaoIA(jogo) else jogo
+
+        val golsCasa = decisao.golsCasa ?: return null
+        val golsFora = decisao.golsFora ?: return null
+        if (golsCasa > golsFora) return decisao.timeCasaId
+        if (golsFora > golsCasa) return decisao.timeForaId
+
+        // Persistiu o empate depois dos 120 minutos: pênaltis.
+        val pCasa = decisao.penaltisCasa
+        val pFora = decisao.penaltisForaId
         if (pCasa != null && pFora != null) {
-            return if (pCasa > pFora) jogo.timeCasaId else jogo.timeForaId
+            return if (pCasa > pFora) decisao.timeCasaId else decisao.timeForaId
         }
-        return simularEPersistirPenaltisIA(jogo, jogo)
+        return simularEPersistirPenaltisIA(decisao, decisao)
     }
 
     /**
