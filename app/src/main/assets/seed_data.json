@@ -4333,7 +4333,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_intermiami"
     },
     {
       "id": 602,
@@ -4350,7 +4350,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 94,
-      "escudo_res": ""
+      "escudo_res": "escudo_bayernmunique"
     },
     {
       "id": 603,
@@ -4367,7 +4367,7 @@
       "tatica": "3-4-3",
       "estilo": "OFENSIVO",
       "reputacao": 87,
-      "escudo_res": ""
+      "escudo_res": "escudo_bayerleverkusen"
     },
     {
       "id": 604,
@@ -4384,7 +4384,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 86,
-      "escudo_res": ""
+      "escudo_res": "escudo_borussiadortmund"
     },
     {
       "id": 605,
@@ -4401,7 +4401,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 83,
-      "escudo_res": ""
+      "escudo_res": "escudo_rbleipzig"
     },
     {
       "id": 606,
@@ -4418,11 +4418,11 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 93,
-      "escudo_res": ""
+      "escudo_res": "escudo_psg"
     },
     {
       "id": 607,
-      "nome": "Olympique de Marselha",
+      "nome": "Olympique de Marseille",
       "cidade": "Marselha",
       "estado": "PAC",
       "divisao": 91,
@@ -4435,7 +4435,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 81,
-      "escudo_res": ""
+      "escudo_res": "escudo_olympiquemarseille"
     },
     {
       "id": 608,
@@ -4452,7 +4452,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 80,
-      "escudo_res": ""
+      "escudo_res": "escudo_monaco"
     },
     {
       "id": 609,
@@ -4469,7 +4469,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 79,
-      "escudo_res": ""
+      "escudo_res": "escudo_psv"
     },
     {
       "id": 610,
@@ -4485,8 +4485,8 @@
       "preco_ingresso": 6000,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 78,
-      "escudo_res": ""
+      "reputacao": 81,
+      "escudo_res": "escudo_ajax"
     },
     {
       "id": 611,
@@ -4503,7 +4503,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 76,
-      "escudo_res": ""
+      "escudo_res": "escudo_clubbrugge"
     },
     {
       "id": 612,
@@ -4520,7 +4520,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_slaviapraga"
     },
     {
       "id": 613,
@@ -4537,7 +4537,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 80,
-      "escudo_res": ""
+      "escudo_res": "escudo_galatasaray"
     },
     {
       "id": 614,
@@ -4554,7 +4554,7 @@
       "tatica": "3-4-3",
       "estilo": "OFENSIVO",
       "reputacao": 84,
-      "escudo_res": ""
+      "escudo_res": "escudo_sportingcp"
     },
     {
       "id": 615,
@@ -4571,7 +4571,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 74,
-      "escudo_res": ""
+      "escudo_res": "escudo_shakhtar"
     },
     {
       "id": 616,
@@ -4588,7 +4588,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 76,
-      "escudo_res": ""
+      "escudo_res": "escudo_celtic"
     },
     {
       "id": 617,
@@ -4605,7 +4605,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_rangers"
     },
     {
       "id": 618,
@@ -4622,7 +4622,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 75,
-      "escudo_res": ""
+      "escudo_res": "escudo_olympiacos"
     },
     {
       "id": 619,
@@ -4639,7 +4639,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 71,
-      "escudo_res": ""
+      "escudo_res": "escudo_paok"
     },
     {
       "id": 620,
@@ -4656,7 +4656,7 @@
       "tatica": "4-4-2",
       "estilo": "OFENSIVO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_rbsalzburg"
     },
     {
       "id": 621,
@@ -4673,7 +4673,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 68,
-      "escudo_res": ""
+      "escudo_res": "escudo_sturmgraz"
     },
     {
       "id": 622,
@@ -4690,7 +4690,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 70,
-      "escudo_res": ""
+      "escudo_res": "escudo_youngboys"
     },
     {
       "id": 623,
@@ -4707,7 +4707,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 69,
-      "escudo_res": ""
+      "escudo_res": "escudo_basel"
     },
     {
       "id": 624,
@@ -4724,7 +4724,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_copenhagen"
     },
     {
       "id": 625,
@@ -4741,7 +4741,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 69,
-      "escudo_res": ""
+      "escudo_res": "escudo_midtjylland"
     },
     {
       "id": 626,
@@ -4758,7 +4758,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 71,
-      "escudo_res": ""
+      "escudo_res": "escudo_bodoglimt"
     },
     {
       "id": 627,
@@ -4775,7 +4775,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_dinamozagreb"
     },
     {
       "id": 628,
@@ -4792,7 +4792,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 71,
-      "escudo_res": ""
+      "escudo_res": "escudo_estrelavermelha"
     },
     {
       "id": 629,
@@ -4809,7 +4809,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 68,
-      "escudo_res": ""
+      "escudo_res": "escudo_legiawarszawa"
     },
     {
       "id": 630,
@@ -4826,7 +4826,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_malmo"
     },
     {
       "id": 631,
@@ -4843,7 +4843,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_fcsb"
     }
   ],
   "jogadores": [

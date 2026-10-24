@@ -2605,9 +2605,13 @@ class GameRepository @Inject constructor(
      * — hoje é o caso enquanto o pool de clubes estrangeiros não existir, e o
      * sinal para não criar a competição.
      */
-    suspend fun determinarParticipantesChampions(anoAtual: Int): List<VagaChampions> {
+    suspend fun determinarParticipantesChampions(
+        anoAtual: Int,
+        temporadaAnteriorId: Int = -1
+    ): List<VagaChampions> {
         val coeficientes = rankingEuropaDao.buscarCoeficientes(anoAtual)
             .associate { it.timeId to it.coeficiente }
+        val posicoes = posicoesFinaisDasLigasEuropeias(temporadaAnteriorId)
         val candidatos = timeRepository.buscarTodosOrdenadosPorReputacao()
             .filter { it.divisao in RankingEuropa.DIVISOES_ELEGIVEIS_CHAMPIONS }
             .filter { Continentes.ehEuropa(it.pais) }
@@ -2617,10 +2621,34 @@ class GameRepository @Inject constructor(
                     nome        = time.nome,
                     pais        = time.pais,
                     coeficiente = coeficientes[time.id] ?: 0.0,
-                    reputacao   = time.reputacao
+                    reputacao   = time.reputacao,
+                    posicaoLiga = posicoes[time.id]
                 )
             }
         return ListaDeAcessoChampions.montar(candidatos)
+    }
+
+    /**
+     * Colocação final de cada clube nas primeiras divisões europeias da temporada
+     * que encerra — Premier League, La Liga e Serie A. É o que decide quem vai à
+     * Champions da temporada seguinte, em vez de reputação ou coeficiente.
+     *
+     * Devolve um mapa vazio quando não há temporada anterior (primeiro ano de
+     * jogo), e aí a lista de acesso cai no coeficiente e na reputação. Clubes do
+     * pool estrangeiro nunca aparecem aqui, porque não têm liga própria.
+     */
+    private suspend fun posicoesFinaisDasLigasEuropeias(temporadaId: Int): Map<Int, Int> {
+        if (temporadaId <= 0) return emptyMap()
+        val ligas = campeonatoDao.buscarPorTemporadaId(temporadaId).filter { camp ->
+            camp.tipo == TipoCampeonato.NACIONAL_DIVISAO1 && Continentes.ehEuropa(camp.pais)
+        }
+        val posicoes = HashMap<Int, Int>()
+        for (liga in ligas) {
+            classificacaoDao.buscarTabelaOrdenada(liga.id).forEachIndexed { indice, linha ->
+                posicoes[linha.timeId] = indice + 1
+            }
+        }
+        return posicoes
     }
 
     /**
@@ -2682,7 +2710,9 @@ class GameRepository @Inject constructor(
             } catch (_: Exception) { break }
         }
         return try {
-            criarChampionsDaTemporada(novoTemporadaId, novoAno)
+            // temporadaId é a que encerra: a sua tabela final é a que classifica
+            // os clubes para a Champions da temporada nova.
+            criarChampionsDaTemporada(novoTemporadaId, novoAno, temporadaAnteriorId = temporadaId)
         } catch (_: Exception) { -1 }
     }
 
@@ -2691,8 +2721,12 @@ class GameRepository @Inject constructor(
      * não fecha os 36 clubes. Extraído em helper porque o rollover de temporada
      * já está no limite de bytecode da JVM.
      */
-    suspend fun criarChampionsDaTemporada(temporadaId: Int, ano: Int): Int {
-        val vagas = determinarParticipantesChampions(ano)
+    suspend fun criarChampionsDaTemporada(
+        temporadaId: Int,
+        ano: Int,
+        temporadaAnteriorId: Int = -1
+    ): Int {
+        val vagas = determinarParticipantesChampions(ano, temporadaAnteriorId)
         if (vagas.size < SorteioChampions.CLUBES) return -1
         return criarChampions(
             CampeonatoEntity(

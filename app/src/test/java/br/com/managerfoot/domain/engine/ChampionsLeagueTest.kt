@@ -185,6 +185,119 @@ class ChampionsLeagueTest {
         assertTrue(ListaDeAcessoChampions.montar(poucos).size < SorteioChampions.CLUBES)
     }
 
+    // ── Classificação pela liga nacional ────────────────────────────────
+
+    /**
+     * Candidatos de um país com liga completa: todos têm colocação final, e a
+     * reputação é INVERSA à colocação de propósito — o lanterna é o mais
+     * reputado. Assim, se a vaga sair pela reputação em vez da tabela, o teste
+     * falha de forma evidente.
+     */
+    private fun candidatosComLiga(pais: String, clubes: Int, idBase: Int): List<CandidatoChampions> =
+        (1..clubes).map { posicao ->
+            CandidatoChampions(
+                timeId      = idBase + posicao,
+                nome        = "$pais ${posicao}o",
+                pais        = pais,
+                coeficiente = 0.0,
+                reputacao   = posicao.toFloat(),   // inversa: o 1o tem a pior
+                posicaoLiga = posicao
+            )
+        }
+
+    /** Candidatos do pool, sem liga, dos países que não são o informado. */
+    private fun candidatosSemLiga(exceto: List<String>): List<CandidatoChampions> =
+        candidatos().filter { ListaDeAcessoChampions.paisCanonico(it.pais) !in exceto }
+
+    @Test
+    fun `as vagas diretas vao para os primeiros colocados da liga nacional`() {
+        val comLiga = candidatosComLiga("Inglaterra", 20, 10_000) +
+            candidatosComLiga("Espanha", 20, 20_000) +
+            candidatosComLiga("Italia", 20, 30_000)
+        val vagas = ListaDeAcessoChampions.montar(
+            comLiga + candidatosSemLiga(listOf("Inglaterra", "Espanha", "Italia"))
+        )
+
+        for ((pais, cota) in listOf("Inglaterra" to 5, "Espanha" to 5, "Italia" to 4)) {
+            val diretas = vagas
+                .filter { ListaDeAcessoChampions.paisCanonico(it.candidato.pais) == pais }
+                .filter { it.porta == PortaDeEntrada.DIRETA }
+            assertEquals("vagas diretas de $pais", cota, diretas.size)
+            // Exatamente as colocações 1..cota, e nada mais.
+            assertEquals(
+                "classificados de $pais",
+                (1..cota).toList(),
+                diretas.mapNotNull { it.candidato.posicaoLiga }.sorted()
+            )
+        }
+    }
+
+    @Test
+    fun `a reputacao nao fura a fila quando existe colocacao na liga`() {
+        val comLiga = candidatosComLiga("Inglaterra", 20, 10_000)
+        val maisReputado = comLiga.maxByOrNull { it.reputacao }!!
+        assertEquals("o mais reputado devia ser o lanterna", 20, maisReputado.posicaoLiga)
+
+        val vagas = ListaDeAcessoChampions.montar(
+            comLiga + candidatosSemLiga(listOf("Inglaterra"))
+        )
+        val diretasInglesas = vagas
+            .filter { ListaDeAcessoChampions.paisCanonico(it.candidato.pais) == "Inglaterra" }
+            .filter { it.porta == PortaDeEntrada.DIRETA }
+            .map { it.candidato.timeId }
+        assertTrue(
+            "o 20o colocado nao devia ter vaga direta",
+            maisReputado.timeId !in diretasInglesas
+        )
+    }
+
+    @Test
+    fun `a cota por pais e respeitada mesmo com liga completa`() {
+        val vagas = ListaDeAcessoChampions.montar(
+            candidatosComLiga("Inglaterra", 20, 10_000) + candidatosSemLiga(listOf("Inglaterra"))
+        )
+        val diretas = vagas.count {
+            ListaDeAcessoChampions.paisCanonico(it.candidato.pais) == "Inglaterra" &&
+                it.porta == PortaDeEntrada.DIRETA
+        }
+        assertEquals("20 clubes com colocacao nao viram 20 vagas", 5, diretas)
+
+        val total = vagas.count { ListaDeAcessoChampions.paisCanonico(it.candidato.pais) == "Inglaterra" }
+        assertTrue(
+            "nenhum pais passa do teto de ${SorteioChampions.MAX_CLUBES_POR_PAIS}",
+            total <= SorteioChampions.MAX_CLUBES_POR_PAIS
+        )
+    }
+
+    @Test
+    fun `clube com colocacao vem antes de clube sem colocacao`() {
+        val comLiga = CandidatoChampions(1, "Com liga", "Alemanha", 0.0, 10f, posicaoLiga = 9)
+        val semLiga = CandidatoChampions(2, "Sem liga", "Alemanha", 0.0, 99f, posicaoLiga = null)
+        val ordenado = listOf(semLiga, comLiga).sortedWith(ListaDeAcessoChampions.ORDEM)
+        assertEquals(comLiga.timeId, ordenado.first().timeId)
+    }
+
+    @Test
+    fun `sem liga a ordem continua sendo coeficiente e reputacao`() {
+        // Caso do pool estrangeiro e da 1a temporada: ninguem tem colocacao.
+        val a = CandidatoChampions(1, "A", "Alemanha", coeficiente = 5.0, reputacao = 50f)
+        val b = CandidatoChampions(2, "B", "Alemanha", coeficiente = 9.0, reputacao = 10f)
+        val c = CandidatoChampions(3, "C", "Alemanha", coeficiente = 0.0, reputacao = 99f)
+        val ordenado = listOf(a, b, c).sortedWith(ListaDeAcessoChampions.ORDEM)
+        assertEquals(listOf(2, 1, 3), ordenado.map { it.timeId })
+    }
+
+    @Test
+    fun `a lista de acesso ainda fecha 36 vagas com as ligas completas`() {
+        val vagas = ListaDeAcessoChampions.montar(
+            candidatosComLiga("Inglaterra", 20, 10_000) +
+                candidatosComLiga("Espanha", 20, 20_000) +
+                candidatosComLiga("Italia", 20, 30_000) +
+                candidatosSemLiga(listOf("Inglaterra", "Espanha", "Italia"))
+        )
+        assertEquals(SorteioChampions.CLUBES, vagas.size)
+    }
+
     // ── Geração da competição: o sorteio em cima da lista de acesso ──────
 
     @Test

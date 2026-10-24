@@ -576,6 +576,17 @@ interface PartidaDao {
     """)
     fun observeArgKnockout(campeonatoId: Int): Flow<List<CalendarioPartidaDto>>
 
+    /**
+     * Partidas de mata-mata de uma copa, para o chaveamento.
+     *
+     * O filtro `fase IS NOT NULL AND confrontoId IS NOT NULL` não é cosmético:
+     * [CopaPartidaDto] declara `fase` e `confrontoId` como NÃO-NULOS, e a Fase de
+     * Liga da Champions grava as suas 144 partidas justamente com os dois nulos
+     * — é o que as faz alimentar a tabela de 36 clubes em vez do chaveamento.
+     * Sem o filtro, o Room tenta escrever null nesses campos e a tela de Copas
+     * quebra ao abrir, assim que passa a existir uma Champions. Para as demais
+     * copas o filtro é inócuo: toda partida delas tem fase e confronto.
+     */
     @Query("""
         SELECT p.id AS partidaId, p.confrontoId AS confrontoId, p.fase AS fase,
                p.rodada AS rodada, p.timeCasaId AS timeCasaId,
@@ -587,6 +598,8 @@ interface PartidaDao {
         INNER JOIN times tc ON p.timeCasaId = tc.id
         INNER JOIN times tf ON p.timeForaId = tf.id
         WHERE p.campeonatoId = :copaId
+          AND p.fase IS NOT NULL
+          AND p.confrontoId IS NOT NULL
         ORDER BY p.fase, p.confrontoId, p.rodada
     """)
     fun observeCopaPartidas(copaId: Int): Flow<List<CopaPartidaDto>>

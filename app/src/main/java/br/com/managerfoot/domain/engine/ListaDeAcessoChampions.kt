@@ -21,7 +21,13 @@ data class CandidatoChampions(
     /** Coeficiente da UEFA acumulado na janela de 5 temporadas. */
     val coeficiente: Double,
     /** Reputação do clube — único critério disponível na 1ª temporada. */
-    val reputacao: Float
+    val reputacao: Float,
+    /**
+     * Posição final na liga nacional da temporada que encerra, 1-based, ou null
+     * quando o clube não disputou uma liga completa — o caso dos clubes do pool
+     * estrangeiro, que existem só para a Champions e não têm campeonato próprio.
+     */
+    val posicaoLiga: Int? = null
 )
 
 /** Por que um clube está na Fase de Liga. */
@@ -91,17 +97,25 @@ object ListaDeAcessoChampions {
     fun paisCanonico(pais: String): String? = ALIASES[normalizar(pais)]
 
     /**
-     * Ordem de preferência dentro de um país e na fila da qualificação: maior
-     * coeficiente da UEFA primeiro, com a reputação desempatando.
+     * Ordem de preferência dentro de um país e na fila da qualificação.
      *
-     * Simplificação consciente: o enunciado dá 4 das 5 vagas inglesas "pela
-     * liga" e 1 "pelo desempenho geral", mas isso exigiria a tabela da liga
-     * nacional da temporada anterior, que não existe no primeiro ano de jogo.
-     * O coeficiente é a métrica mais próxima que está sempre disponível, e na 1ª
-     * temporada ele é zero para todos — aí a reputação decide sozinha.
+     * A **colocação na liga nacional** manda: quem terminou melhor no campeonato
+     * da temporada que encerra pega a vaga, que é como a classificação funciona
+     * de verdade. Vale para os países que têm liga completa no jogo — Inglaterra,
+     * Espanha e Itália.
+     *
+     * Os clubes sem liga própria (o pool estrangeiro, que cobre Alemanha, França
+     * e as demais associações) não têm colocação, e para eles decide o
+     * coeficiente da UEFA, com a reputação desempatando. Na 1ª temporada o
+     * coeficiente é zero para todos, então a reputação decide sozinha.
+     *
+     * Um clube com colocação sempre vem antes de um sem: dentro de um mesmo país
+     * isso nunca mistura os dois, e na fila da qualificação significa que um
+     * 6º colocado da Premier passa à frente de um clube de pool sem campanha.
      */
     val ORDEM: Comparator<CandidatoChampions> =
-        compareByDescending<CandidatoChampions> { it.coeficiente }
+        compareBy<CandidatoChampions> { it.posicaoLiga ?: Int.MAX_VALUE }
+            .thenByDescending { it.coeficiente }
             .thenByDescending { it.reputacao }
             .thenBy { it.nome }
             .thenBy { it.timeId }

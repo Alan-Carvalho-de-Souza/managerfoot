@@ -57,6 +57,7 @@ fun ArtilheirosScreen(
     copaInglaterraId: Int = -1,
     campeonatoSerieAId: Int = -1,
     campeonatoAmistososId: Int = -1,
+    campeonatoChampionsId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -74,13 +75,15 @@ fun ArtilheirosScreen(
     val temInglaterra = campeonatoPremierId > 0 || campeonatoChampionshipId > 0 || copaInglaterraId > 0
     val temEspanha = campeonatoLaLigaId > 0
     val temItalia = campeonatoSerieAId > 0
+    val temEuropa = campeonatoChampionsId > 0
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
         campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
         campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId, campeonatoChampionshipId,
-        campeonatoLaLigaId, copaInglaterraId, campeonatoSerieAId, campeonatoAmistososId
+        campeonatoLaLigaId, copaInglaterraId, campeonatoSerieAId, campeonatoAmistososId,
+        campeonatoChampionsId
     ) {
         vm.carregar(
             campAId           = campeonatoAId,
@@ -103,6 +106,7 @@ fun ArtilheirosScreen(
             campSerieAId      = campeonatoSerieAId,
             campAmistosos     = campeonatoAmistososId,
             copaIng           = copaInglaterraId,
+            campChampionsId   = campeonatoChampionsId,
             divisaoInicial    = 0
         )
     }
@@ -149,6 +153,11 @@ fun ArtilheirosScreen(
     val opcoesItalia = buildList<Pair<Int, String>> {
         if (campeonatoSerieAId > 0) add(34 to "Serie A")
     }
+    // Competição continental, que não pertence a um país. Reúne a Fase de Liga e
+    // o mata-mata: a artilharia da Champions é a do torneio inteiro.
+    val opcoesEuropa = buildList<Pair<Int, String>> {
+        if (campeonatoChampionsId > 0) add(35 to "Champions League")
+    }
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
@@ -157,6 +166,7 @@ fun ArtilheirosScreen(
             30, 31, 33 -> "Inglaterra"
             32 -> "Espanha"
             34 -> "Italia"
+            35 -> "Europa"
             else -> "Brasil"
         }
     }
@@ -168,11 +178,13 @@ fun ArtilheirosScreen(
         "Inglaterra" -> opcoesInglaterra
         "Espanha"    -> opcoesEspanha
         "Italia"     -> opcoesItalia
+        "Europa"     -> opcoesEuropa
         else        -> opcoesBrasil
     }
 
     fun divisaoDoFiltroPais(pais: String) = when (pais) {
-        "Argentina" -> 200; "Uruguai" -> 300; "Inglaterra" -> 30; "Espanha" -> 32; "Italia" -> 34; else -> 100
+        "Argentina" -> 200; "Uruguai" -> 300; "Inglaterra" -> 30; "Espanha" -> 32; "Italia" -> 34
+        "Europa" -> 35; else -> 100
     }
 
     Column(
@@ -213,6 +225,7 @@ fun ArtilheirosScreen(
             if (temInglaterra) add("Inglaterra")
             if (temEspanha) add("Espanha")
             if (temItalia) add("Italia")
+            if (temEuropa) add("Europa")
         }
         if (paises.size > 1) {
             Row(
