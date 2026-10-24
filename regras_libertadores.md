@@ -105,35 +105,56 @@ o formato `GRUPOS_E_MATA_MATA`, que já existe no jogo.
 
 ---
 
-## Pré-requisito: faltam 7 das 10 associações
+## Pré-requisito resolvido: as 10 associações
 
-O seed tem **170 clubes sul-americanos**, de sobra para os 47 — mas de apenas **3 das 10
-associações**: Brasil (80), Argentina (60) e Uruguai (30). Não há clubes da Bolívia, Chile,
-Colômbia, Equador, Paraguai, Peru nem Venezuela.
+O seed tinha **170 clubes sul-americanos de apenas 3 associações** — Brasil (80),
+Argentina (60) e Uruguai (30) —, e com isso só 17 das 45 vagas nacionais tinham de
+onde sair. As outras 28 eram redistribuídas entre os três países presentes.
 
-Com isso, apenas **17 das 45 vagas nacionais** têm de onde sair: as 7 do Brasil, as 6 da
-Argentina e as 4 do Uruguai.
+Foi pelo caminho recomendado: um **pool sul-americano** na divisão 90, no mesmo
+modelo do pool europeu (`scripts/gen_outros.py`), com **6 clubes para cada uma das
+7 associações que faltavam** — Bolívia, Chile, Colômbia, Equador, Paraguai, Peru e
+Venezuela. São 42 clubes (ids 654–695) e 840 jogadores.
 
-**A boa notícia, diferente do caso europeu:** o enunciado **não impõe travas geográficas**.
-A Champions proíbe compatriotas na mesma chave e limita a 2 rivais por país, o que tornava
-o torneio matematicamente impossível com 3 países. Aqui não há nada disso no texto, então a
-Libertadores **é implementável já**, redistribuindo as 28 vagas órfãs entre os três países
-existentes.
+Seis por país, e não os 4 da cota, para que as vagas tenham concorrência e haja
+rotação entre temporadas: dentro do pool a fila é ordenada pelo coeficiente do
+Ranking CONMEBOL e, no desempate, pela reputação. As reputações ficam na faixa
+61–78 — abaixo dos gigantes brasileiros (até 89) e argentinos (até 97) —, o que
+mantém Brasil e Argentina nos potes 1 e 2 do sorteio sem tornar os outros oito
+países figurantes.
 
-> ⚠️ **Mas se você quiser a trava real, ela também não cabe.** Na Libertadores de verdade o
-> sorteio evita clubes do mesmo país num grupo. Um grupo de 4 precisaria de 4 países
-> distintos, e temos 3 — impossível por construção, exatamente como na Champions. Com as 10
-> associações, cabe com folga.
+**O efeito no domínio é o que `cotasEfetivas` foi escrita para ter:** com as 10
+associações presentes ela devolve as **cotas oficiais**, sem redistribuir nada e
+sem uma linha de código alterada. `SeedLibertadoresTest` trava isso lendo o
+`seed_data.json` de verdade, e confere vaga por vaga que cada país entra com o que
+a tabela da seção 2 manda: Brasil 5 + 2, Argentina 5 + 1, os outros oito 2 + 2.
 
-### Caminhos
+> **Os elencos do pool são SINTÉTICOS.** Os 53 clubes do pool europeu têm elenco
+> real escrito à mão; estes 42 não. Seriam 840 jogadores, e nomes reais nessa
+> quantidade, para sete ligas, sairiam errados — jogador no clube trocado, idade e
+> posição chutadas. Nome gerado não finge ser quem não é, e o elenco cumpre o papel
+> de dar a cada clube um plantel coerente com a sua reputação. Para trocar um clube
+> por um elenco real, basta acrescentar a entrada dele em `ROSTERS`: o gerador só
+> age quando o clube não tem roster escrito. Os **escudos** continuam manuais —
+> `escudo_res` sai vazio e o app cai no escudo genérico até o PNG existir em
+> `res/drawable`.
 
-| Caminho | O que implica |
-|---|---|
-| **Redistribuir as vagas (mais rápido)** | Dar as 28 vagas órfãs a Brasil, Argentina e Uruguai, proporcionalmente. Roda já, sem tocar no seed, e o torneio fica com 3 países — aceitável porque não há trava geográfica no enunciado. |
-| **Pool sul-americano (recomendado)** | Adicionar clubes dos 7 países que faltam, no mesmo modelo do pool europeu (divisões 90/91/92). O domínio já está pronto: `Continentes.PAISES_AMERICA_DO_SUL` **já reconhece as 10 associações da CONMEBOL**, incluindo Chile, Colômbia, Paraguai, Peru, Equador, Bolívia e Venezuela. Com ~30 clubes o torneio ganha os 10 países, a trava geográfica passa a ser possível e a Sul-Americana depois reaproveita os mesmos clubes. |
-| **Ligas completas** | Criar campeonatos nacionais para os 7 países. O mais fiel e o mais caro; fica como evolução do pool. |
+### A trava geográfica agora cabe — quase inteira
 
----
+Com 3 associações a separação por país era **impossível por construção**: um grupo
+de 4 precisa de 4 países distintos, e sobravam 13 pares de compatriotas. Com as 10
+ela passa a ser quase completa — no máximo 2 pares, e às vezes zero.
+
+Não é exatamente zero, e a razão é o **algoritmo, não a contagem**:
+`SorteioLibertadores` escolhe, pote a pote, o grupo com menos compatriotas, e nunca
+volta atrás; uma escolha cedo pode encurralar uma depois. Um sorteio com retrocesso
+zeraria. O guloso existe para **nunca falhar**, que é o que importa para o torneio
+poder ser criado.
+
+Há também um limite de contagem que nenhum algoritmo vence: são 8 grupos, então um
+país com mais de 8 clubes tem de repetir em algum deles. O Brasil pode chegar a 9 —
+5 da cota, 2 da Pré que sobrevivam e até 2 das vagas de campeão vigente sem titular
+(ver abaixo). É por isso que o sorteio minimiza em vez de proibir.
 
 ## Estado da implementação
 
@@ -145,16 +166,22 @@ de campeão vigente com a regra de queda quando o campeão já se classificaria 
 estrutura das três fases prévias.
 
 **A redistribuição de vagas** é genérica de propósito: ela recebe as associações que têm
-clubes e reparte as 45 vagas proporcionalmente às cotas oficiais. Com os 3 países do seed
-atual ela redistribui as 28 vagas órfãs sem perder nenhuma e preservando a hierarquia
-(Brasil ≥ Argentina ≥ Uruguai); quando os 7 países que faltam ganharem clubes, ela devolve
-as cotas oficiais **sem alteração de código**.
+clubes e reparte as 45 vagas proporcionalmente às cotas oficiais. Hoje ela **não age**: com
+o pool sul-americano o jogo tem as 10 associações, e a função devolve as cotas oficiais
+intactas, sem alteração de código — era exatamente a propriedade para a qual foi escrita.
+Ela continua valendo como rede de proteção, para o caso de uma associação ficar sem clubes
+elegíveis. Antes do pool, com 3 países, repartia as 28 vagas órfãs preservando a hierarquia
+(Brasil ≥ Argentina ≥ Uruguai).
 
 **O sorteio dos grupos** — `SorteioLibertadores.kt`: 4 potes de 8 por coeficiente, 8 grupos
-de 4 com um clube de cada pote. A separação por país é um objetivo, não uma trava: o
-sorteio escolhe sempre o grupo com menos compatriotas, então **nunca falha**, e um teste
-confirma que com as 10 associações ele separa todos os compatriotas, enquanto com 3 países
-ele apenas minimiza — um grupo de 4 não cabe em 3 países.
+de 4 com um clube de cada pote. A separação por país é um objetivo, não uma trava: o sorteio
+escolhe sempre o grupo com menos compatriotas, então **nunca falha**.
+
+Com um campo bem espalhado — no máximo 4 clubes por país — um teste confirma que ele separa
+todos os compatriotas. Sobre o campo REAL do seed ele não chega a zero: ficam até 2 pares,
+porque o Brasil entra com 7 clubes nos grupos e o guloso não volta atrás. Antes do pool,
+com 3 países, sobravam 13 — a separação era impossível por contagem, já que um grupo de 4
+não cabe em 3 países. Ver "A trava geográfica agora cabe — quase inteira", acima.
 
 ### Resolvido pelo caminho
 
@@ -257,6 +284,24 @@ sem que a Libertadores tenha gravado nada em lugar nenhum.
 de 4, pelo filtro de grupo que o `ClassificacaoDao` já tinha), Artilharia e
 Chaveamento. **Migração de banco: nenhuma.**
 
+### O fechamento dos grupos distorce a cota do Brasil
+
+Medido sobre o seed, com as cotas oficiais em vigor: o Brasil entra com **7 vagas
+diretas nos grupos, e não 5**. As 26 vagas nacionais de grupo saem corretas, mas as
+2 vagas de campeão vigente nunca têm titular — a Copa Sul-Americana não existe no
+jogo e na primeira temporada não houve Libertadores —, e o fechamento as entrega
+aos **melhores clubes restantes por ordem global**, que são brasileiros.
+
+Antes do pool a distorção era pior e mais arbitrária: as sobras iam para o 11º e o
+12º do Uruguai, clubes que não entravam nem na cota uruguaia, porque a ordenação
+compara `posicaoLiga` entre países como se fosse a mesma escala e as ligas têm
+tamanhos diferentes. Com o pool as sobras vão para clubes brasileiros de reputação
+alta, o que é defensável, mas ainda assim **passa por cima da tabela de cotas**.
+
+O conserto natural é o fechamento repartir as vagas órfãs respeitando a hierarquia
+das cotas, como `cotasEfetivas` já faz, em vez de ordenar por posição global. Fica
+registrado como pendência porque é uma mudança de comportamento na distribuição.
+
 ### Aproximações registradas na distribuição de vagas
 
 1. **A fase de mata-mata dos torneios argentino e uruguaio não entra na tabela
@@ -269,15 +314,16 @@ Chaveamento. **Migração de banco: nenhuma.**
 
 Mantido como registro do que continua valendo como evolução.
 
-1. **Os clubes dos 7 países que faltam**, se você quiser as 10 associações — ver
-   acima. É a única coisa que falta para a trava geográfica real do sorteio passar
-   a ser possível. Enquanto isso a redistribuição reparte as 28 vagas órfãs entre
-   Brasil, Argentina e Uruguai, e o sorteio **minimiza** compatriotas por grupo em
-   vez de proibi-los.
-2. **A Copa Sul-Americana**, para onde vão os terceiros de cada grupo. A lista está
+1. **O fechamento dos grupos respeitar as cotas**, em vez de dar as vagas de
+   campeão vigente sem titular aos melhores restantes por ordem global — ver acima.
+2. **Um sorteio com retrocesso**, para a separação por país fechar em zero pares
+   quando a composição permite. O guloso atual deixa no máximo 2.
+3. **Elencos reais para o pool sul-americano**, clube a clube, em `ROSTERS`.
+4. **Escudos do pool** em `res/drawable` (`escudo_res` está vazio nos 42 clubes).
+5. **A Copa Sul-Americana**, para onde vão os terceiros de cada grupo. A lista está
    pronta e derivada; falta a competição que a consome — e, com ela, a segunda vaga
    de campeão vigente, que hoje desce para o próximo colocado.
-3. **A prorrogação como segmento interativo.** Os 30 minutos são simulados de uma vez
+6. **A prorrogação como segmento interativo.** Os 30 minutos são simulados de uma vez
    quando a final do jogador termina empatada; a tela da partida não oferece um
    período de prorrogação para ele mexer no time, como faz no intervalo. O placar
    exibido é o dos 120 minutos, com os gols nos minutos 91 a 120.

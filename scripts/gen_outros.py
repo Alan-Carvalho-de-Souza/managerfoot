@@ -20,6 +20,10 @@ import json
 import os
 import random
 
+# Divisao do pool sul-americano. Clube desta divisao sem elenco escrito a mao
+# recebe um elenco gerado — ver gen_roster_sintetico.
+DIVISAO_POOL_SUL = 90
+
 # ─────────────────── Metadados dos clubes ─────────────────────────────────────
 # (id, nome, cidade, estado, divisao, pais, nivel, saldo(centavos), estadio, cap,
 #  preco(centavos), tatica, estilo, reputacao)
@@ -181,6 +185,120 @@ TIMES = [
      "Tele2 Arena", 30000, 3000, "4-3-3", "EQUILIBRADO", 65),
     (653, "CFR Cluj", "Cluj", "CLU", 91, "Romenia", 5, 8_500_000_00,
      "Dr. Constantin Radulescu", 23500, 3000, "4-2-3-1", "DEFENSIVO", 64),
+    # ── Pool sul-americano (divisao 90) — base da CONMEBOL Libertadores ───────
+    # Sao as 7 associacoes que o seed nao tinha: Bolivia, Chile, Colombia,
+    # Equador, Paraguai, Peru e Venezuela. Com elas o jogo passa a ter as 10
+    # associacoes da CONMEBOL, e ListaDeAcessoLibertadores.cotasEfetivas devolve
+    # as COTAS OFICIAIS em vez de redistribuir as vagas orfas entre Brasil,
+    # Argentina e Uruguai — ver regras_libertadores.md.
+    #
+    # Seis clubes por pais para as 4 vagas de cada um (2 nos grupos + 2 na Pre):
+    # a sobra da concorrencia pelas vagas e rotacao entre temporadas, porque
+    # dentro do pool a fila e ordenada pelo coeficiente do Ranking CONMEBOL e,
+    # no desempate, pela reputacao.
+    #
+    # As reputacoes ficam na faixa 61-78: abaixo dos gigantes brasileiros (ate
+    # 89) e argentinos (ate 97) e sobrepostas ao meio da tabela deles. E o que
+    # mantem Brasil e Argentina nos potes 1 e 2 do sorteio sem tornar os outros
+    # oito paises figurantes.
+
+    # Bolivia
+    (654, "Bolivar", "La Paz", "LPZ", 90, "Bolivia", 6, 12_000_000_00,
+     "Estadio Hernando Siles", 41143, 3000, "4-3-3", "OFENSIVO", 72),
+    (655, "The Strongest", "La Paz", "LPZ", 90, "Bolivia", 6, 9_000_000_00,
+     "Estadio Rafael Mendoza", 15000, 2800, "4-4-2", "EQUILIBRADO", 69),
+    (656, "Always Ready", "El Alto", "LPZ", 90, "Bolivia", 5, 7_500_000_00,
+     "Estadio Municipal de El Alto", 24000, 2600, "4-4-2", "OFENSIVO", 67),
+    (657, "Oriente Petrolero", "Santa Cruz de la Sierra", "SCZ", 90, "Bolivia", 5, 6_000_000_00,
+     "Estadio Ramon Tahuichi Aguilera", 38000, 2400, "4-2-3-1", "EQUILIBRADO", 64),
+    (658, "Blooming", "Santa Cruz de la Sierra", "SCZ", 90, "Bolivia", 5, 5_000_000_00,
+     "Estadio Ramon Tahuichi Aguilera", 38000, 2200, "4-4-2", "EQUILIBRADO", 62),
+    (659, "Jorge Wilstermann", "Cochabamba", "CBB", 90, "Bolivia", 4, 4_500_000_00,
+     "Estadio Felix Capriles", 32000, 2200, "4-4-2", "DEFENSIVO", 61),
+
+    # Chile
+    (660, "Colo-Colo", "Santiago", "RMS", 90, "Chile", 7, 20_000_000_00,
+     "Estadio Monumental David Arellano", 47347, 3800, "4-3-3", "OFENSIVO", 77),
+    (661, "Universidad de Chile", "Santiago", "RMS", 90, "Chile", 7, 16_000_000_00,
+     "Estadio Nacional Julio Martinez", 48665, 3600, "4-2-3-1", "OFENSIVO", 74),
+    (662, "Universidad Catolica", "Santiago", "RMS", 90, "Chile", 7, 15_000_000_00,
+     "Estadio San Carlos de Apoquindo", 20000, 3600, "4-3-3", "EQUILIBRADO", 73),
+    (663, "Huachipato", "Talcahuano", "BIO", 90, "Chile", 5, 7_000_000_00,
+     "Estadio CAP", 10500, 2600, "4-2-3-1", "EQUILIBRADO", 67),
+    (664, "Palestino", "Santiago", "RMS", 90, "Chile", 5, 5_500_000_00,
+     "Estadio Municipal La Cisterna", 8000, 2400, "4-4-2", "EQUILIBRADO", 64),
+    (665, "Cobresal", "El Salvador", "ATC", 90, "Chile", 4, 4_500_000_00,
+     "Estadio El Cobre", 12000, 2200, "4-4-2", "DEFENSIVO", 62),
+
+    # Colombia
+    (666, "Atletico Nacional", "Medellin", "ANT", 90, "Colombia", 7, 22_000_000_00,
+     "Estadio Atanasio Girardot", 40043, 3800, "4-3-3", "OFENSIVO", 78),
+    (667, "Millonarios", "Bogota", "BOG", 90, "Colombia", 7, 16_000_000_00,
+     "Estadio El Campin", 36343, 3600, "4-2-3-1", "OFENSIVO", 74),
+    (668, "America de Cali", "Cali", "VAC", 90, "Colombia", 6, 13_000_000_00,
+     "Estadio Pascual Guerrero", 35405, 3200, "4-3-3", "OFENSIVO", 72),
+    (669, "Junior", "Barranquilla", "ATL", 90, "Colombia", 6, 12_000_000_00,
+     "Estadio Metropolitano Roberto Melendez", 46692, 3200, "4-2-3-1", "OFENSIVO", 71),
+    (670, "Deportivo Cali", "Cali", "VAC", 90, "Colombia", 5, 8_000_000_00,
+     "Estadio Deportivo Cali", 41000, 2800, "4-4-2", "EQUILIBRADO", 68),
+    (671, "Independiente Medellin", "Medellin", "ANT", 90, "Colombia", 5, 7_000_000_00,
+     "Estadio Atanasio Girardot", 40043, 2600, "4-2-3-1", "EQUILIBRADO", 66),
+
+    # Equador
+    (672, "Independiente del Valle", "Sangolqui", "PIC", 90, "Equador", 7, 15_000_000_00,
+     "Estadio Banco Guayaquil", 12000, 3200, "4-3-3", "OFENSIVO", 76),
+    (673, "LDU Quito", "Quito", "PIC", 90, "Equador", 7, 14_000_000_00,
+     "Estadio Rodrigo Paz Delgado", 41575, 3200, "4-2-3-1", "EQUILIBRADO", 75),
+    (674, "Barcelona de Guayaquil", "Guayaquil", "GUA", 90, "Equador", 6, 12_000_000_00,
+     "Estadio Monumental Banco Pichincha", 59283, 3000, "4-3-3", "OFENSIVO", 73),
+    (675, "Emelec", "Guayaquil", "GUA", 90, "Equador", 6, 9_000_000_00,
+     "Estadio George Capwell", 20000, 2800, "4-2-3-1", "EQUILIBRADO", 69),
+    (676, "El Nacional", "Quito", "PIC", 90, "Equador", 5, 5_500_000_00,
+     "Estadio Olimpico Atahualpa", 35724, 2400, "4-4-2", "EQUILIBRADO", 64),
+    (677, "Deportivo Cuenca", "Cuenca", "AZU", 90, "Equador", 4, 4_500_000_00,
+     "Estadio Alejandro Serrano Aguilar", 18549, 2200, "4-4-2", "DEFENSIVO", 62),
+
+    # Paraguai
+    (678, "Olimpia", "Assuncao", "ASU", 90, "Paraguai", 7, 15_000_000_00,
+     "Estadio Manuel Ferreira", 20000, 3200, "4-3-3", "OFENSIVO", 75),
+    (679, "Cerro Porteno", "Assuncao", "ASU", 90, "Paraguai", 7, 14_000_000_00,
+     "Estadio General Pablo Rojas", 45000, 3200, "4-2-3-1", "OFENSIVO", 74),
+    (680, "Libertad", "Assuncao", "ASU", 90, "Paraguai", 6, 12_000_000_00,
+     "Estadio Dr. Nicolas Leoz", 10500, 3000, "4-3-3", "EQUILIBRADO", 73),
+    (681, "Guarani", "Assuncao", "ASU", 90, "Paraguai", 5, 7_000_000_00,
+     "Estadio Rogelio Livieres", 8000, 2600, "4-4-2", "EQUILIBRADO", 67),
+    (682, "Nacional de Assuncao", "Assuncao", "ASU", 90, "Paraguai", 5, 5_000_000_00,
+     "Estadio Arsenio Erico", 5000, 2200, "4-4-2", "EQUILIBRADO", 64),
+    (683, "Sportivo Luqueno", "Luque", "CEN", 90, "Paraguai", 4, 4_000_000_00,
+     "Estadio Feliciano Caceres", 25000, 2200, "4-4-2", "DEFENSIVO", 61),
+
+    # Peru
+    (684, "Universitario", "Lima", "LIM", 90, "Peru", 7, 14_000_000_00,
+     "Estadio Monumental de Ate", 80093, 3200, "4-2-3-1", "OFENSIVO", 74),
+    (685, "Alianza Lima", "Lima", "LIM", 90, "Peru", 6, 13_000_000_00,
+     "Estadio Alejandro Villanueva", 35000, 3000, "4-3-3", "OFENSIVO", 73),
+    (686, "Sporting Cristal", "Lima", "LIM", 90, "Peru", 6, 12_000_000_00,
+     "Estadio Alberto Gallardo", 11000, 3000, "4-3-3", "EQUILIBRADO", 72),
+    (687, "Melgar", "Arequipa", "ARE", 90, "Peru", 5, 7_000_000_00,
+     "Estadio Monumental de la UNSA", 40370, 2600, "4-2-3-1", "EQUILIBRADO", 67),
+    (688, "Cienciano", "Cusco", "CUS", 90, "Peru", 5, 5_000_000_00,
+     "Estadio Garcilaso", 42000, 2400, "4-4-2", "EQUILIBRADO", 64),
+    (689, "Sport Huancayo", "Huancayo", "JUN", 90, "Peru", 4, 4_000_000_00,
+     "Estadio Huancayo", 20000, 2200, "4-4-2", "DEFENSIVO", 61),
+
+    # Venezuela
+    (690, "Caracas", "Caracas", "DTC", 90, "Venezuela", 6, 10_000_000_00,
+     "Estadio Olimpico de la UCV", 24900, 2800, "4-2-3-1", "OFENSIVO", 70),
+    (691, "Deportivo Tachira", "San Cristobal", "TAC", 90, "Venezuela", 6, 8_500_000_00,
+     "Estadio Pueblo Nuevo", 38000, 2600, "4-3-3", "EQUILIBRADO", 68),
+    (692, "Zamora", "Barinas", "BAR", 90, "Venezuela", 5, 6_000_000_00,
+     "Estadio La Carolina", 12000, 2400, "4-4-2", "EQUILIBRADO", 65),
+    (693, "Monagas", "Maturin", "MON", 90, "Venezuela", 5, 5_500_000_00,
+     "Estadio Monumental de Maturin", 51796, 2400, "4-2-3-1", "EQUILIBRADO", 64),
+    (694, "Deportivo La Guaira", "Caracas", "LAG", 90, "Venezuela", 5, 5_000_000_00,
+     "Estadio Olimpico de la UCV", 24900, 2200, "4-4-2", "EQUILIBRADO", 63),
+    (695, "Carabobo", "Valencia", "CAR", 90, "Venezuela", 4, 4_000_000_00,
+     "Estadio Misael Delgado", 15000, 2200, "4-4-2", "DEFENSIVO", 61),
 ]
 
 # ─────────────────── Escudos (drawable) ───────────────────────────────────────
@@ -272,6 +390,138 @@ def abrev(nome):
     if len(parts) >= 2:
         return f"{parts[0][0]}. {parts[-1]}"[:15]
     return nome[:15]
+
+# ─────────────────── Pool sul-americano: elencos SINTÉTICOS ───────────────────
+# Os 53 clubes do pool europeu e o Inter Miami tem elenco REAL, escrito a mao em
+# ROSTERS. Os 42 clubes sul-americanos da divisao 90 nao: os elencos deles sao
+# GERADOS, com nomes montados a partir dos pools abaixo.
+#
+# A escolha e deliberada. Seriam 840 jogadores, e nomes reais em quantidade dessa
+# ordem, para sete ligas, sairiam errados — jogador no clube trocado, idade e
+# posicao chutadas. Nome gerado nao finge ser quem nao e, e o elenco cumpre o
+# papel que o pool precisa: dar a cada clube um plantel coerente com a sua
+# reputacao, para a Libertadores ter 10 associacoes de verdade.
+#
+# Para trocar um clube por um elenco real, basta acrescentar a entrada dele em
+# ROSTERS: o gerador so e usado quando o clube NAO tem roster escrito.
+SUL_NOMES = [
+    "Alan", "Alexis", "Andres", "Angel", "Anibal", "Ariel", "Bruno", "Camilo",
+    "Carlos", "Cesar", "Cristian", "Damian", "Daniel", "Dario", "David", "Diego",
+    "Edgar", "Eduardo", "Emanuel", "Enzo", "Esteban", "Ezequiel", "Fabian",
+    "Facundo", "Federico", "Felipe", "Fernando", "Francisco", "Gabriel", "Gaston",
+    "Gonzalo", "Gustavo", "Hernan", "Hugo", "Ignacio", "Ivan", "Jaime", "Javier",
+    "Jeremias", "Joaquin", "Jorge", "Jose", "Juan", "Julio", "Kevin", "Leandro",
+    "Leonardo", "Lucas", "Luis", "Manuel", "Marcelo", "Marco", "Mariano",
+    "Martin", "Mateo", "Matias", "Mauricio", "Maximiliano", "Miguel", "Nahuel",
+    "Nestor", "Nicolas", "Octavio", "Omar", "Oscar", "Pablo", "Patricio", "Pedro",
+    "Rafael", "Ramiro", "Raul", "Ricardo", "Roberto", "Rodrigo", "Ruben",
+    "Santiago", "Sebastian", "Sergio", "Thiago", "Tomas", "Valentin", "Victor",
+    "Walter", "Wilson", "Yerson",
+]
+
+SUL_SOBRENOMES = [
+    "Acosta", "Aguilar", "Alvarado", "Alvarez", "Arce", "Arevalo", "Avila",
+    "Benitez", "Bustos", "Caceres", "Cardenas", "Carrasco", "Castillo", "Castro",
+    "Cespedes", "Chavez", "Cordoba", "Cordero", "Cortes", "Delgado", "Diaz",
+    "Duarte", "Escobar", "Espinoza", "Estrada", "Figueroa", "Flores", "Fuentes",
+    "Gaitan", "Galarza", "Gallardo", "Garcia", "Gimenez", "Godoy", "Gomez",
+    "Guerrero", "Gutierrez", "Guzman", "Herrera", "Hurtado", "Ibarra", "Jara",
+    "Lagos", "Lezcano", "Lopez", "Luna", "Maldonado", "Mamani", "Mancilla",
+    "Marin", "Medina", "Mejia", "Mendez", "Mendoza", "Molina", "Montero",
+    "Morales", "Moreno", "Munoz", "Navarro", "Nunez", "Ojeda", "Olivares",
+    "Ortega", "Ortiz", "Osorio", "Paredes", "Pena", "Perez", "Pineda", "Quintana",
+    "Quispe", "Ramirez", "Reyes", "Rios", "Rivera", "Rojas", "Roldan", "Romero",
+    "Rueda", "Salazar", "Salcedo", "Sanabria", "Sanchez", "Sandoval", "Sarmiento",
+    "Sosa", "Soto", "Suarez", "Tapia", "Tejada", "Toledo", "Torres", "Trejo",
+    "Urbina", "Valencia", "Valdez", "Vargas", "Vasquez", "Vega", "Velasquez",
+    "Vera", "Villalba", "Zambrano", "Zapata", "Zarate",
+]
+
+# Vizinhos de onde sai a minoria estrangeira de cada elenco. Mantem o jogo com
+# transferencias plausiveis dentro do continente sem espalhar nacionalidade de
+# fora da CONMEBOL pelo pool.
+SUL_VIZINHOS = {
+    "Bolivia":   ["Argentina", "Brasil", "Paraguai", "Peru"],
+    "Chile":     ["Argentina", "Paraguai", "Uruguai", "Colombia"],
+    "Colombia":  ["Venezuela", "Equador", "Argentina", "Brasil"],
+    "Equador":   ["Colombia", "Peru", "Argentina", "Uruguai"],
+    "Paraguai":  ["Argentina", "Brasil", "Uruguai", "Bolivia"],
+    "Peru":      ["Argentina", "Colombia", "Uruguai", "Bolivia"],
+    "Venezuela": ["Colombia", "Argentina", "Brasil", "Equador"],
+}
+
+# 20 jogadores: 11 titulares + 9 reservas, cobrindo todas as posicoes com dois
+# goleiros e reserva em cada setor.
+SUL_POSICOES = (
+    ["GOLEIRO"] * 2 +
+    ["ZAGUEIRO"] * 4 +
+    ["LATERAL_DIREITO"] * 2 +
+    ["LATERAL_ESQUERDO"] * 2 +
+    ["VOLANTE"] * 3 +
+    ["MEIA_CENTRAL"] * 2 +
+    ["MEIA_ATACANTE"] * 1 +
+    ["PONTA_DIREITA"] * 1 +
+    ["PONTA_ESQUERDA"] * 1 +
+    ["CENTROAVANTE"] * 2
+)
+
+
+def gen_roster_sintetico(tid, trep, pais):
+    """Elenco de 20 jogadores para um clube do pool sul-americano.
+
+    Semeado por [tid], entao o seed sai igual a cada execucao do script.
+
+    Os overalls descem numa escada de reputacao+2 (o melhor do grupo) ate
+    reputacao-7 (o ultimo reserva), o que reproduz a forma dos elencos reais do
+    pool europeu: um clube de reputacao 64 tem jogadores de 61 a 68.
+    """
+    r = random.Random(tid * 97 + 13)
+    vizinhos = SUL_VIZINHOS.get(pais, [])
+    usados = set()
+    roster = []
+
+    for i, pos in enumerate(SUL_POSICOES):
+        # Nome unico dentro do clube.
+        for _ in range(50):
+            nome = "%s %s" % (r.choice(SUL_NOMES), r.choice(SUL_SOBRENOMES))
+            if nome not in usados:
+                break
+        usados.add(nome)
+
+        # Escada de qualidade: titulares perto da reputacao, reservas abaixo.
+        degrau = 2 - (i * 9.0 / max(1, len(SUL_POSICOES) - 1))
+        overall = int(round(trep + degrau)) + r.randint(-1, 1)
+        overall = max(45, min(90, overall))
+
+        # Minoria estrangeira: ~1 em cada 5, sempre de um vizinho da CONMEBOL.
+        nacionalidade = pais
+        if vizinhos and r.random() < 0.2:
+            nacionalidade = r.choice(vizinhos)
+
+        idade = r.randint(19, 35) if pos != "GOLEIRO" else r.randint(21, 37)
+        roster.append((nome, pos, idade, nacionalidade, overall))
+
+    return roster
+
+
+def gen_tecnico_sintetico(tid, trep, pais, tecnico_id):
+    """Tecnico de um clube do pool sul-americano, com nome gerado do mesmo pool.
+
+    Os clubes europeus do pool tem tecnico REAL em TECNICOS; aqui o nome e
+    gerado, pelo mesmo motivo dos elencos. Tambem semeado por [tid].
+    """
+    r = random.Random(tid * 31 + 7)
+    nome = "%s %s" % (r.choice(SUL_NOMES), r.choice(SUL_SOBRENOMES))
+    parts = nome.split()
+    nome_abrev = "%s. %s" % (parts[0][0], parts[-1])
+    reputacao = max(30.0, min(90.0, trep * 0.75 + r.uniform(-8, 8)))
+    return {
+        "id": tecnico_id, "nome": nome, "nome_abrev": nome_abrev,
+        "idade": r.randint(38, 62), "nacionalidade": pais, "time_id": tid,
+        "salario": int(150_000 + (reputacao - 30) * 50_000),
+        "contrato_anos": r.randint(2, 4),
+        "reputacao": round(reputacao, 1),
+    }
 
 # ─────────────────── Elencos reais 2025 ───────────────────────────────────────
 # Formato: (nome, posicao, idade, nacionalidade, overall)
@@ -1598,8 +1848,15 @@ for (tid, tnome, tcidade, testado, tdiv, tpais, tnivel, tsaldo, testadio, tcap, 
         data["tecnicos"].append(gen_tecnico(
             tid, trep, TECNICO_ID_BASE + len(data["tecnicos"])
         ))
+    elif tdiv == DIVISAO_POOL_SUL:
+        data["tecnicos"].append(gen_tecnico_sintetico(
+            tid, trep, tpais, TECNICO_ID_BASE + len(data["tecnicos"])
+        ))
 
     roster = ROSTERS.get(tid, [])
+    if not roster and tdiv == DIVISAO_POOL_SUL:
+        # Pool sul-americano: elenco gerado (ver gen_roster_sintetico).
+        roster = gen_roster_sintetico(tid, trep, tpais)
     if not roster:
         raise SystemExit(f"Roster ausente para time id {tid} ({tnome})")
 
