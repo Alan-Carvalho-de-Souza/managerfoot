@@ -60,7 +60,30 @@ class InicioViewModel @Inject constructor(
         viewModelScope, SharingStarted.WhileSubscribed(5_000), null
     )
 
+    /**
+     * Todos os clubes do banco. E uma fonte de CONSULTA por id — o clube do save
+     * e o que o jogador acabou de escolher —, nao a lista de escolha. Para
+     * escolher use [timesSelecionaveis].
+     */
     val timesDisponiveis: StateFlow<List<Time>> = timeRepository.observeTodos()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Os clubes que o jogador pode DIRIGIR: os das ligas modeladas no jogo.
+     *
+     * Fica de fora o pool (divisoes 90/91/92), que existe so para as competicoes
+     * continentais e nao tem liga nacional. Esses clubes nao sao dirigiveis: sem
+     * campeonato proprio, `iniciarNovoJogo` cairia no `else` do roteamento de
+     * divisao e poria o jogador a dirigir, por exemplo, o Colo-Colo DENTRO do
+     * Apertura argentino, um torneio do qual ele nao participa.
+     *
+     * A filtragem e so aqui, e nao em [timesDisponiveis], porque aquela lista e
+     * usada para achar o clube do save pelo id: um save feito antes desta correcao
+     * pode ter um clube do pool, e filtrar na fonte deixaria o card de continuar
+     * sem clube nenhum.
+     */
+    val timesSelecionaveis: StateFlow<List<Time>> = timeRepository.observeTodos()
+        .map { times -> times.filter { it.divisao !in RankingEuropa.DIVISOES_POOL } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _uiState = MutableStateFlow<InicioUiState>(InicioUiState.Carregando)

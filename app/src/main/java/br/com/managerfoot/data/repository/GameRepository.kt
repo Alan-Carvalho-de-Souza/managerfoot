@@ -7124,12 +7124,19 @@ class GameRepository @Inject constructor(
             time.divisao in divisoesDoMesmoPais
         }.shuffled()
 
-        // Candidatos de outras ligas/países
+        // Candidatos de outras ligas/países.
+        //
+        // O pool continental (divisoes 90/91/92) fica de fora: aqueles clubes
+        // existem so para a Champions, a Europa League e a Libertadores e nao tem
+        // liga nacional. Dirigir um deles poria o jogador num campeonato do qual o
+        // clube nem participa — a mesma razao por que eles nao aparecem na tela de
+        // selecao de time (ver InicioViewModel.timesSelecionaveis).
         val candidatosOutrasLigas = todosOsTimes.filter { time ->
             !time.controladoPorJogador &&
             time.id != timeJogadorId &&
             time.nivel in nivelMin..nivelMax &&
-            time.divisao !in divisoesDoMesmoPais
+            time.divisao !in divisoesDoMesmoPais &&
+            time.divisao !in RankingEuropa.DIVISOES_POOL
         }.shuffled()
 
         // Garante ao menos 1 proposta da própria liga e 1 de outra liga

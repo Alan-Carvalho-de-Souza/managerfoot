@@ -294,6 +294,39 @@ class SeedLibertadoresTest {
         assertTrue(fase1.all { porId.getValue(it.timeId).divisao == 90 })
     }
 
+    /**
+     * Os clubes do pool nao sao DIRIGIVEIS, e isto trava a definicao disso.
+     *
+     * Eles existem so para as competicoes continentais e nao tem liga nacional.
+     * Dirigir um deles poria o jogador num campeonato do qual o clube nem
+     * participa — o roteamento de divisao de `iniciarNovoJogo` cairia no `else`.
+     *
+     * Duas portas levavam a esse estado e as duas foram fechadas pela mesma
+     * constante: a tela de selecao (InicioViewModel.timesSelecionaveis) e as
+     * propostas de emprego de clubes (GameRepository, candidatosOutrasLigas).
+     */
+    @Test
+    fun `as divisoes de pool cobrem os clubes sem liga nacional`() {
+        // A constante e a fonte unica das duas filtragens.
+        assertEquals(setOf(90, 91, 92), RankingEuropa.DIVISOES_POOL)
+
+        val porDivisao = lerClubes().groupBy { it.divisao }
+        // Todo clube do pool esta numa divisao de pool, e nenhuma liga jogavel
+        // aparece ali por acidente.
+        val noPool = porDivisao.filterKeys { it in RankingEuropa.DIVISOES_POOL }
+            .values.flatten()
+        assertTrue("o pool nao devia estar vazio", noPool.isNotEmpty())
+
+        val DIVISOES_JOGAVEIS = setOf(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14)
+        assertTrue(
+            "divisao nao pode ser de pool e jogavel ao mesmo tempo",
+            RankingEuropa.DIVISOES_POOL.none { it in DIVISOES_JOGAVEIS }
+        )
+        // Os 42 sul-americanos novos estao todos na 90, logo todos filtrados.
+        assertEquals(42, porDivisao[90]?.size)
+        assertTrue(porDivisao.getValue(90).all { it.divisao in RankingEuropa.DIVISOES_POOL })
+    }
+
     // ── O pool em si ─────────────────────────────────────────────────────
 
     @Test

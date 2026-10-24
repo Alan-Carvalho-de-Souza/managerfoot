@@ -428,7 +428,8 @@ fun SelecionarTimeScreen(
     onTimeSelecionado: (timeId: Int) -> Unit,
     vm: InicioViewModel = hiltViewModel()
 ) {
-    val times by vm.timesDisponiveis.collectAsState()
+    // Lista filtrada: o pool continental (divisoes 90/91/92) nao e dirigivel.
+    val times by vm.timesSelecionaveis.collectAsState()
     var busca by remember { mutableStateOf("") }
     var paisSelecionado by remember { mutableStateOf("Brasil") }
     var divisaoSelecionada by remember { mutableIntStateOf(0) }  // 0 = todas
