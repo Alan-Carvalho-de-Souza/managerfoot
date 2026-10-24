@@ -1186,4 +1186,43 @@ class LibertadoresTest {
         // Cada grupo tem exatamente um clube da Pré, e ele é o isento.
         assertEquals(4, r.grupos.count { g -> g.clubes.any { it.timeId in ids } })
     }
+
+    // ── A Pré no calendário por rodada ───────────────────────────────────
+    //
+    // A Pré e a fase de grupos dividem a numeração de rodadas do MESMO
+    // campeonato, e é por isso que o seletor de rodadas precisa de rótulo
+    // próprio: "Rodada 3" é a ida da Fase 2, e não a terceira rodada de nada.
+
+    @Test
+    fun `a pre ocupa as rodadas 1 a 6 e os grupos as 11 a 16`() {
+        val f = MotorCampeonato.FORMATO_LIBERTADORES
+        assertEquals(listOf(1, 2, 3, 4, 5, 6), f.rodadasDaPre)
+        assertEquals(listOf(11, 12, 13, 14, 15, 16), f.rodadasDosGrupos)
+        // As duas faixas não se tocam: nenhuma rodada pertence às duas.
+        assertTrue(f.rodadasDaPre.intersect(f.rodadasDosGrupos.toSet()).isEmpty())
+    }
+
+    @Test
+    fun `cada rodada da pre e rotulada pela fase e pelo mando`() {
+        val f = MotorCampeonato.FORMATO_LIBERTADORES
+        assertEquals("Fase 1 — Ida", f.rotuloDaRodadaPre(1))
+        assertEquals("Fase 1 — Volta", f.rotuloDaRodadaPre(2))
+        assertEquals("Fase 2 — Ida", f.rotuloDaRodadaPre(3))
+        assertEquals("Fase 3 — Volta", f.rotuloDaRodadaPre(6))
+        // Fora da Pré não há rótulo: o vão entre as faixas, uma rodada de grupo
+        // e uma rodada que não existe.
+        assertNull(f.rotuloDaRodadaPre(7))
+        assertNull(f.rotuloDaRodadaPre(11))
+        assertNull(f.rotuloDaRodadaPre(0))
+    }
+
+    @Test
+    fun `o rotulo casa com a rodada de ida que o motor usa para gerar a fase`() {
+        val f = MotorCampeonato.FORMATO_LIBERTADORES
+        f.preFases.forEachIndexed { indice, fase ->
+            val ida = f.rodadaIdaDaPreFase(indice)
+            assertEquals("$fase — Ida", f.rotuloDaRodadaPre(ida))
+            assertEquals("$fase — Volta", f.rotuloDaRodadaPre(ida + 1))
+        }
+    }
 }

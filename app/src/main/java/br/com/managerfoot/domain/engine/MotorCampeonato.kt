@@ -911,6 +911,31 @@ object MotorCampeonato {
         /** rodada de ida da fase prévia de índice [faseIndex] (0 = Fase 1). */
         fun rodadaIdaDaPreFase(faseIndex: Int): Int = rodadaIdaDeFase(faseIndex)
 
+        /** Última rodada da Pré: a volta da última fase prévia (6, com 3 fases). */
+        val ultimaRodadaDaPre: Int get() = rodadaIdaDaPreFase(preFases.lastIndex) + 1
+
+        /** As rodadas que a Pré ocupa, na ordem em que são jogadas. */
+        val rodadasDaPre: List<Int> get() = (1..ultimaRodadaDaPre).toList()
+
+        /** As rodadas da fase de grupos. */
+        val rodadasDosGrupos: List<Int>
+            get() = (rodadaBaseGrupos until rodadaBaseGrupos + rodadasGrupos).toList()
+
+        /**
+         * Rótulo de uma rodada da Pré — "Fase 2 — Volta" —, ou null quando a
+         * rodada não é dela.
+         *
+         * A Pré divide a numeração de rodadas com a fase de grupos dentro do
+         * mesmo campeonato, e por isso "Rodada 3" não diz nada ao jogador: a
+         * terceira rodada do torneio é a ida da Fase 2, e não a terceira rodada
+         * de nada que ele acompanhe.
+         */
+        fun rotuloDaRodadaPre(rodada: Int): String? {
+            if (rodada < 1 || rodada > ultimaRodadaDaPre) return null
+            val fase = preFases[(rodada - 1) / 2]
+            return if ((rodada - 1) % 2 == 0) "$fase — Ida" else "$fase — Volta"
+        }
+
         /** rodadaIda de uma fase do mata-mata (0 = Oitavas). */
         fun rodadaIdaDeFaseMataMata(faseIndex: Int): Int =
             rodadaBaseMataMata + rodadaIdaDeFase(faseIndex)

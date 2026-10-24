@@ -566,6 +566,30 @@ interface PartidaDao {
     """)
     fun observeRodada(campeonatoId: Int, rodada: Int): Flow<List<CalendarioPartidaDto>>
 
+    /**
+     * A mesma rodada, SEM o filtro de fase.
+     *
+     * Existe para a Libertadores, onde a Pré e a fase de grupos dividem a
+     * numeração de rodadas do mesmo campeonato: as partidas da Pré têm `fase`
+     * preenchida, e [observeRodada] as esconderia do calendário por rodada.
+     */
+    @Query("""
+        SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
+               c.nome AS nomeCampeonato, p.rodada AS rodada,
+               p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.torcedores AS torcedores, p.receitaPartida AS receitaPartida
+        FROM partidas p
+        INNER JOIN campeonatos c  ON p.campeonatoId = c.id
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.campeonatoId = :campeonatoId AND p.rodada = :rodada
+        ORDER BY p.id
+    """)
+    fun observeRodadaComFases(campeonatoId: Int, rodada: Int): Flow<List<CalendarioPartidaDto>>
+
     @Query("""
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,

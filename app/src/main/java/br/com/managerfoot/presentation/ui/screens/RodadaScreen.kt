@@ -62,6 +62,7 @@ fun RodadaScreen(
     val rodadaSelecionada  by vm.rodadaSelecionada.collectAsState()
     val maxRodada          by vm.maxRodada.collectAsState()
     val rodadaMinima       by vm.rodadaMinima.collectAsState()
+    val rodadasDisponiveis by vm.rodadasDisponiveis.collectAsState()
 
     val esMataMataDivisao =
         divisaoSelecionada == 8 || divisaoSelecionada == 9 ||
@@ -147,11 +148,12 @@ fun RodadaScreen(
         }
     }
     // A Libertadores é sul-americana, então ganha o seu próprio filtro de país.
-    // A fase de grupos tem rodadas (11 a 16) e entra como calendário; a
-    // Pré-Libertadores e o mata-mata são confrontos e entram na visão de chaves.
+    // O calendário por rodada cobre a Pré (rodadas 1 a 6, rotuladas pela fase) e
+    // a fase de grupos (11 a 16). O mata-mata, das oitavas à final, é confronto e
+    // entra na visão de chaves — que mostra a Pré também, como chaveamento.
     val opcoesAmericaDoSul = buildList {
         if (campeonatoLibertadoresId > 0) {
-            add(40 to "Libertadores — Grupos")
+            add(40 to "Libertadores — Pré e Grupos")
             add(41 to "Libertadores — Mata-Mata")
         }
     }
@@ -210,9 +212,12 @@ fun RodadaScreen(
 
     val labelSerie = opcoesDivisaoAtual.firstOrNull { it.first == divisaoSelecionada }?.second
         ?: opcoesDivisaoAtual.firstOrNull()?.second ?: "Série A"
-    // A faixa começa na primeira rodada da divisão, não em 1: a fase de grupos da
-    // Libertadores ocupa as rodadas 11 a 16 do seu campeonato.
-    val opcoesRodada = (rodadaMinima..maxRodada).toList()
+    // A lista vem do ViewModel porque nem toda divisão ocupa uma faixa contínua:
+    // na Libertadores a Pré são as rodadas 1 a 6 e os grupos as 11 a 16, sem nada
+    // entre elas. O intervalo é só o fallback do primeiro frame, antes de o
+    // ViewModel carregar.
+    val opcoesRodada = rodadasDisponiveis.ifEmpty { (rodadaMinima..maxRodada).toList() }
+    val rotulosRodada = opcoesRodada.map { vm.rotuloDaRodada(divisaoSelecionada, it) }
 
     Column(
         Modifier
@@ -282,13 +287,15 @@ fun RodadaScreen(
             if (!esMataMataDivisao) {
                 FiltroDropdown(
                     label = "Rodada",
-                    valor = "Rodada $rodadaSelecionada",
+                    valor = vm.rotuloDaRodada(divisaoSelecionada, rodadaSelecionada),
                     expanded = expandidoRodada,
                     onExpand = { expandidoRodada = it },
-                    options = opcoesRodada.map { "Rodada $it" },
+                    options = rotulosRodada,
+                    // Pelo índice, e não pelo texto: o rótulo de uma rodada da Pré
+                    // é o nome da fase, de onde não dá para extrair o número.
                     onSelect = { label ->
-                        val r = label.removePrefix("Rodada ").toIntOrNull()
-                        if (r != null) vm.selecionarRodada(r)
+                        val i = rotulosRodada.indexOf(label)
+                        opcoesRodada.getOrNull(i)?.let { vm.selecionarRodada(it) }
                         expandidoRodada = false
                     }
                 )

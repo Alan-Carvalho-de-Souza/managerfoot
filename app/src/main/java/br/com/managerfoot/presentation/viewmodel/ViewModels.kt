@@ -3799,6 +3799,16 @@ class RodadaViewModel @Inject constructor(
     private val _rodadaMinima = MutableStateFlow(1)
     val rodadaMinima: StateFlow<Int> = _rodadaMinima.asStateFlow()
 
+    /**
+     * As rodadas que o seletor oferece, na ordem.
+     *
+     * Não é uma faixa contínua na Libertadores: a Pré ocupa 1..6, a fase de
+     * grupos 11..16, e as rodadas 7 a 10 não existem. Oferecer a faixa cheia
+     * daria quatro rodadas vazias no meio do seletor.
+     */
+    private val _rodadasDisponiveis = MutableStateFlow<List<Int>>(emptyList())
+    val rodadasDisponiveis: StateFlow<List<Int>> = _rodadasDisponiveis.asStateFlow()
+
     private var campeonatoAId = -1
     private var campeonatoBId = -1
     private var campeonatoCId = -1
@@ -3851,14 +3861,19 @@ class RodadaViewModel @Inject constructor(
     fun selecionarDivisao(divisao: Int) = viewModelScope.launch {
         if (_divisaoSelecionada.value == divisao) return@launch
         _divisaoSelecionada.value = divisao
-        _rodadaSelecionada.value = 1
+        // A Libertadores abre na fase de grupos, e não na rodada 1: a rodada 1
+        // dela é a ida da Fase 1 da Pré, que já está decidida quando o jogador
+        // chega aqui. Se os grupos ainda não foram sorteados, a coerção abaixo
+        // leva para a última rodada da Pré, que é a que existe.
+        _rodadaSelecionada.value =
+            if (divisao == 40) MotorCampeonato.FORMATO_LIBERTADORES.rodadaBaseGrupos else 1
         atualizarMaxEColetar()
     }
 
     fun selecionarRodada(rodada: Int) = viewModelScope.launch {
         if (_rodadaSelecionada.value == rodada) return@launch
         _rodadaSelecionada.value = rodada
-        coletar(campIdAtual(), rodada)
+        coletar(campIdAtual(), rodada, incluirFases = _divisaoSelecionada.value == 40)
     }
 
     private suspend fun atualizarMaxEColetar() {
@@ -3885,39 +3900,50 @@ class RodadaViewModel @Inject constructor(
         if (campId <= 0) {
             _partidas.value = emptyList(); _maxRodada.value = 38; _rodadaMinima.value = 1; return
         }
-        val (minimaDaDivisao, maximaDaDivisao) = faixaDeRodadas(div, campId)
-        _rodadaMinima.value = minimaDaDivisao
-        _maxRodada.value = maximaDaDivisao
-        val rodada = _rodadaSelecionada.value.coerceIn(minimaDaDivisao, maximaDaDivisao)
+        val rodadas = rodadasDaDivisao(div, campId)
+        _rodadasDisponiveis.value = rodadas
+        _rodadaMinima.value = rodadas.first()
+        _maxRodada.value = rodadas.last()
+        // A rodada guardada pode não existir nesta divisão — e, na Libertadores,
+        // pode cair no vão entre a Pré e os grupos. Cai na mais próxima que existe.
+        val anterior = _rodadaSelecionada.value
+        val rodada = if (anterior in rodadas) anterior
+            else rodadas.minByOrNull { kotlin.math.abs(it - anterior) } ?: rodadas.first()
         _rodadaSelecionada.value = rodada
-        coletar(campId, rodada)
+        // Só a Libertadores mistura partidas com fase no calendário por rodada.
+        coletar(campId, rodada, incluirFases = div == 40)
     }
 
     /**
-     * Faixa de rodadas que a divisão ocupa dentro do seu campeonato.
+     * As rodadas que a divisão ocupa dentro do seu campeonato, na ordem.
      *
-     * O caso geral é 1 até a última rodada que existe. A fase de grupos da
-     * Libertadores é a exceção: ela ocupa uma faixa no MEIO do campeonato, porque
-     * a Pré-Libertadores vem antes e o mata-mata depois, todos no mesmo
-     * campeonatoId. Sem esta faixa a aba "Grupos" abriria na rodada 1, que é um
-     * jogo da Pré.
+     * O caso geral é 1 até a última rodada que existe. A Libertadores é a
+     * exceção, e não por capricho: a Pré, a fase de grupos e o mata-mata moram
+     * todos no mesmo campeonatoId, então a Pré fica nas rodadas 1 a 6, os grupos
+     * nas 11 a 16 e o mata-mata da 21 em diante. As rodadas 7 a 10 não existem —
+     * é por isso que isto devolve uma lista, e não um intervalo.
+     *
+     * O mata-mata fica de fora: ele é confronto, não rodada, e tem a sua própria
+     * visão de chaves (divisão 41).
      */
-    private suspend fun faixaDeRodadas(div: Int, campId: Int): Pair<Int, Int> {
+    private suspend fun rodadasDaDivisao(div: Int, campId: Int): List<Int> {
         val ultima = partidaDao.maxRodada(campId).coerceAtLeast(1)
-        if (div != 40) return 1 to ultima
+        if (div != 40) return (1..ultima).toList()
         val formato = MotorCampeonato.FORMATO_LIBERTADORES
-        val primeira = formato.rodadaBaseGrupos
-        val fim = primeira + formato.rodadasGrupos - 1
-        // Enquanto os grupos não forem sorteados, a última rodada que existe é da
-        // Pré: aí a faixa fica vazia e o seletor mostra só a primeira de grupo.
-        return primeira to maxOf(primeira, minOf(fim, ultima))
+        // maxRodada só conta partidas SEM fase, ou seja, só as da fase de grupos:
+        // enquanto o sorteio não acontece ela devolve 0 e só a Pré existe.
+        val temGrupos = ultima >= formato.rodadaBaseGrupos
+        return formato.rodadasDaPre + if (temGrupos) formato.rodadasDosGrupos else emptyList()
     }
 
-    private fun coletar(campId: Int, rodada: Int) {
+    private fun coletar(campId: Int, rodada: Int, incluirFases: Boolean = false) {
         if (campId <= 0) { _partidas.value = emptyList(); return }
         coletarJob?.cancel()
         coletarJob = viewModelScope.launch {
-            partidaDao.observeRodada(campId, rodada).collect { _partidas.value = it }
+            val fluxo =
+                if (incluirFases) partidaDao.observeRodadaComFases(campId, rodada)
+                else partidaDao.observeRodada(campId, rodada)
+            fluxo.collect { _partidas.value = it }
         }
     }
 
@@ -3958,6 +3984,20 @@ class RodadaViewModel @Inject constructor(
      * Ordem das fases do mata-mata da divisão selecionada. A Champions começa no
      * play-off, que antecede as oitavas e não existe no mata-mata argentino.
      */
+    /**
+     * Rótulo da rodada no seletor.
+     *
+     * "Rodada 3" não diz nada numa rodada da Pré-Libertadores, que divide a
+     * numeração de rodadas com a fase de grupos do mesmo campeonato: ali o
+     * rótulo é o da fase, "Fase 2 — Ida".
+     */
+    fun rotuloDaRodada(divisao: Int, rodada: Int): String {
+        if (divisao == 40) {
+            MotorCampeonato.FORMATO_LIBERTADORES.rotuloDaRodadaPre(rodada)?.let { return it }
+        }
+        return "Rodada $rodada"
+    }
+
     fun fasesDaDivisao(divisao: Int): List<String> = when (divisao) {
         31   -> MotorCampeonato.FORMATO_CHAMPIONS.fases
         33   -> MotorCampeonato.FORMATO_EUROPA_LEAGUE.fases
