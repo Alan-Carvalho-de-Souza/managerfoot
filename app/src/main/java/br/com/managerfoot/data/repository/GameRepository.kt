@@ -19,6 +19,8 @@ import br.com.managerfoot.data.database.AppDatabase
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.domain.engine.*
 import br.com.managerfoot.domain.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -1620,7 +1622,7 @@ class GameRepository @Inject constructor(
         // a nova, porque a vaga de campeao vigente sai do Hall da Fama e sem ela os
         // 32 dos grupos nao fecham.
         val novoLibertadoresId = encerrarECriarLibertadores(
-            libertadoresId, ano, temporadaId, novoTemporadaId, novoAno
+            libertadoresId, ano, temporadaId, novoTemporadaId, novoAno, timeJogadorId
         )
 
         // Cria as Supercopas (Brasil/Inglaterra/Espanha/Itália) para a próxima temporada.
@@ -7404,7 +7406,12 @@ class GameRepository @Inject constructor(
     suspend fun criarLibertadoresDaTemporada(
         temporadaId: Int,
         ano: Int,
-        temporadaAnteriorId: Int = -1
+        temporadaAnteriorId: Int = -1,
+        /**
+         * Clube do jogador. Decide se a Pré-Libertadores é resolvida na criação:
+         * ver [criarLibertadores]. Com -1 (nenhum jogador) ela é resolvida.
+         */
+        timeJogadorId: Int = -1
     ): Int {
         val vagas = determinarParticipantesLibertadores(ano, temporadaAnteriorId)
         return criarLibertadores(
@@ -7419,24 +7426,37 @@ class GameRepository @Inject constructor(
                 // Torneio continental: não pertence a um país.
                 pais         = Continentes.AMERICA_DO_SUL
             ),
-            vagas
+            vagas,
+            ano           = ano,
+            timeJogadorId = timeJogadorId
         )
     }
 
     /**
      * Grava a Libertadores: participantes marcados pela porta de entrada e as
-     * partidas da Fase 1 da Pré-Libertadores.
+     * partidas da Pré-Libertadores.
      *
-     * Só a Fase 1 entra agora. As Fases 2 e 3 dependem de quem vence a anterior,
-     * e a fase de grupos depende dos 4 sobreviventes — tudo isso é gerado por
-     * [verificarEAvancarFaseLibertadores] à medida que as fases terminam.
+     * **A Pré é resolvida aqui quando o jogador não disputa nenhuma fase dela**, e
+     * com ela vem o sorteio dos grupos. Sem isso a competição nasceria com 6
+     * partidas só — a Fase 1, entre os 6 clubes mais fracos da Pré —, e os 28
+     * classificados diretos, o clube do jogador entre eles, ficariam sem nenhuma
+     * partida no calendário até a Pré acabar. Era o que acontecia: em toda
+     * temporada nova o jogador abria o Calendário e a aba de Rodadas e não via
+     * Libertadores nenhuma, porque ela de fato ainda não tinha jogo dele.
+     *
+     * Quando o jogador ESTÁ na Pré, nada é resolvido: ele joga as fases prévias, e
+     * aí o calendário dele tem as partidas da Pré desde o primeiro dia. O sorteio
+     * dos grupos acontece quando a Fase 3 termina, por
+     * [verificarEAvancarFaseLibertadores].
      *
      * Devolve -1 quando a lista de acesso não fecha os 47 clubes: em vez de criar
      * um torneio incompleto, não criamos nada e o resto do jogo segue sem ele.
      */
     suspend fun criarLibertadores(
         campeonato: CampeonatoEntity,
-        vagas: List<VagaLibertadores>
+        vagas: List<VagaLibertadores>,
+        ano: Int = 0,
+        timeJogadorId: Int = -1
     ): Int {
         val diretos = ListaDeAcessoLibertadores.diretosNosGrupos(vagas)
         val naPre   = ListaDeAcessoLibertadores.naPreLibertadores(vagas)
@@ -7473,7 +7493,43 @@ class GameRepository @Inject constructor(
                 ordemGlobalVolta  = formato.ordemGlobalPre[1]
             )
         )
+
+        // O jogador não disputa a Pré → resolve as três fases agora e sorteia os
+        // grupos, para o calendário dele existir desde o primeiro dia.
+        if (naPre.none { it.timeId == timeJogadorId }) {
+            resolverPreLibertadores(campeonatoId, ano, timeJogadorId, campeonato.temporadaId)
+        }
         return campeonatoId
+    }
+
+    /**
+     * Joga a Pré-Libertadores inteira de uma vez e deixa a fase de grupos
+     * sorteada. Usada na criação, quando o jogador não está na Pré.
+     *
+     * Cada volta do laço simula as rodadas pendentes e chama o avanço de fase, que
+     * gera a fase seguinte — Fase 1 → Fase 2 → Fase 3 → sorteio dos grupos. O
+     * limite de voltas é a garantia de que um avanço que não progrida não vire
+     * laço infinito na criação do jogo.
+     */
+    private suspend fun resolverPreLibertadores(
+        libertadoresId: Int,
+        ano: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) = withContext(Dispatchers.Default) {
+        // Sao 30 partidas simuladas (6 + 16 + 8), e isto e chamado de
+        // iniciarNovoJogo, que roda no viewModelScope SEM dispatcher — ou seja, na
+        // thread de UI. A simulacao e CPU puro (os DAOs do Room ja despacham para
+        // IA por conta propria), entao sem sair da Main ela travaria a tela de
+        // carregamento do jogo novo.
+        repeat(ListaDeAcessoLibertadores.PRE_FASES.size + 2) {
+            val todas = partidaDao.buscarTodasPorCampeonato(libertadoresId)
+            // Grupos sorteados: a Pré acabou e o calendário já está completo.
+            if (todas.any { it.fase == null }) return@withContext
+            val pendentes = todas.filter { !it.jogada }.map { it.rodada }.toSortedSet()
+            for (rodada in pendentes) simularRodada(libertadoresId, rodada)
+            verificarEAvancarFaseLibertadores(libertadoresId, ano, timeJogadorId, temporadaId)
+        }
     }
 
     /**
@@ -8033,13 +8089,18 @@ class GameRepository @Inject constructor(
         ano: Int,
         temporadaId: Int,
         novoTemporadaId: Int,
-        novoAno: Int
+        novoAno: Int,
+        timeJogadorId: Int
     ): Int {
         concluirCompeticaoContinental(libertadoresIdAnterior) {
             simularProximaRodadaLibertadoresSeNecessario(libertadoresIdAnterior, -1, ano, temporadaId)
         }
         return try {
-            criarLibertadoresDaTemporada(novoTemporadaId, novoAno, temporadaAnteriorId = temporadaId)
+            criarLibertadoresDaTemporada(
+                novoTemporadaId, novoAno,
+                temporadaAnteriorId = temporadaId,
+                timeJogadorId       = timeJogadorId
+            )
         } catch (_: Exception) { -1 }
     }
 }

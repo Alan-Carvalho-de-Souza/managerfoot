@@ -412,7 +412,9 @@ class InicioViewModel @Inject constructor(
             // ── CONMEBOL Libertadores — Pré-Libertadores + 8 grupos de 4 ────────
             // Devolve -1 enquanto o jogo não tiver os 47 clubes sul-americanos
             // (19 na Pré, 26 diretos e as 2 vagas de campeão vigente).
-            val libertadoresId = gameRepository.criarLibertadoresDaTemporada(temporadaId, 2026)
+            val libertadoresId = gameRepository.criarLibertadoresDaTemporada(
+                temporadaId, 2026, timeJogadorId = timeId
+            )
 
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)

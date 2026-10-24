@@ -262,6 +262,38 @@ class SeedLibertadoresTest {
         )
     }
 
+    /**
+     * Por que a Pre-Libertadores tem de ser resolvida na criacao da competicao.
+     *
+     * A competicao nasce so com a Fase 1, entre os 6 clubes mais FRACOS da Pre. Na
+     * primeira temporada nenhuma liga encerrou, entao a fila e ordenada por
+     * coeficiente e reputacao — e os 6 ultimos sao sempre clubes do pool, de
+     * reputacao 61-62. Nenhum clube de liga jogavel cai ali.
+     *
+     * Consequencia: o clube do jogador NUNCA tem partida da Libertadores no
+     * momento em que o jogo comeca. Era por isso que o Calendario e a aba de
+     * Rodadas apareciam sem Libertadores numa temporada nova — ela de fato ainda
+     * nao tinha jogo dele. Ver GameRepository.criarLibertadores, que resolve a Pre
+     * na criacao quando o jogador nao esta nela.
+     */
+    @Test
+    fun `a fase 1 da pre nunca tem clube de liga jogavel na primeira temporada`() {
+        val porId = lerClubes().associateBy { it.id }
+        val vagas = acesso.montar(candidatos(), fecharFaseDeGrupos = true)
+        val filaPre = acesso.naPreLibertadores(vagas).sortedWith(ListaDeAcessoChampions.ORDEM)
+        val fase1 = filaPre.takeLast(acesso.PRE_FASE1_CLUBES)
+
+        assertEquals(6, fase1.size)
+        // Divisoes jogaveis sul-americanas: 1 Brasileirao, 5 Primera ARG, 9 URU.
+        val deLigaJogavel = fase1.filter { porId.getValue(it.timeId).divisao in setOf(1, 5, 9) }
+        assertTrue(
+            "a Fase 1 nao deveria ter clube de liga jogavel: ${deLigaJogavel.map { it.nome }}",
+            deLigaJogavel.isEmpty()
+        )
+        // Sao todos do pool, e e por isso que o jogador nunca esta na Fase 1.
+        assertTrue(fase1.all { porId.getValue(it.timeId).divisao == 90 })
+    }
+
     // ── O pool em si ─────────────────────────────────────────────────────
 
     @Test
