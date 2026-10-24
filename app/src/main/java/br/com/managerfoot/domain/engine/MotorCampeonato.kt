@@ -728,10 +728,11 @@ object MotorCampeonato {
     fun distribuirRodadasFaseLiga(
         confrontos: List<ConfrontoChampions>,
         random: kotlin.random.Random = kotlin.random.Random.Default,
-        tentativasPorTamanho: Int = 200
+        tentativasPorTamanho: Int = 200,
+        formato: FormatoContinental = FORMATO_CHAMPIONS
     ): List<Int> {
-        var rodadas = CHAMPIONS_RODADAS_LIGA
-        while (rodadas <= CHAMPIONS_RODADAS_LIGA + 4) {
+        var rodadas = formato.rodadasLiga
+        while (rodadas <= formato.rodadasLiga + 4) {
             repeat(tentativasPorTamanho) {
                 val tentativa = tentarDistribuir(confrontos, rodadas, random)
                 if (tentativa != null) return tentativa
@@ -801,9 +802,10 @@ object MotorCampeonato {
     fun gerarFaseLigaChampions(
         campeonatoId: Int,
         confrontos: List<ConfrontoChampions>,
-        random: kotlin.random.Random = kotlin.random.Random.Default
+        random: kotlin.random.Random = kotlin.random.Random.Default,
+        formato: FormatoContinental = FORMATO_CHAMPIONS
     ): List<PartidaEntity> {
-        val rodadas = distribuirRodadasFaseLiga(confrontos, random)
+        val rodadas = distribuirRodadasFaseLiga(confrontos, random, formato = formato)
         return confrontos.mapIndexed { indice, confronto ->
             val rodada = rodadas[indice]
             PartidaEntity(
@@ -812,7 +814,7 @@ object MotorCampeonato {
                 timeCasaId   = confronto.casaId,
                 timeForaId   = confronto.foraId,
                 fase         = null,
-                ordemGlobal  = ordemGlobalLigaChampions(rodada)
+                ordemGlobal  = formato.ordemGlobalDaRodadaLiga(rodada)
             )
         }
     }
@@ -825,13 +827,16 @@ object MotorCampeonato {
      *
      * [classificados] é a tabela ordenada do 1º ao 36º.
      */
-    fun paresPlayoffChampions(classificados: List<Int>): List<Pair<Int, Int>> {
+    fun paresPlayoffChampions(
+        classificados: List<Int>,
+        formato: FormatoContinental = FORMATO_CHAMPIONS
+    ): List<Pair<Int, Int>> {
         // Sem os 9 primeiros não existe play-off: a lista está incompleta e
         // insistir só produziria um chaveamento inventado.
-        if (classificados.size <= CHAMPIONS_CLASSIFICADOS_DIRETO) return emptyList()
+        if (classificados.size <= formato.classificadosDireto) return emptyList()
         val faixa = classificados.subList(
-            CHAMPIONS_CLASSIFICADOS_DIRETO,
-            minOf(CHAMPIONS_ULTIMO_DO_PLAYOFF, classificados.size)
+            formato.classificadosDireto,
+            minOf(formato.ultimoDoPlayoff, classificados.size)
         )
         val metade = faixa.size / 2
         return (0 until metade).map { i ->
@@ -852,9 +857,10 @@ object MotorCampeonato {
      */
     fun paresOitavasChampions(
         classificados: List<Int>,
-        vencedoresPlayoff: List<Int>
+        vencedoresPlayoff: List<Int>,
+        formato: FormatoContinental = FORMATO_CHAMPIONS
     ): List<Pair<Int, Int>> {
-        val cabecas = classificados.take(CHAMPIONS_CLASSIFICADOS_DIRETO)
+        val cabecas = classificados.take(formato.classificadosDireto)
         return cabecas.mapIndexed { i, cabeca ->
             val vencedor = vencedoresPlayoff.getOrNull(vencedoresPlayoff.size - 1 - i)
                 ?: vencedoresPlayoff[i % vencedoresPlayoff.size]

@@ -58,6 +58,7 @@ fun ArtilheirosScreen(
     campeonatoSerieAId: Int = -1,
     campeonatoAmistososId: Int = -1,
     campeonatoChampionsId: Int = -1,
+    campeonatoEuropaId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -75,7 +76,7 @@ fun ArtilheirosScreen(
     val temInglaterra = campeonatoPremierId > 0 || campeonatoChampionshipId > 0 || copaInglaterraId > 0
     val temEspanha = campeonatoLaLigaId > 0
     val temItalia = campeonatoSerieAId > 0
-    val temEuropa = campeonatoChampionsId > 0
+    val temEuropa = campeonatoChampionsId > 0 || campeonatoEuropaId > 0
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
@@ -83,7 +84,7 @@ fun ArtilheirosScreen(
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
         campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId, campeonatoChampionshipId,
         campeonatoLaLigaId, copaInglaterraId, campeonatoSerieAId, campeonatoAmistososId,
-        campeonatoChampionsId
+        campeonatoChampionsId, campeonatoEuropaId
     ) {
         vm.carregar(
             campAId           = campeonatoAId,
@@ -107,6 +108,7 @@ fun ArtilheirosScreen(
             campAmistosos     = campeonatoAmistososId,
             copaIng           = copaInglaterraId,
             campChampionsId   = campeonatoChampionsId,
+            campEuropaId      = campeonatoEuropaId,
             divisaoInicial    = 0
         )
     }
@@ -157,6 +159,7 @@ fun ArtilheirosScreen(
     // o mata-mata: a artilharia da Champions é a do torneio inteiro.
     val opcoesEuropa = buildList<Pair<Int, String>> {
         if (campeonatoChampionsId > 0) add(35 to "Champions League")
+        if (campeonatoEuropaId > 0) add(36 to "Europa League")
     }
 
     val paisDaDivisao = remember(divisaoSelecionada) {
@@ -166,7 +169,7 @@ fun ArtilheirosScreen(
             30, 31, 33 -> "Inglaterra"
             32 -> "Espanha"
             34 -> "Italia"
-            35 -> "Europa"
+            35, 36 -> "Europa"
             else -> "Brasil"
         }
     }
@@ -184,7 +187,10 @@ fun ArtilheirosScreen(
 
     fun divisaoDoFiltroPais(pais: String) = when (pais) {
         "Argentina" -> 200; "Uruguai" -> 300; "Inglaterra" -> 30; "Espanha" -> 32; "Italia" -> 34
-        "Europa" -> 35; else -> 100
+        // A primeira opção continental disponível, porque a Champions (35) pode
+        // não existir num save em que só a Europa League (36) foi montada.
+        "Europa" -> opcoesEuropa.firstOrNull()?.first ?: 35
+        else -> 100
     }
 
     Column(

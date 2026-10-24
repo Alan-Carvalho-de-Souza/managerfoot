@@ -1453,6 +1453,8 @@ private fun competitionLabelFor(
         // tabela de 1 a 36); do play-off em diante o nome da fase aparece.
         snap.championsId > 0 && proximaPartida.campeonatoId == snap.championsId ->
             "Champions League — ${proximaPartida.fase ?: "Fase de Liga"}"
+        snap.europaLeagueId > 0 && proximaPartida.campeonatoId == snap.europaLeagueId ->
+            "Europa League — ${proximaPartida.fase ?: "Fase de Liga"}"
         else -> when (proximaPartida.campeonatoId) {
             snap.campeonatoAId -> "Série A"
             snap.campeonatoBId -> "Série B"

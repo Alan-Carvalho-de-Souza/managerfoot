@@ -8,7 +8,7 @@
 > [Pré-requisito](#pré-requisito-os-clubes-para-as-duas-competições), com a conta nova, e
 > `SeedEuropaTest`, que monta as duas a partir do seed real e sorteia as duas.
 
-Quando existir, esta competição pontua nos dois conjuntos de ranking que já estão prontos:
+Esta competição pontua nos dois conjuntos de ranking que já estavam prontos antes dela:
 no [Coeficiente de Clubes da UEFA](ranking_europa.md) — onde o topo da Fase de Liga vale 6
 pontos, caindo 0,25 por posição, e cada fase do mata-mata soma 1,0 — e no
 [Ranking Mundial da IFFHS](ranking_mundial.md), onde uma vitória vale 12 pontos.
@@ -186,6 +186,10 @@ de comportamento. A Europa League joga um dia depois, com cada casa de `ordemGlo
 as duas competições **nunca colidem** no calendário, nem entre si nem com as rodadas das
 ligas nacionais, que usam múltiplos de 10.
 
+Os geradores do motor também passaram a receber o formato: `distribuirRodadasFaseLiga`,
+`gerarFaseLigaChampions`, `paresPlayoffChampions` e `paresOitavasChampions` têm um
+parâmetro `formato` com `FORMATO_CHAMPIONS` por padrão, então nenhuma chamada antiga mudou.
+
 **Os clubes** — o pool europeu tem 52 clubes em 20 associações (divisão 91, ids 602–653),
 o suficiente para as duas competições na mesma temporada. `SeedEuropaTest` monta as duas a
 partir do `seed_data.json` real, na ordem em que o jogo as monta — a Champions primeiro, a
@@ -196,30 +200,53 @@ duas portas por país (campeão da copa e melhor da liga fora da zona da Champio
 da vaga da copa para o colocado seguinte, a exceção de Liechtenstein, a exclusão mútua com
 a Champions e a fila de qualificação com o teto por país.
 
+**O repositório** — `determinarParticipantesEuropa`, `criarEuropaLeague` e
+`criarEuropaDaTemporada`, no modelo das funções da Champions. A base de candidatos europeus
+(coeficiente da UEFA + colocação final das ligas) virou o helper comum `candidatosEuropeus`,
+e os campeões das copas nacionais europeias da temporada que encerra saem de
+`campeoesDasCopasEuropeias`, que alimenta a porta da copa.
+
+A máquina de fases foi **generalizada**, não duplicada: `verificarEAvancarFaseContinental`
+recebe o `FormatoContinental`, o código do Hall da Fama, a `CompeticaoUefa` e os prêmios;
+`verificarEAvancarFaseChampions` e `verificarEAvancarFaseEuropa` são casca em cima dela.
+O mesmo vale para `gerarPlayoffContinental`, `gerarOitavasContinental`,
+`registrarCampanhasEuropeias` (que agora recebe a competição) e
+`simularProximaRodadaContinentalSeNecessario`. No rollover, `encerrarECriarEuropa` roda
+**depois** de `encerrarECriarChampions` e recebe o id da Champions nova: os participantes
+dela são os `ocupados` da lista de acesso.
+
+O Hall da Fama da Europa League é a **divisão 31** (a 30 é a Champions, a 32 fica para a
+Conference League), e ao encerrar a competição cada campanha é registrada em
+`CompeticaoUefa.EUROPA_LEAGUE`, com os pesos que já estavam em `RankingEuropa`.
+
+**O save** — `europaLeagueId` no `GameDataStore`, no padrão do `championsId`: campo,
+chave, leitura e as duas funções de gravação. Não precisou de migração de banco: nada
+mudou no Room, e uma chave de DataStore ausente num save antigo lê como -1, que é o mesmo
+que "não existe essa competição".
+
+**As telas** — Rodadas (32 = Fase de Liga, 33 = mata-mata), Classificação (31, com as
+mesmas zonas e legenda da 30), Artilharia (36) e Chaveamento (aba "Europa League"), todas
+no recorte de país "Europa". O chaveamento mantém o filtro de `observeCopaPartidas`
+(`fase IS NOT NULL AND confrontoId IS NOT NULL`), que é o que impede as 144 partidas da
+Fase de Liga de tentarem entrar num `CopaPartidaDto` de campos não-nulos.
+
+**Os testes** — `EuropaLeagueTest` cobre a criação (montagem depois da Champions, sem
+interseção de clubes; sorteio viável; 144 partidas com 8 por clube; casas do calendário) e
+o avanço de fases (play-off do 9º ao 24º, cruzamento das oitavas, e o torneio de 8 para 1
+confronto até sobrar um campeão).
+
 ### Falta
 
-2. **O repositório**: `determinarParticipantesEuropa`, `criarEuropaLeague`,
-   `criarEuropaDaTemporada`, avanço de fases, Hall da Fama e a chamada de
-   `registrarCampanhaEuropeia` ao encerrar. A máquina de fases da Champions
-   (`verificarEAvancarFaseChampions`, `gerarPlayoffChampions`, `gerarOitavasChampions`)
-   serve, mas hoje está escrita para uma competição só — use o `FormatoContinental`.
-3. **O save**: um `europaLeagueId` no `GameDataStore`, no modelo do `championsId`.
-4. **As telas**: Rodadas, Classificação, Artilharia e Chaveamento, todas no mesmo padrão já
-   usado pela Champions (recorte "Europa", um código de divisão novo por tela).
+Nada do que esta seção listava: a competição está completa e jogável, com os clubes do
+seed real. O que sobrou não é da Europa League em si:
 
-## O que a implementação vai precisar
-
-2. **A lista de acesso da Europa League**, no modelo de `ListaDeAcessoChampions.kt`: as 21
-   vagas diretas, a queda da vaga da copa para o colocado seguinte, e a fila de qualificação.
-3. **Exclusão mútua com a Champions.** Um clube não disputa as duas, então a Europa League
-   precisa ser montada **depois** da Champions, recebendo quem já está ocupado. Hoje
-   `determinarParticipantesChampions` não devolve essa informação.
-4. **Os eliminados da Champions que caem na Europa League.** O enunciado cita a mecânica mas
-   não a detalha, e ela cria dependência de ordem: parte do campo da Europa League só é
-   conhecida depois das qualificatórias da Champions.
-5. **Generalizar a máquina da Champions.** As constantes e geradores de `MotorCampeonato` se
-   chamam `CHAMPIONS_*` e assumem uma única competição continental por temporada. Vale
-   extrair para algo parametrizável antes de duplicar.
-6. **Pesos do coeficiente** — nada a fazer além de chamar. Já estão implementados e testados
-   em `RankingEuropa.kt` (topo 6, passo 0,25, avanço 1,0, garantia de participação 3) e em
-   `RankingMundial.kt` (12 por vitória).
+- **Escudos dos 22 clubes novos do pool.** Ficam com `""` (escudo genérico) até a imagem
+  existir em `res/drawable`; o mapa `ESCUDOS` do `gen_outros.py` está pronto para recebê-la.
+- **Os eliminados da Champions que caem na Europa League.** O enunciado cita a mecânica mas
+  não a detalha, e ela criaria dependência de ordem dentro da temporada: parte do campo só
+  seria conhecida depois das qualificatórias da Champions. Hoje as 15 vagas de qualificação
+  saem todas da fila de acesso, o que fecha os 36 sem essa dependência.
+- **Conference League.** A divisão 32 do Hall da Fama e `CompeticaoUefa.CONFERENCE_LEAGUE`
+  já estão reservadas e testadas. Com a máquina de fases parametrizada pelo
+  `FormatoContinental`, uma terceira competição é uma terceira instância do formato mais uma
+  lista de acesso — sem mexer no repositório.

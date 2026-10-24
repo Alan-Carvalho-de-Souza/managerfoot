@@ -78,10 +78,11 @@ fun HallDaFamaScreen(
         24 to "Serie A", 26 to "Copa Italiana", 29 to "Supercopa da Itália"
     )
     // Competições continentais: 30, 31 e 32 estavam livres — a Champions é a 30,
-    // e 31/32 ficam para a Europa League e a Conference League.
+    // a Europa League a 31, e a 32 fica para a Conference League.
     val opcoesEuropa = listOf(
         700 to "Todas",
-        30 to "Champions League"
+        30 to "Champions League",
+        31 to "Europa League"
     )
 
     val paisDaDivisao = remember(divisaoSelecionada) {
