@@ -1013,7 +1013,8 @@ class DashboardViewModel @Inject constructor(
                     // ── Supercopas (Brasil / Inglaterra / Espanha / Itália) ─────────
                     val supercopasIds = listOf(
                         save.supercopaId, save.supercopaInglaterraId,
-                        save.supercopaEspanholaId, save.supercopaItalianaId
+                        save.supercopaEspanholaId, save.supercopaItalianaId,
+                        save.supercopaUefaId
                     ).filter { it > 0 }
                     val supercopaDoJogo = supercopasIds.firstOrNull { it == ctx.campeonatoId }
                     if (supercopaDoJogo != null) {
@@ -1601,6 +1602,7 @@ class DashboardViewModel @Inject constructor(
                 supercopaInglaterraId = novaInfo.supercopaInglaterraId,
                 supercopaEspanholaId  = novaInfo.supercopaEspanholaId,
                 supercopaItalianaId   = novaInfo.supercopaItalianaId,
+                supercopaUefaId       = novaInfo.supercopaUefaId,
                 temporadaId   = novaInfo.temporadaId,
                 ano           = novaInfo.ano
             )
@@ -2701,7 +2703,7 @@ class HallDaFamaViewModel @Inject constructor(
                 400  -> lista.filter { it.divisao in 20..21 || it.divisao == 23 || it.divisao == 27 }   // Inglaterra (Premier + Championship + Copa + Supercopa)
                 500  -> lista.filter { it.divisao == 22 || it.divisao == 25 || it.divisao == 28 }       // Espanha (La Liga + Copa + Supercopa)
                 600  -> lista.filter { it.divisao == 24 || it.divisao == 26 || it.divisao == 29 }       // Italia (Serie A + Copa + Supercopa)
-                700  -> lista.filter { it.divisao in 30..32 }                                          // Europa (Champions + futuras Europa/Conference League)
+                700  -> lista.filter { it.divisao in 30..33 }                                          // Europa (Champions, Europa League, Supercopa da UEFA e futura Conference)
                 else -> lista.filter { it.divisao == div }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

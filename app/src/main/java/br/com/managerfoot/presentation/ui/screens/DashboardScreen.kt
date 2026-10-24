@@ -505,7 +505,7 @@ private fun AbaInicio(
                 val ehCopaPartida = snap != null && snap.copaId > 0 && partida.campeonatoId == snap.copaId
                 val ehCopaArgPartida = snap != null && snap.copaArgId > 0 && partida.campeonatoId == snap.copaArgId
                 val ehSupercopaPartida = snap != null && partida.campeonatoId > 0 &&
-                    partida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId)
+                    partida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
                 val ehAmistosoPartida = snap != null && snap.campeonatoAmistososId > 0 && partida.campeonatoId == snap.campeonatoAmistososId
                 val resultLabel = when {
                     ehAmistosoPartida -> "Amistoso"
@@ -1425,7 +1425,7 @@ private fun nomeCampeonatoParaData(
     val ref = proximaPartida ?: ultimosResultados.firstOrNull() ?: return "Brasileirao"
     val snap = saveState ?: return "Brasileirao"
     return when {
-        ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId) -> "Supercopa"
+        ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId) -> "Supercopa"
         snap.copaId > 0 && ref.campeonatoId == snap.copaId -> "Copa"
         ref.campeonatoId == snap.campeonatoArgAId ||
         ref.campeonatoId == snap.campeonatoArgBId ||
@@ -1445,7 +1445,7 @@ private fun competitionLabelFor(
     val snap = saveState ?: return "Brasileirão"
     val ehCopa = snap.copaId > 0 && proximaPartida.campeonatoId == snap.copaId
     val ehSupercopa = proximaPartida.campeonatoId > 0 &&
-        proximaPartida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId)
+        proximaPartida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
     return when {
         ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
         ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"

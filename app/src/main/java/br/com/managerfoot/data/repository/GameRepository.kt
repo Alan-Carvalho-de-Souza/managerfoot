@@ -1052,6 +1052,7 @@ class GameRepository @Inject constructor(
         val supercopaInglaterraId: Int,   // Supercopa da Inglaterra
         val supercopaEspanholaId: Int,    // Supercopa da Espanha
         val supercopaItalianaId: Int,     // Supercopa da Itália
+        val supercopaUefaId: Int,         // Supercopa da UEFA (Champions x Europa League)
         val temporadaId: Int,
         val ano: Int,
         val resultadoMeta: String? = null // Mensagem "Meta cumprida/falhada" para exibir em Snackbar
@@ -1545,6 +1546,7 @@ class GameRepository @Inject constructor(
         val novoSupercopaIngId = supers.inglaterra
         val novoSupercopaEspId = supers.espanha
         val novoSupercopaItaId = supers.italia
+        val novoSupercopaUefaId = supers.uefa
 
         // Troféu dos Campeões (ARG) — disputado no MESMO ano (após Apertura+Clausura).
         // Auto-simulado pois ambos os campeões já estão registrados no Hall da Fama.
@@ -1620,7 +1622,7 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
     }
 
     // ── Reputação por mudança de divisão ────────────────────────
@@ -4148,7 +4150,10 @@ class GameRepository @Inject constructor(
 
     // ── Supercopa Rei: jogo único entre campeão do Brasileirão e da Copa ──
     // ordemGlobal = 1 → disputada no final de janeiro, antes de qualquer outra partida.
-    private data class SupercopasNovas(val brasil: Int, val inglaterra: Int, val espanha: Int, val italia: Int)
+    private data class SupercopasNovas(
+        val brasil: Int, val inglaterra: Int, val espanha: Int, val italia: Int,
+        val uefa: Int
+    )
 
     // Cria as 4 supercopas do rollover num só lugar (mantém encerrarTemporada... enxuto).
     private suspend fun criarSupercopasDaTemporada(ano: Int, novoAno: Int, temporadaId: Int): SupercopasNovas =
@@ -4156,7 +4161,19 @@ class GameRepository @Inject constructor(
             brasil     = criarSupercopaDeCampeoes(ano, novoAno, temporadaId, 1, 5, "Supercopa Rei $novoAno", "Brasil"),
             inglaterra = criarSupercopaDeCampeoes(ano, novoAno, temporadaId, 20, 23, "Supercopa da Inglaterra $novoAno", "Inglaterra"),
             espanha    = criarSupercopaDeCampeoes(ano, novoAno, temporadaId, 22, 25, "Supercopa da Espanha $novoAno", "Espanha"),
-            italia     = criarSupercopaDeCampeoes(ano, novoAno, temporadaId, 24, 26, "Supercopa da Italia $novoAno", "Italia")
+            italia     = criarSupercopaDeCampeoes(ano, novoAno, temporadaId, 24, 26, "Supercopa da Italia $novoAno", "Italia"),
+            // Supercopa da UEFA: campeão da Champions (Hall 30) x campeão da Europa
+            // League (Hall 31). Mesma engine das supercopas nacionais — o que muda
+            // são os dois códigos do Hall da Fama e o "país", que aqui é o
+            // continente, porque a competição não pertence a país nenhum.
+            //
+            // O desempate de "mesmo clube venceu os dois" que criarSupercopaDeCampeoes
+            // aplica é inalcançável aqui: Champions e Europa League são mutuamente
+            // exclusivas, nenhum clube disputa as duas na mesma temporada.
+            uefa       = criarSupercopaDeCampeoes(
+                ano, novoAno, temporadaId, 30, 31,
+                "Supercopa da UEFA $novoAno", Continentes.EUROPA
+            )
         )
 
     // Cria a Supercopa de um país: campeão da liga (Hall [ligaDiv]) vs campeão da
@@ -4587,12 +4604,15 @@ class GameRepository @Inject constructor(
         val assistente = partidaDao.buscarAssisteTop1(supercopaId)
 
         // Código de divisão do Hall da Fama por país (Supercopa): Brasil=6,
-        // Inglaterra=27, Espanha=28, Itália=29.
+        // Inglaterra=27, Espanha=28, Itália=29, e 33 para a Supercopa da UEFA, que
+        // não é de um país — o seu "país" é o continente. O 32 fica reservado para
+        // a Conference League, como diz o HallDaFamaScreen.
         val divisaoSupercopa = when (supercopa.pais) {
-            "Inglaterra" -> 27
-            "Espanha"    -> 28
-            "Italia"     -> 29
-            else         -> 6
+            "Inglaterra"        -> 27
+            "Espanha"           -> 28
+            "Italia"            -> 29
+            Continentes.EUROPA  -> 33
+            else                -> 6
         }
 
         // Registra no Hall da Fama

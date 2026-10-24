@@ -45,6 +45,7 @@ data class SaveState(
     val supercopaInglaterraId: Int,  // ID da Supercopa da Inglaterra ativa (-1 se não houver)
     val supercopaEspanholaId: Int,   // ID da Supercopa da Espanha ativa (-1 se não houver)
     val supercopaItalianaId: Int,    // ID da Supercopa da Itália ativa (-1 se não houver)
+    val supercopaUefaId: Int,        // ID da Supercopa da UEFA ativa (-1 se não houver)
     val anoAtual: Int,
     val mesAtual: Int,               // 1–12
     val jogoInicializado: Boolean,
@@ -94,6 +95,7 @@ class GameDataStore @Inject constructor(
         val KEY_SUPERCOPA_ING_ID = intPreferencesKey("supercopa_inglaterra_id")
         val KEY_SUPERCOPA_ESP_ID = intPreferencesKey("supercopa_espanhola_id")
         val KEY_SUPERCOPA_ITA_ID = intPreferencesKey("supercopa_italiana_id")
+        val KEY_SUPERCOPA_UEFA_ID = intPreferencesKey("supercopa_uefa_id")
         val KEY_ANO            = intPreferencesKey("ano_atual")
         val KEY_MES            = intPreferencesKey("mes_atual")
         val KEY_INICIALIZADO   = booleanPreferencesKey("jogo_inicializado")
@@ -141,6 +143,7 @@ class GameDataStore @Inject constructor(
                 supercopaInglaterraId = prefs[KEY_SUPERCOPA_ING_ID] ?: -1,
                 supercopaEspanholaId  = prefs[KEY_SUPERCOPA_ESP_ID] ?: -1,
                 supercopaItalianaId   = prefs[KEY_SUPERCOPA_ITA_ID] ?: -1,
+                supercopaUefaId       = prefs[KEY_SUPERCOPA_UEFA_ID] ?: -1,
                 anoAtual          = prefs[KEY_ANO]             ?: 2026,
                 mesAtual          = prefs[KEY_MES]             ?: 1,
                 jogoInicializado  = prefs[KEY_INICIALIZADO]    ?: false,
@@ -172,6 +175,7 @@ class GameDataStore @Inject constructor(
         europaLeagueId: Int = -1,
         supercopaId: Int = -1,
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
+        supercopaUefaId: Int = -1,
         ano: Int
     ) {
         context.dataStore.edit { prefs ->
@@ -205,6 +209,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_SUPERCOPA_ING_ID] = supercopaInglaterraId
             prefs[KEY_SUPERCOPA_ESP_ID] = supercopaEspanholaId
             prefs[KEY_SUPERCOPA_ITA_ID] = supercopaItalianaId
+            prefs[KEY_SUPERCOPA_UEFA_ID] = supercopaUefaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
             prefs[KEY_INICIALIZADO]    = true
@@ -248,6 +253,7 @@ class GameDataStore @Inject constructor(
         europaLeagueId: Int = -1,
         supercopaId: Int = -1,
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
+        supercopaUefaId: Int = -1,
         temporadaId: Int, ano: Int
     ) {
         context.dataStore.edit { prefs ->
@@ -279,6 +285,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_SUPERCOPA_ING_ID] = supercopaInglaterraId
             prefs[KEY_SUPERCOPA_ESP_ID] = supercopaEspanholaId
             prefs[KEY_SUPERCOPA_ITA_ID] = supercopaItalianaId
+            prefs[KEY_SUPERCOPA_UEFA_ID] = supercopaUefaId
             prefs[KEY_TEMPORADA_ID]    = temporadaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
