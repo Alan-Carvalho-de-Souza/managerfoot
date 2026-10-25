@@ -507,8 +507,11 @@ private fun AbaInicio(
                 val ehSupercopaPartida = snap != null && partida.campeonatoId > 0 &&
                     partida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
                 val ehAmistosoPartida = snap != null && snap.campeonatoAmistososId > 0 && partida.campeonatoId == snap.campeonatoAmistososId
+                val ehIntercontinentalPartida = snap != null && snap.intercontinentalId > 0 &&
+                    partida.campeonatoId == snap.intercontinentalId
                 val resultLabel = when {
                     ehAmistosoPartida -> "Amistoso"
+                    ehIntercontinentalPartida -> "Copa Intercontinental"
                     ehSupercopaPartida -> if (partida.campeonatoId == snap?.supercopaId) "Supercopa Rei" else "Supercopa"
                     ehCopaPartida -> "Copa do Brasil — ${partida.fase ?: "Copa"}"
                     ehCopaArgPartida -> "Copa Argentina — ${partida.fase ?: "Copa"}"
@@ -1425,6 +1428,7 @@ private fun nomeCampeonatoParaData(
     val ref = proximaPartida ?: ultimosResultados.firstOrNull() ?: return "Brasileirao"
     val snap = saveState ?: return "Brasileirao"
     return when {
+        snap.intercontinentalId > 0 && ref.campeonatoId == snap.intercontinentalId -> "Intercontinental"
         ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId) -> "Supercopa"
         snap.copaId > 0 && ref.campeonatoId == snap.copaId -> "Copa"
         ref.campeonatoId == snap.campeonatoArgAId ||
@@ -1449,6 +1453,9 @@ private fun competitionLabelFor(
     val ehSupercopa = proximaPartida.campeonatoId > 0 &&
         proximaPartida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
     return when {
+        // Jogo único e último oficial da temporada: não tem rodada nem fase a exibir.
+        snap.intercontinentalId > 0 && proximaPartida.campeonatoId == snap.intercontinentalId ->
+            "Copa Intercontinental — Final"
         ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
         ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"
         // Champions: na Fase de Liga a partida não tem fase (é o que alimenta a

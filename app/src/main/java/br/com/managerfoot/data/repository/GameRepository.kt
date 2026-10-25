@@ -1643,10 +1643,15 @@ class GameRepository @Inject constructor(
         } catch (_: Exception) { }
 
         // Copa Intercontinental — ÚLTIMO jogo oficial da temporada, entre os
-        // campeões da Champions e da Libertadores. Vem aqui porque as duas já
-        // encerraram acima e os seus campeões estão no Hall da Fama deste ano.
+        // campeões da Champions e da Libertadores.
+        //
+        // Normalmente ela já foi criada e jogada DURANTE a temporada, porque é
+        // jogável. Aqui ficam só as duas pontas soltas: criar quando o usuário
+        // virou a temporada antes de ela nascer, e concluir quando ele é
+        // finalista e virou sem jogá-la — nos dois casos o título precisa ter dono.
         try {
-            criarESimularCopaIntercontinental(
+            criarCopaIntercontinental(ano = ano, temporadaId = temporadaId)
+            concluirCopaIntercontinentalPendente(
                 ano = ano, temporadaId = temporadaId, timeJogadorId = timeJogadorId
             )
         } catch (_: Exception) { }
@@ -4352,31 +4357,45 @@ class GameRepository @Inject constructor(
     //  Copa Intercontinental
     //  Jogo único entre o campeão da Champions League (Hall 30) e o
     //  campeão da Libertadores (Hall 34) da MESMA temporada.
+    //
+    //  É JOGÁVEL: quando o clube do usuário é um dos finalistas, ele escala
+    //  o time e disputa a partida como qualquer outra. Por isso a criação é
+    //  separada da resolução, no mesmo padrão das Supercopas — e não no do
+    //  Troféu dos Campeões, que cria e simula de uma vez.
+    //
     //  - Hall da Fama: divisao = 36
-    //  - ordemGlobal = 440: depois de TODA competição oficial e antes dos
-    //    amistosos de dezembro. É, por construção, o último jogo oficial.
+    //  - ordemGlobal = 440: depois de TODA competição oficial (a maior casa
+    //    em uso é 425) e antes dos amistosos de dezembro, que começam em
+    //    451. É, por construção, o último jogo oficial da temporada.
+    //  - Entra sozinha no calendário: buscarProximaPartida varre todo
+    //    campeonato que não seja amistoso, ordenado por ordemGlobal.
     //  - Campo neutro sai de graça: simularPartidaInterna liga campoNeutro
     //    quando a fase é "Final".
-    //  - Auto-simulada dentro de encerrarTemporadaComHallDaFama, depois de
-    //    Champions e Libertadores já terem campeão registrado.
     // ─────────────────────────────────────────────────────────────
-    suspend fun criarESimularCopaIntercontinental(
-        ano: Int,
-        temporadaId: Int,
-        timeJogadorId: Int = -1
-    ): Int {
+
+    /**
+     * Cria a Copa Intercontinental do ano, SEM simular, quando os dois campeões
+     * continentais já estão no Hall da Fama. Devolve o id, ou -1 quando ainda não
+     * há os dois campeões, ou quando a edição do ano já existe.
+     *
+     * Chamada durante a temporada, depois de cada partida do usuário: as finais
+     * da Champions e da Libertadores acontecem antes do fim da temporada, então a
+     * competição nasce a tempo de entrar no calendário dele.
+     */
+    suspend fun criarCopaIntercontinental(ano: Int, temporadaId: Int): Int {
         val champEuropa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_CHAMPIONS)
+            ?: return -1
         val champAmerica = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_LIBERTADORES)
-        if (champEuropa == null || champAmerica == null) return -1
+            ?: return -1
 
         // Não existe o caso de "mesmo clube campeão dos dois": Champions e
         // Libertadores são de confederações diferentes, e nenhum clube disputa as
         // duas. Por isso não há aqui o desempate que o Troféu dos Campeões faz.
 
-        // Evita duplicata se a função for chamada de novo no mesmo ano.
-        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_INTERCONTINENTAL) != null) return -1
-
+        // Já existe a edição deste ano? Não cria de novo.
         val nomeCampeonato = "Copa Intercontinental $ano"
+        if (campeonatoDao.buscarPorTemporadaId(temporadaId).any { it.nome == nomeCampeonato }) return -1
+        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_INTERCONTINENTAL) != null) return -1
 
         val copaId = campeonatoDao.inserir(
             CampeonatoEntity(
@@ -4395,7 +4414,7 @@ class GameRepository @Inject constructor(
         ))
 
         // Campeão da Libertadores como mandante nominal; o jogo é em campo neutro.
-        val partidaId = partidaDao.inserir(
+        partidaDao.inserirTodas(listOf(
             PartidaEntity(
                 campeonatoId = copaId,
                 rodada       = 1,
@@ -4404,29 +4423,46 @@ class GameRepository @Inject constructor(
                 fase         = "Final",
                 ordemGlobal  = ORDEM_GLOBAL_INTERCONTINENTAL
             )
-        ).toInt()
+        ))
+        return copaId
+    }
 
-        val partidaCriada = partidaDao.buscarPorId(partidaId) ?: return copaId
-        try { simularPartidaInterna(partidaCriada) } catch (_: Exception) { }
+    /**
+     * Encerra a Copa Intercontinental depois que a partida foi jogada: define o
+     * campeão (pênaltis quando empate), registra no Hall da Fama, paga a
+     * premiação e fecha a competição. Devolve false se ainda não há o que fazer.
+     */
+    suspend fun verificarEEncerrarCopaIntercontinental(
+        copaId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (copaId <= 0) return false
+        val copa = campeonatoDao.buscarPorId(copaId) ?: return false
+        if (copa.encerrado) return false
 
-        val partidaJogada = partidaDao.buscarPorId(partidaId) ?: return copaId
-        val gCasa = partidaJogada.golsCasa ?: 0
-        val gFora = partidaJogada.golsFora ?: 0
+        val partidas = partidaDao.buscarTodasPorCampeonato(copaId)
+        if (partidas.isEmpty() || !partidas.all { it.jogada }) return false
+
+        val jogo = partidas.first()
+        val gCasa = jogo.golsCasa ?: return false
+        val gFora = jogo.golsFora ?: return false
+
         val campeaoId = when {
-            gCasa > gFora -> partidaJogada.timeCasaId
-            gFora > gCasa -> partidaJogada.timeForaId
+            gCasa > gFora -> jogo.timeCasaId
+            gFora > gCasa -> jogo.timeForaId
             else -> {
-                val pCasa = partidaJogada.penaltisCasa
-                val pFora = partidaJogada.penaltisForaId
+                val pCasa = jogo.penaltisCasa
+                val pFora = jogo.penaltisForaId
                 if (pCasa != null && pFora != null) {
-                    if (pCasa > pFora) partidaJogada.timeCasaId else partidaJogada.timeForaId
+                    if (pCasa > pFora) jogo.timeCasaId else jogo.timeForaId
                 } else {
-                    simularEPersistirPenaltisIA(partidaJogada, partidaJogada)
+                    simularEPersistirPenaltisIA(jogo, jogo)
                 }
             }
         }
-        val viceId = if (campeaoId == partidaJogada.timeCasaId)
-            partidaJogada.timeForaId else partidaJogada.timeCasaId
+        val viceId = if (campeaoId == jogo.timeCasaId) jogo.timeForaId else jogo.timeCasaId
 
         val campeao = timeRepository.buscarEntityPorId(campeaoId)
         val vice    = timeRepository.buscarEntityPorId(viceId)
@@ -4435,8 +4471,8 @@ class GameRepository @Inject constructor(
 
         inserirNoHallDaFamaComTecnico(
             HallDaFamaEntity(
-                ano                  = ano,
-                nomeCampeonato       = nomeCampeonato,
+                ano                  = anoAtual,
+                nomeCampeonato       = copa.nome,
                 campeaoTimeId        = campeaoId,
                 campeaoNome          = campeao?.nome ?: "",
                 campeaoEscudo        = campeao?.escudoRes ?: "",
@@ -4466,11 +4502,66 @@ class GameRepository @Inject constructor(
                 viceId    -> 12_000_000_00L
                 else      -> 0L
             }
-            if (premio > 0L) timeRepository.creditarSaldo(timeJogadorId, premio)
+            if (premio > 0L) {
+                timeRepository.creditarSaldo(timeJogadorId, premio)
+                financaDao.inserir(
+                    br.com.managerfoot.data.database.entities.FinancaEntity(
+                        timeId = timeJogadorId, temporadaId = temporadaId, mes = 13,
+                        receitaPremiacoes = premio,
+                        descricaoPremio   = "${copa.nome} — " +
+                            if (timeJogadorId == campeaoId) "Campeão" else "Vice-campeão",
+                        saldoFinal        = premio
+                    )
+                )
+            }
         }
 
         campeonatoDao.encerrar(copaId)
-        return copaId
+        return true
+    }
+
+    /**
+     * Simula a Copa Intercontinental quando o clube do usuário NÃO é finalista,
+     * e a encerra. Chamada depois de cada partida dele, como as supercopas.
+     */
+    suspend fun simularCopaIntercontinentalSeJogadorNaoParticipa(
+        copaId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) {
+        if (copaId <= 0) return
+        if (campeonatoDao.buscarPorId(copaId)?.encerrado == true) return
+
+        val partidas = partidaDao.buscarTodasPorCampeonato(copaId)
+        if (partidas.isEmpty()) return
+        val jogadorParticipa = partidas.any {
+            it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId
+        }
+        if (jogadorParticipa) return  // É dele: deixa que ele jogue.
+
+        partidas.filter { !it.jogada }.forEach { partida ->
+            try { simularPartidaInterna(partida) } catch (_: Exception) { }
+        }
+        verificarEEncerrarCopaIntercontinental(copaId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /**
+     * Rede de segurança do rollover: se a Copa Intercontinental do ano existe e
+     * não foi concluída — o usuário é finalista e virou a temporada sem jogá-la —,
+     * simula e encerra, para o título não ficar sem dono.
+     */
+    suspend fun concluirCopaIntercontinentalPendente(
+        ano: Int,
+        temporadaId: Int,
+        timeJogadorId: Int = -1
+    ) {
+        val copa = campeonatoDao.buscarPorTemporadaId(temporadaId)
+            .firstOrNull { it.tipo == TipoCampeonato.INTERCONTINENTAL && !it.encerrado } ?: return
+        partidaDao.buscarTodasPorCampeonato(copa.id).filter { !it.jogada }.forEach { partida ->
+            try { simularPartidaInterna(partida) } catch (_: Exception) { }
+        }
+        verificarEEncerrarCopaIntercontinental(copa.id, ano, timeJogadorId, temporadaId)
     }
 
     // ─────────────────────────────────────────────────────────────

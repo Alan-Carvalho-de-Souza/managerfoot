@@ -1063,6 +1063,46 @@ class DashboardViewModel @Inject constructor(
                             anoAtual = save.anoAtual, temporadaId = save.temporadaId
                         )
                     }
+                    // ── Copa Intercontinental ───────────────────────────────────────
+                    // Ela nasce no meio da temporada, assim que Champions e
+                    // Libertadores têm campeão; então a cada partida do usuário
+                    // tentamos criá-la, e o id vai para o save na primeira vez.
+                    var intercId = save.intercontinentalId
+                    if (intercId <= 0) {
+                        intercId = gameRepository.criarCopaIntercontinental(
+                            ano = save.anoAtual, temporadaId = save.temporadaId
+                        )
+                        if (intercId > 0) gameDataStore.salvarIntercontinentalId(intercId)
+                    }
+                    if (intercId > 0) {
+                        if (ctx.campeonatoId == intercId) {
+                            // É o jogo do usuário: pênaltis seguem o mesmo caminho
+                            // das supercopas, que também são de partida única.
+                            if (resultadoFinal.precisaPenaltis) {
+                                _penaltisParaSupercopa = true
+                                _supercopaAtivaId = intercId
+                                _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                                    copaId         = intercId,
+                                    voltaPartidaId = resultadoFinal.partidaId,
+                                    timeJogadorId  = save.timeIdJogador
+                                )
+                            } else {
+                                gameRepository.verificarEEncerrarCopaIntercontinental(
+                                    copaId        = intercId,
+                                    anoAtual      = save.anoAtual,
+                                    timeJogadorId = save.timeIdJogador,
+                                    temporadaId   = save.temporadaId
+                                )
+                            }
+                        } else {
+                            gameRepository.simularCopaIntercontinentalSeJogadorNaoParticipa(
+                                copaId        = intercId,
+                                timeJogadorId = save.timeIdJogador,
+                                anoAtual      = save.anoAtual,
+                                temporadaId   = save.temporadaId
+                            )
+                        }
+                    }
                     // ── Supercopas (Brasil / Inglaterra / Espanha / Itália) ─────────
                     val supercopasIds = listOf(
                         save.supercopaId, save.supercopaInglaterraId,

@@ -10,9 +10,13 @@ import org.junit.Test
  * Copa Intercontinental: jogo único entre o campeão da Champions League e o
  * campeão da Libertadores, último jogo oficial da temporada.
  *
- * Reaproveita a engine do Troféu dos Campeões — criada e auto-simulada no fim da
- * temporada, lendo os dois campeões do Hall da Fama. Estes testes cobrem o que é
- * regra: o lugar dela no calendário, o peso no ranking e os códigos do Hall.
+ * É JOGÁVEL: quando o clube do usuário é finalista, ele escala e disputa a
+ * partida como qualquer outra, e ela entra no calendário dele. Por isso segue o
+ * padrão das Supercopas — criação separada da resolução — e não o do Troféu dos
+ * Campeões, que cria e simula de uma vez.
+ *
+ * Estes testes cobrem o que é regra e não depende de banco: o lugar dela no
+ * calendário, o peso no ranking e os códigos do Hall da Fama.
  */
 class CopaIntercontinentalTest {
 
@@ -58,6 +62,15 @@ class CopaIntercontinentalTest {
         // As ligas usam ordemGlobal = rodada * 10, e a maior liga tem 38 rodadas.
         val ultimaRodadaDeLiga = 38 * 10
         assertTrue(ordemGlobalIntercontinental > ultimaRodadaDeLiga)
+    }
+
+    @Test
+    fun `entra no calendario do usuario, por nao ser amistoso`() {
+        // buscarProximaPartida varre toda partida nao jogada do clube e exclui
+        // apenas os campeonatos de tipo AMISTOSO. Como a Copa Intercontinental tem
+        // tipo proprio, a partida dela aparece sozinha no calendario, na posicao
+        // que a sua ordemGlobal determina.
+        assertNotEquals(TipoCampeonato.AMISTOSO, TipoCampeonato.INTERCONTINENTAL)
     }
 
     // ── Peso no ranking mundial ──────────────────────────────────────────
