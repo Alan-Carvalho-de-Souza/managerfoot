@@ -3262,7 +3262,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": "escudo_southampton_efl"
+      "escudo_res": "escudo_southampton"
     },
     {
       "id": 423,
@@ -3619,7 +3619,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 52,
-      "escudo_res": "escudo_wrexham_efl"
+      "escudo_res": "escudo_wrexham"
     },
     {
       "id": 444,
@@ -4979,7 +4979,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 71,
-      "escudo_res": ""
+      "escudo_res": "escudo_spartapraha"
     },
     {
       "id": 640,
@@ -4996,7 +4996,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 81,
-      "escudo_res": ""
+      "escudo_res": "escudo_fenerbahce"
     },
     {
       "id": 641,
@@ -5012,8 +5012,8 @@
       "preco_ingresso": 3800,
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
-      "reputacao": 71,
-      "escudo_res": ""
+      "reputacao": 77,
+      "escudo_res": "escudo_dynamokyiv"
     },
     {
       "id": 642,
@@ -5029,8 +5029,8 @@
       "preco_ingresso": 3200,
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
-      "reputacao": 65,
-      "escudo_res": ""
+      "reputacao": 70,
+      "escudo_res": "escudo_hearts"
     },
     {
       "id": 643,
@@ -5047,7 +5047,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_lask"
     },
     {
       "id": 644,
@@ -5064,7 +5064,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_servette"
     },
     {
       "id": 645,
@@ -5081,7 +5081,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 69,
-      "escudo_res": ""
+      "escudo_res": "escudo_partizan"
     },
     {
       "id": 646,
@@ -5098,7 +5098,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 58,
-      "escudo_res": ""
+      "escudo_res": "escudo_vaduz"
     },
     {
       "id": 647,
@@ -5115,7 +5115,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_aekathens"
     },
     {
       "id": 648,
@@ -5132,7 +5132,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_brondby"
     },
     {
       "id": 649,
@@ -5149,7 +5149,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_molde"
     },
     {
       "id": 650,
@@ -5166,7 +5166,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_hajduksplit"
     },
     {
       "id": 651,
@@ -5183,7 +5183,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_lechpoznan"
     },
     {
       "id": 652,
@@ -5200,7 +5200,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 65,
-      "escudo_res": ""
+      "escudo_res": "escudo_djurgarden"
     },
     {
       "id": 653,
@@ -5217,7 +5217,7 @@
       "tatica": "4-2-3-1",
       "estilo": "DEFENSIVO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_cfrcluj"
     },
     {
       "id": 654,
@@ -5234,7 +5234,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_bolivar"
     },
     {
       "id": 655,
@@ -5251,7 +5251,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 69,
-      "escudo_res": ""
+      "escudo_res": "escudo_thestrongest"
     },
     {
       "id": 656,
@@ -5268,7 +5268,7 @@
       "tatica": "4-4-2",
       "estilo": "OFENSIVO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_alwaysready"
     },
     {
       "id": 657,
@@ -5285,7 +5285,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_orientepetrolero"
     },
     {
       "id": 658,
@@ -5302,7 +5302,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 62,
-      "escudo_res": ""
+      "escudo_res": "escudo_blooming"
     },
     {
       "id": 659,
@@ -5318,8 +5318,8 @@
       "preco_ingresso": 2200,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 61,
-      "escudo_res": ""
+      "reputacao": 75,
+      "escudo_res": "escudo_jorgewilstermann"
     },
     {
       "id": 660,
@@ -5336,7 +5336,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 77,
-      "escudo_res": ""
+      "escudo_res": "escudo_colocolo"
     },
     {
       "id": 661,
@@ -5352,8 +5352,8 @@
       "preco_ingresso": 3600,
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
-      "reputacao": 74,
-      "escudo_res": ""
+      "reputacao": 80,
+      "escudo_res": "escudo_universidaddechile"
     },
     {
       "id": 662,
@@ -5370,7 +5370,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_universidadcatolica"
     },
     {
       "id": 663,
@@ -5387,7 +5387,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_huachipato"
     },
     {
       "id": 664,
@@ -5404,7 +5404,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_palestino"
     },
     {
       "id": 665,
@@ -5421,7 +5421,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 62,
-      "escudo_res": ""
+      "escudo_res": "escudo_cobresal"
     },
     {
       "id": 666,
@@ -5437,8 +5437,8 @@
       "preco_ingresso": 3800,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 78,
-      "escudo_res": ""
+      "reputacao": 83,
+      "escudo_res": "escudo_atleticonacional"
     },
     {
       "id": 667,
@@ -5454,8 +5454,8 @@
       "preco_ingresso": 3600,
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
-      "reputacao": 74,
-      "escudo_res": ""
+      "reputacao": 79,
+      "escudo_res": "escudo_millonarios"
     },
     {
       "id": 668,
@@ -5472,11 +5472,11 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_americadecali"
     },
     {
       "id": 669,
-      "nome": "Junior",
+      "nome": "Junior Barranquilla",
       "cidade": "Barranquilla",
       "estado": "ATL",
       "divisao": 90,
@@ -5489,7 +5489,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 71,
-      "escudo_res": ""
+      "escudo_res": "escudo_atleticojunior"
     },
     {
       "id": 670,
@@ -5506,7 +5506,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 68,
-      "escudo_res": ""
+      "escudo_res": "escudo_deportivocali"
     },
     {
       "id": 671,
@@ -5523,7 +5523,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 66,
-      "escudo_res": ""
+      "escudo_res": "escudo_independientemedellin"
     },
     {
       "id": 672,
@@ -5539,8 +5539,8 @@
       "preco_ingresso": 3200,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 76,
-      "escudo_res": ""
+      "reputacao": 82,
+      "escudo_res": "escudo_independientedelvalle"
     },
     {
       "id": 673,
@@ -5556,8 +5556,8 @@
       "preco_ingresso": 3200,
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
-      "reputacao": 75,
-      "escudo_res": ""
+      "reputacao": 80,
+      "escudo_res": "escudo_ldu"
     },
     {
       "id": 674,
@@ -5574,7 +5574,7 @@
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
       "reputacao": 73,
-      "escudo_res": ""
+      "escudo_res": "escudo_barcelonasc"
     },
     {
       "id": 675,
@@ -5590,8 +5590,8 @@
       "preco_ingresso": 2800,
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
-      "reputacao": 69,
-      "escudo_res": ""
+      "reputacao": 77,
+      "escudo_res": "escudo_emelec"
     },
     {
       "id": 676,
@@ -5608,7 +5608,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_elnacional"
     },
     {
       "id": 677,
@@ -5625,7 +5625,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 62,
-      "escudo_res": ""
+      "escudo_res": "escudo_deportivocuenca"
     },
     {
       "id": 678,
@@ -5641,8 +5641,8 @@
       "preco_ingresso": 3200,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 75,
-      "escudo_res": ""
+      "reputacao": 85,
+      "escudo_res": "escudo_olimpia"
     },
     {
       "id": 679,
@@ -5658,8 +5658,8 @@
       "preco_ingresso": 3200,
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
-      "reputacao": 74,
-      "escudo_res": ""
+      "reputacao": 80,
+      "escudo_res": "escudo_cerroporteno"
     },
     {
       "id": 680,
@@ -5675,8 +5675,8 @@
       "preco_ingresso": 3000,
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
-      "reputacao": 73,
-      "escudo_res": ""
+      "reputacao": 81,
+      "escudo_res": "escudo_libertad"
     },
     {
       "id": 681,
@@ -5693,7 +5693,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_guaraniparaguay"
     },
     {
       "id": 682,
@@ -5710,7 +5710,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_nacionalparaguay"
     },
     {
       "id": 683,
@@ -5727,7 +5727,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 61,
-      "escudo_res": ""
+      "escudo_res": "escudo_sportivoluqueno"
     },
     {
       "id": 684,
@@ -5744,7 +5744,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 74,
-      "escudo_res": ""
+      "escudo_res": "escudo_universitario"
     },
     {
       "id": 685,
@@ -5760,8 +5760,8 @@
       "preco_ingresso": 3000,
       "tatica": "4-3-3",
       "estilo": "OFENSIVO",
-      "reputacao": 73,
-      "escudo_res": ""
+      "reputacao": 79,
+      "escudo_res": "escudo_alianzalima"
     },
     {
       "id": 686,
@@ -5778,7 +5778,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 72,
-      "escudo_res": ""
+      "escudo_res": "escudo_sportingcristal"
     },
     {
       "id": 687,
@@ -5795,7 +5795,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 67,
-      "escudo_res": ""
+      "escudo_res": "escudo_melgar"
     },
     {
       "id": 688,
@@ -5812,7 +5812,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_cienciano"
     },
     {
       "id": 689,
@@ -5829,7 +5829,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 61,
-      "escudo_res": ""
+      "escudo_res": "escudo_sporthuancayo"
     },
     {
       "id": 690,
@@ -5846,7 +5846,7 @@
       "tatica": "4-2-3-1",
       "estilo": "OFENSIVO",
       "reputacao": 70,
-      "escudo_res": ""
+      "escudo_res": "escudo_caracas"
     },
     {
       "id": 691,
@@ -5863,7 +5863,7 @@
       "tatica": "4-3-3",
       "estilo": "EQUILIBRADO",
       "reputacao": 68,
-      "escudo_res": ""
+      "escudo_res": "escudo_deportivotachira"
     },
     {
       "id": 692,
@@ -5880,7 +5880,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 65,
-      "escudo_res": ""
+      "escudo_res": "escudo_zamora"
     },
     {
       "id": 693,
@@ -5897,7 +5897,7 @@
       "tatica": "4-2-3-1",
       "estilo": "EQUILIBRADO",
       "reputacao": 64,
-      "escudo_res": ""
+      "escudo_res": "escudo_monagas"
     },
     {
       "id": 694,
@@ -5914,7 +5914,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 63,
-      "escudo_res": ""
+      "escudo_res": "escudo_deportivolaguaira"
     },
     {
       "id": 695,
@@ -5931,7 +5931,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 61,
-      "escudo_res": ""
+      "escudo_res": "escudo_carabobo"
     }
   ],
   "jogadores": [

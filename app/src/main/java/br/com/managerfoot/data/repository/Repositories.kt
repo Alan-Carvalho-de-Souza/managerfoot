@@ -6,6 +6,7 @@ import br.com.managerfoot.data.dao.TimeDao
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.domain.engine.CalculadoraMercado
 import br.com.managerfoot.domain.model.Jogador
+import br.com.managerfoot.domain.model.LimitesElenco
 import br.com.managerfoot.domain.model.OfertaTransferencia
 import br.com.managerfoot.domain.model.Time
 import kotlinx.coroutines.flow.Flow
@@ -607,13 +608,29 @@ class JogadorRepository @Inject constructor(
         ))
     }
 
-    /** Aposenta o jogador e gera automaticamente um jogador na base de juniores do mesmo clube. */
-    suspend fun aposentarJogador(jogadorId: Int) {
+    /**
+     * Aposenta o jogador e gera automaticamente um jogador na base de juniores do
+     * mesmo clube. O usuário escolhe a posição em que a "cria" entra ([posicaoJunior],
+     * null = mesma do aposentado) e o nome dela: [manterNome] herda o nome do ídolo,
+     * [nomeJunior] define um nome digitado, e nenhum dos dois gera um nome aleatório.
+     */
+    suspend fun aposentarJogador(
+        jogadorId: Int,
+        posicaoJunior: Posicao? = null,
+        manterNome: Boolean = false,
+        nomeJunior: String? = null
+    ) {
         val entity = jogadorDao.buscarPorId(jogadorId) ?: return
         val timeId = entity.timeId
         jogadorDao.aposentarJogador(jogadorId)
         if (timeId != null) {
-            val junior = gerarJuniorDeAposentado(entity, timeId)
+            val junior = gerarJuniorDeAposentado(
+                aposentado = entity,
+                timeId     = timeId,
+                manterNome = manterNome,
+                posicao    = posicaoJunior,
+                nomeCustom = nomeJunior
+            )
             jogadorDao.inserir(junior)
         }
     }
@@ -621,10 +638,13 @@ class JogadorRepository @Inject constructor(
     private fun gerarJuniorDeAposentado(
         aposentado: JogadorEntity,
         timeId: Int,
-        manterNome: Boolean = false
+        manterNome: Boolean = false,
+        posicao: Posicao? = null,
+        nomeCustom: String? = null
     ): JogadorEntity {
         val rng = kotlin.random.Random.Default
-        val principais = atributosPrincipais(aposentado.posicao)
+        val posJunior = posicao ?: aposentado.posicao
+        val principais = atributosPrincipais(posJunior)
         val baseForca = rng.nextInt(65, 81)
         fun attr(nome: String): Int =
             if (nome in principais) (baseForca + rng.nextInt(5, 16)).coerceIn(1, 99)
@@ -638,20 +658,24 @@ class JogadorRepository @Inject constructor(
         val forca = ((tecnica + passe + velocidade + finalizacao + defesa + fisico) / 6).coerceIn(1, 99)
         val idade = rng.nextInt(16, 20)
         val potencial = (forca + rng.nextInt(5, 16)).coerceAtMost(99)
-        // manterNome=true (times da IA): o junior HERDA o nome e a posição do
-        // aposentado — a "cria" que leva o nome do ídolo. manterNome=false
-        // (time do usuário / dispensa manual): nome novo por nacionalidade.
-        val (nomeGerado, nomeAbrevGerado) = if (manterNome)
-            aposentado.nome to aposentado.nomeAbreviado
-        else gerarNomeAleatorio(aposentado.nacionalidade)
+        // nomeCustom (aposentadoria manual com nome digitado) tem prioridade.
+        // manterNome=true (times da IA, ou escolha do usuário): o junior HERDA o
+        // nome do aposentado — a "cria" que leva o nome do ídolo. Sem nenhum dos
+        // dois (dispensa manual): nome novo por nacionalidade.
+        val custom = nomeCustom?.trim()?.takeIf { it.isNotEmpty() }
+        val (nomeGerado, nomeAbrevGerado) = when {
+            custom != null -> custom to abreviarNome(custom)
+            manterNome     -> aposentado.nome to aposentado.nomeAbreviado
+            else           -> gerarNomeAleatorio(aposentado.nacionalidade)
+        }
         return JogadorEntity(
             timeId            = timeId,
             nome              = nomeGerado,
             nomeAbreviado     = nomeAbrevGerado,
             nacionalidade     = aposentado.nacionalidade,
             idade             = idade,
-            posicao           = aposentado.posicao,
-            posicaoSecundaria = aposentado.posicaoSecundaria,
+            posicao           = posJunior,
+            posicaoSecundaria = aposentado.posicaoSecundaria.takeIf { it != posJunior },
             forca             = forca,
             tecnica           = tecnica,
             passe             = passe,
@@ -660,9 +684,9 @@ class JogadorRepository @Inject constructor(
             defesa            = defesa,
             fisico            = fisico,
             potencial         = potencial,
-            salario           = CalculadoraMercado.salarioAlvo(forca, idade, aposentado.posicao),
+            salario           = CalculadoraMercado.salarioAlvo(forca, idade, posJunior),
             contratoAnos      = 3,
-            valorMercado      = CalculadoraMercado.valorDeMercado(forca, idade, 3, aposentado.posicao, potencial),
+            valorMercado      = CalculadoraMercado.valorDeMercado(forca, idade, 3, posJunior, potencial),
             categoriaBase     = true,
             notaMedia         = 6.0f,
             partidasTemporada = 0,
@@ -790,11 +814,17 @@ class JogadorRepository @Inject constructor(
 
         val seniores = jogadorDao.buscarSenioresDoTime(timeId)
         val juniores = jogadorDao.buscarJunioresDoTime(timeId)
+        // Teto da base. Antes não havia nenhum: a base só competia pelo limite
+        // somado de 35, então um clube podia formar juniores indefinidamente desde
+        // que o elenco profissional estivesse enxuto. Forma só o que couber.
+        val vagas = LimitesElenco.vagasNaBase(juniores.size)
+        if (vagas <= 0) return false
+        val aFormar = quantidade.coerceAtMost(vagas)
         val posCount = (seniores + juniores).groupingBy { it.posicao }.eachCount().toMutableMap()
         val nac = (seniores + juniores).groupingBy { it.nacionalidade }.eachCount()
             .maxByOrNull { it.value }?.key ?: "Brasileiro"
 
-        val novos = (0 until quantidade).map {
+        val novos = (0 until aFormar).map {
             val pos = posicaoMaisEscassa(posCount)
             posCount[pos] = (posCount[pos] ?: 0) + 1
             gerarJuniorFormado(timeId, pos, nac)
@@ -888,8 +918,18 @@ class JogadorRepository @Inject constructor(
         )
     }
 
-    /** Retorna o total de jogadores (sênior + base) de um time — para verificar limite de 35. */
+    /**
+     * Total de jogadores (sênior + base). NÃO é a conta de nenhum limite: os
+     * limites são separados, ver [contarSeniores] e [contarBase]. Segue aqui
+     * porque o piso anti-depleção do rollover olha o elenco inteiro.
+     */
     suspend fun contarJogadores(timeId: Int): Int = jogadorDao.contarJogadoresPorTime(timeId)
+
+    /** Profissionais do clube — a conta do limite do elenco (LimitesElenco.MAX_SENIORES). */
+    suspend fun contarSeniores(timeId: Int): Int = jogadorDao.contarSenioresPorTime(timeId)
+
+    /** Jogadores da base — a conta do limite da base (LimitesElenco.MAX_BASE). */
+    suspend fun contarBase(timeId: Int): Int = jogadorDao.contarBasePorTime(timeId)
 
     suspend fun atualizarEscalacao(jogadorId: Int, status: Int, posicao: Posicao? = null) {
         if (posicao != null) jogadorDao.atualizarEscalacaoComPosicao(jogadorId, status, posicao)
@@ -1484,6 +1524,13 @@ class JogadorRepository @Inject constructor(
 
     private val nomesEn = listOf("James","Harry","Jack","Thomas","Oliver","Jamie","Callum","George","Charlie","Alex","Daniel","Tom","Ben","Kyle","Marcus","Luke","Reece","Aaron","Kieran","Mason")
     private val sobrenomesEn = listOf("Smith","Jones","Taylor","Brown","Williams","Wilson","Johnson","Davies","Robinson","Wright","Walker","Roberts","Green","Hall","Wood","Harris","Clark","Baker","Cooper","Bennett")
+
+    /** "Carlos Henrique Silva" → "Carlos S."; nome único volta inteiro. */
+    private fun abreviarNome(nomeCompleto: String): String {
+        val partes = nomeCompleto.trim().split(Regex("\\s+"))
+        return if (partes.size < 2) partes.first()
+               else "${partes.first()} ${partes.last().take(1)}."
+    }
 
     private fun gerarNomeAleatorio(nacionalidade: String): Pair<String, String> {
         val rng = kotlin.random.Random.Default

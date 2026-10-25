@@ -1800,8 +1800,13 @@ class EscalacaoViewModel @Inject constructor(
 
     fun selecionarJogador(jogador: Jogador?) { _jogadorSelecionado.value = jogador }
 
-    fun aposentarJogador(jogadorId: Int) = viewModelScope.launch {
-        jogadorRepository.aposentarJogador(jogadorId)
+    fun aposentarJogador(
+        jogadorId: Int,
+        posicaoJunior: Posicao? = null,
+        manterNome: Boolean = false,
+        novoNome: String? = null
+    ) = viewModelScope.launch {
+        jogadorRepository.aposentarJogador(jogadorId, posicaoJunior, manterNome, novoNome)
     }
 
     fun carregarAdversario(timeId: Int) = viewModelScope.launch {
@@ -2064,9 +2069,10 @@ class MercadoViewModel @Inject constructor(
             _mensagem.value = "Saldo insuficiente para contratar ${jogador.nomeAbreviado}"
             return@launch
         }
-        val qtdElenco = jogadorRepository.contarJogadores(timeId)
-        if (qtdElenco >= 35) {
-            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
+        val qtdElenco = jogadorRepository.contarSeniores(timeId)
+        if (LimitesElenco.elencoCheio(qtdElenco)) {
+            _mensagem.value = "Elenco cheio (${LimitesElenco.MAX_SENIORES}/${LimitesElenco.MAX_SENIORES}). " +
+                "Venda ou dispense um jogador antes de contratar."
             return@launch
         }
         timeRepository.debitarSaldo(timeId, preco)
@@ -2292,9 +2298,10 @@ class ClubesViewModel @Inject constructor(
             _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(preco)}"
             return@launch
         }
-        val qtdElenco = jogadorRepository.contarJogadores(timeJogadorId)
-        if (qtdElenco >= 35) {
-            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
+        val qtdElenco = jogadorRepository.contarSeniores(timeJogadorId)
+        if (LimitesElenco.elencoCheio(qtdElenco)) {
+            _mensagem.value = "Elenco cheio (${LimitesElenco.MAX_SENIORES}/${LimitesElenco.MAX_SENIORES}). " +
+                "Venda ou dispense um jogador antes de contratar."
             return@launch
         }
         timeRepository.debitarSaldo(timeJogadorId, preco)
@@ -3747,9 +3754,10 @@ class JunioresViewModel @Inject constructor(
 
     fun promoverJunior(jogadorId: Int, nomeAbrev: String) = viewModelScope.launch {
         if (timeIdAtual > 0) {
-            val qtdElenco = jogadorRepository.contarJogadores(timeIdAtual)
-            if (qtdElenco >= 35) {
-                _mensagem.value = "Elenco cheio (35/35). Não é possível promover $nomeAbrev."
+            val qtdElenco = jogadorRepository.contarSeniores(timeIdAtual)
+            if (LimitesElenco.elencoCheio(qtdElenco)) {
+                _mensagem.value = "Elenco cheio (${LimitesElenco.MAX_SENIORES}/" +
+                    "${LimitesElenco.MAX_SENIORES}). Não é possível promover $nomeAbrev."
                 return@launch
             }
         }
@@ -4097,9 +4105,10 @@ class JogadoresViewModel @Inject constructor(
             _mensagem.value = "Saldo insuficiente. Necessário: ${formatarValor(preco)}"
             return@launch
         }
-        val qtdElenco = jogadorRepository.contarJogadores(timeId)
-        if (qtdElenco >= 35) {
-            _mensagem.value = "Elenco cheio (35/35). Venda ou dispense um jogador antes de contratar."
+        val qtdElenco = jogadorRepository.contarSeniores(timeId)
+        if (LimitesElenco.elencoCheio(qtdElenco)) {
+            _mensagem.value = "Elenco cheio (${LimitesElenco.MAX_SENIORES}/${LimitesElenco.MAX_SENIORES}). " +
+                "Venda ou dispense um jogador antes de contratar."
             return@launch
         }
         timeRepository.debitarSaldo(timeId, preco)
@@ -4158,6 +4167,17 @@ class JogadoresViewModel @Inject constructor(
     fun dispensarJogador(jogador: Jogador) = viewModelScope.launch {
         jogadorRepository.dispensarParaMercado(jogador.id)
         _mensagem.value = "${jogador.nomeAbreviado} dispensado para o mercado livre."
+    }
+
+    /** Aposenta o jogador; um junior assume a vaga na posição/nome escolhidos. */
+    fun aposentarJogador(
+        jogador: Jogador,
+        posicaoJunior: Posicao,
+        manterNome: Boolean,
+        novoNome: String?
+    ) = viewModelScope.launch {
+        jogadorRepository.aposentarJogador(jogador.id, posicaoJunior, manterNome, novoNome)
+        _mensagem.value = "${jogador.nomeAbreviado} se aposentou. Um jogador da base assumiu a vaga."
     }
 
     private fun formatarValor(centavos: Long): String {

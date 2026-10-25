@@ -273,7 +273,7 @@ fun TabelaScreen(
         LazyColumn(modifier = Modifier.weight(1f)) {
             if (ehGrupos) {
                 gruposCompetencia.forEach { (grupo, grupoTabela) ->
-                    item { GrupoHeader("Zona $grupo") }
+                    item { GrupoHeader("Grupo $grupo") }
                     item { TabelaColunasHeader() }
                     itemsIndexed(grupoTabela) { index, item ->
                         val time = times.find { it.id == item.timeId }

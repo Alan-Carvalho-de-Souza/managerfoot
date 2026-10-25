@@ -152,6 +152,14 @@ interface JogadorDao {
     @Query("SELECT COUNT(*) FROM jogadores WHERE timeId = :timeId AND aposentado = 0")
     suspend fun contarJogadoresPorTime(timeId: Int): Int
 
+    /** Conta só os profissionais — a conta do limite do elenco. */
+    @Query("SELECT COUNT(*) FROM jogadores WHERE timeId = :timeId AND aposentado = 0 AND categoriaBase = 0")
+    suspend fun contarSenioresPorTime(timeId: Int): Int
+
+    /** Conta só os da base — a conta do limite da base, independente do elenco. */
+    @Query("SELECT COUNT(*) FROM jogadores WHERE timeId = :timeId AND aposentado = 0 AND categoriaBase = 1")
+    suspend fun contarBasePorTime(timeId: Int): Int
+
     /** Retorna todos os jogadores sênior ativos (sem base) de um time, incluindo lesionados/suspensos. */
     @Query("SELECT * FROM jogadores WHERE timeId = :timeId AND aposentado = 0 AND categoriaBase = 0")
     suspend fun buscarSenioresDoTime(timeId: Int): List<JogadorEntity>

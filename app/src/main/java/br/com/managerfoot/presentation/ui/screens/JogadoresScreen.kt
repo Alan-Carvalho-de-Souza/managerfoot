@@ -84,9 +84,10 @@ fun JogadoresScreen(
         }
     }
 
-    var jogadorParaOfertar  by remember { mutableStateOf<Jogador?>(null) }
-    var jogadorParaVender   by remember { mutableStateOf<Jogador?>(null) }
-    var jogadorParaRenovar  by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaOfertar   by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaVender    by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaRenovar   by remember { mutableStateOf<Jogador?>(null) }
+    var jogadorParaAposentar by remember { mutableStateOf<Jogador?>(null) }
 
     // Dialog: Renovar / Dispensar (contrato expirado)
     jogadorParaRenovar?.let { jogador ->
@@ -100,7 +101,22 @@ fun JogadoresScreen(
                 vm.dispensarJogador(jogador)
                 jogadorParaRenovar = null
             },
+            onAposentar = if (podeAposentar(jogador)) {
+                { jogadorParaRenovar = null; jogadorParaAposentar = jogador }
+            } else null,
             onDismiss = { jogadorParaRenovar = null }
+        )
+    }
+
+    // Dialog: Aposentar jogador (posição e nome do sucessor)
+    jogadorParaAposentar?.let { jogador ->
+        AposentadoriaDialog(
+            jogador = jogador,
+            onConfirmar = { posicao, manterNome, novoNome ->
+                vm.aposentarJogador(jogador, posicao, manterNome, novoNome)
+                jogadorParaAposentar = null
+            },
+            onDismiss = { jogadorParaAposentar = null }
         )
     }
 
@@ -123,6 +139,9 @@ fun JogadoresScreen(
         VenderDialog(
             jogador = jogador,
             onConfirmar = { vm.venderJogador(jogador); jogadorParaVender = null },
+            onAposentar = if (podeAposentar(jogador)) {
+                { jogadorParaVender = null; jogadorParaAposentar = jogador }
+            } else null,
             onDismiss = { jogadorParaVender = null },
             onIrParaHistorico = onIrParaHistorico?.let { cb ->
                 { id -> jogadorParaVender = null; cb(id) }
@@ -203,6 +222,7 @@ private fun ContratoExpiradoDialog(
     jogador:     Jogador,
     onRenovar:   (novoSalario: Long, novosAnos: Int) -> Unit,
     onDispensar: () -> Unit,
+    onAposentar: (() -> Unit)? = null,
     onDismiss:   () -> Unit
 ) {
     val salarioAtualReais  = jogador.salario / 100L
@@ -280,6 +300,11 @@ private fun ContratoExpiradoDialog(
                             label    = { Text("$anos") }
                         )
                     }
+                }
+
+                if (onAposentar != null) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    BotaoAposentar(onClick = onAposentar)
                 }
             }
         },
@@ -1017,6 +1042,7 @@ private fun OfertaDialog(
 private fun VenderDialog(
     jogador: Jogador,
     onConfirmar: () -> Unit,
+    onAposentar: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onIrParaHistorico: ((Int) -> Unit)? = null
 ) {
@@ -1074,6 +1100,11 @@ private fun VenderDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                if (onAposentar != null) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    BotaoAposentar(onClick = onAposentar)
+                }
             }
         },
         confirmButton = {
@@ -1096,6 +1127,23 @@ private fun VenderDialog(
             }
         }
     )
+}
+
+/** Atalho para o fluxo de aposentadoria, exibido nos dialogs do elenco. */
+@Composable
+private fun BotaoAposentar(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.sm),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+    ) {
+        Text(
+            "Aposentar jogador",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
 }
 
 @Composable

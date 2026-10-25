@@ -482,7 +482,10 @@ fun EscalacaoScreen(
         JogadorDetalheDialog(
             jogador    = jogador,
             onDismiss  = { vm.selecionarJogador(null) },
-            onAposentar = { id -> vm.aposentarJogador(id); vm.selecionarJogador(null) },
+            onAposentar = { id, posicao, manterNome, novoNome ->
+                vm.aposentarJogador(id, posicao, manterNome, novoNome)
+                vm.selecionarJogador(null)
+            },
             onIrParaHistorico = onIrParaHistorico
         )
     }
@@ -1477,10 +1480,22 @@ internal fun posicaoColor(posicao: Posicao): Color = corSetor(posicao.setor)
 private fun JogadorDetalheDialog(
     jogador: Jogador,
     onDismiss: () -> Unit,
-    onAposentar: ((Int) -> Unit)? = null,
+    onAposentar: ((Int, Posicao, Boolean, String?) -> Unit)? = null,
     onIrParaHistorico: ((Int) -> Unit)? = null
 ) {
     var confirmarAposentadoria by remember { mutableStateOf(false) }
+
+    if (confirmarAposentadoria && onAposentar != null) {
+        AposentadoriaDialog(
+            jogador = jogador,
+            onConfirmar = { posicao, manterNome, novoNome ->
+                confirmarAposentadoria = false
+                onAposentar(jogador.id, posicao, manterNome, novoNome)
+                onDismiss()
+            },
+            onDismiss = { confirmarAposentadoria = false }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1662,42 +1677,18 @@ private fun JogadorDetalheDialog(
                 Text("Valor de mercado: ${formatarSaldo(jogador.valorMercado)}", style = MaterialTheme.typography.bodySmall)
 
                 // ── Aposentadoria ───────────────────────────────────
-                if (onAposentar != null && jogador.idade in 33..44 && !jogador.aposentado) {
+                if (onAposentar != null && podeAposentar(jogador)) {
                     HorizontalDivider(Modifier.padding(vertical = Spacing.xs))
-                    if (confirmarAposentadoria) {
-                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                            Text(
-                                "Confirma a aposentadoria de ${jogador.nomeAbreviado}? Esta ação não pode ser desfeita.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                OutlinedButton(
-                                    onClick = { confirmarAposentadoria = false },
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("Cancelar", style = MaterialTheme.typography.labelSmall) }
-                                Button(
-                                    onClick = {
-                                        onAposentar(jogador.id)
-                                        onDismiss()
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                ) { Text("Aposentar", style = MaterialTheme.typography.labelSmall) }
-                            }
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { confirmarAposentadoria = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                        ) {
-                            Text(
-                                "Aposentar jogador",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
+                    OutlinedButton(
+                        onClick = { confirmarAposentadoria = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(
+                            "Aposentar jogador",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
