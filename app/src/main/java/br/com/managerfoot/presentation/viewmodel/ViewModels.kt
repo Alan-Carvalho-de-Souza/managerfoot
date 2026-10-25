@@ -2656,9 +2656,12 @@ class TabelaViewModel @Inject constructor(
         coletaJob = viewModelScope.launch {
             if (campId <= 0) { _tabela.value = emptyList(); return@launch }
             gameRepository.observarTabela(campId).collect { lista ->
-                // 5 e 7 = Apertura/Clausura argentinos; 40 = fase de grupos da
-                // Libertadores, que são 8 grupos de 4.
-                val ehGrupos = divisao == 5 || divisao == 7 || divisao == 40
+                // 5 e 7 = Apertura/Clausura argentinos; 40 e 41 = fases de grupos
+                // da Libertadores e da Sul-Americana, que são 8 grupos de 4. Nestas
+                // o rótulo do grupo ordena primeiro, para a lista já chegar à tela
+                // agrupada — é a mesma ordem que a tela monta, e não a muda.
+                val ehGrupos = divisao == 5 || divisao == 7 ||
+                    divisao == 40 || divisao == 41
                 _tabela.value = if (ehGrupos) {
                     lista.sortedWith(
                         compareBy<ClassificacaoEntity> { it.grupo ?: "Z" }

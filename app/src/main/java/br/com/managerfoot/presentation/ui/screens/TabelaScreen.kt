@@ -80,7 +80,8 @@ fun TabelaScreen(
         campeonatoUruAperturaId, campeonatoUruBId, campeonatoUruClausuraId,
         campeonatoUruIntermedId, campeonatoUruBCompetId, copaId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId
+        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId,
+        campeonatoSulAmericanaId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId,
@@ -99,6 +100,7 @@ fun TabelaScreen(
             campChampionsId = campeonatoChampionsId,
             campEuropaId = campeonatoEuropaId,
             campLibertadoresId = campeonatoLibertadoresId,
+            campSulAmericanaId = campeonatoSulAmericanaId,
             timeJogadorId = timeJogadorId
         )
     }
