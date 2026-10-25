@@ -59,6 +59,7 @@ fun CopaChaveamentoScreen(
     val partidasChampions by vm.partidasChampions.collectAsState()
     val partidasEuropa by vm.partidasEuropa.collectAsState()
     val partidasLibertadores by vm.partidasLibertadores.collectAsState()
+    val partidasIntercontinental by vm.partidasIntercontinental.collectAsState()
 
     LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId) {
         vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId)
@@ -74,6 +75,8 @@ fun CopaChaveamentoScreen(
         if (championsId > 0) add("Champions")
         if (europaLeagueId > 0) add("Europa League")
         if (libertadoresId > 0) add("Libertadores")
+        // A Intercontinental nao tem id no save: a aba aparece quando ha partida.
+        if (partidasIntercontinental.isNotEmpty()) add("Intercontinental")
     }
     val mostrarFiltroPais = copasDisponiveis.size > 1
     var paisSelecionado by remember(copasDisponiveis) { mutableStateOf(copasDisponiveis.firstOrNull() ?: "Brasil") }
@@ -87,6 +90,7 @@ fun CopaChaveamentoScreen(
         "Champions" -> partidasChampions
         "Europa League" -> partidasEuropa
         "Libertadores" -> partidasLibertadores
+        "Intercontinental" -> partidasIntercontinental
         else -> partidas
     }
     val fasesMotor = when (paisSelecionado) {
@@ -96,6 +100,8 @@ fun CopaChaveamentoScreen(
         "Champions" -> MotorCampeonato.CHAMPIONS_FASES
         "Europa League" -> MotorCampeonato.FORMATO_EUROPA_LEAGUE.fases
         "Libertadores" -> MotorCampeonato.FORMATO_LIBERTADORES.fases
+        // Jogo unico: a unica fase e a decisao.
+        "Intercontinental" -> listOf("Final")
         else -> MotorCampeonato.COPA_FASES
     }
 
@@ -125,6 +131,7 @@ fun CopaChaveamentoScreen(
         "Champions" -> "Champions League"
         "Europa League" -> "Europa League"
         "Libertadores" -> "Libertadores"
+        "Intercontinental" -> "Copa Intercontinental"
         else -> "Copa do Brasil"
     }
 

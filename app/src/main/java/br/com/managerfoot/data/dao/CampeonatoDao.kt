@@ -19,6 +19,17 @@ interface CampeonatoDao {
     @Query("SELECT * FROM campeonatos WHERE id = :id")
     suspend fun buscarPorId(id: Int): CampeonatoEntity?
 
+    /**
+     * A competição mais recente de um tipo, ou null se nunca houve nenhuma.
+     *
+     * Serve para competições que não guardam id no save porque são criadas e
+     * resolvidas de uma vez no fim da temporada — a Copa Intercontinental é o
+     * caso. Como ela pertence à temporada que ENCERROU, buscar pela temporada
+     * corrente não a encontraria; o que a UI quer é sempre a última disputada.
+     */
+    @Query("SELECT * FROM campeonatos WHERE tipo = :tipo ORDER BY id DESC LIMIT 1")
+    fun observeMaisRecentePorTipo(tipo: TipoCampeonato): Flow<CampeonatoEntity?>
+
     @Query("SELECT * FROM campeonatos WHERE encerrado = 0 ORDER BY tipo")
     suspend fun buscarAtivos(): List<CampeonatoEntity>
 

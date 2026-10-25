@@ -3101,6 +3101,13 @@ class CopaChaveamentoViewModel @Inject constructor(
     private val _partidasIta = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
     val partidasIta: StateFlow<List<CopaPartidaDto>> = _partidasIta.asStateFlow()
 
+    // Copa Intercontinental: jogo único entre os campeões da Champions e da
+    // Libertadores. Não recebe id por parâmetro como as outras — ela não tem id
+    // no save, e o repositório descobre sozinho qual é a edição mais recente.
+    val partidasIntercontinental: StateFlow<List<CopaPartidaDto>> =
+        gameRepository.observarCopaIntercontinental()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     // Mata-mata da Champions: play-off + oitavas às finais. A Fase de Liga não
     // entra aqui — ela é uma tabela, e aparece na tela de Classificação.
     private val _partidasChampions = MutableStateFlow<List<CopaPartidaDto>>(emptyList())

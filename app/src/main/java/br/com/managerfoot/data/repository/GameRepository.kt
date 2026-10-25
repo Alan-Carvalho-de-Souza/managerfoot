@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -2131,6 +2132,20 @@ class GameRepository @Inject constructor(
     /** Vice-campeonatos de um time — usado opcionalmente em ConquistasScreen. */
     fun observarVicesDoTime(timeId: Int): Flow<List<HallDaFamaEntity>> =
         hallDaFamaDao.observeVicesDoTime(timeId)
+
+    /**
+     * Partidas da Copa Intercontinental mais recente, para a aba de Copas.
+     *
+     * Ela não tem id no save, por ser criada e simulada de uma vez no fim da
+     * temporada; então a própria consulta descobre qual é, sempre a última.
+     * Devolve lista vazia enquanto nenhuma edição tiver sido disputada.
+     */
+    fun observarCopaIntercontinental(): Flow<List<CopaPartidaDto>> =
+        campeonatoDao.observeMaisRecentePorTipo(TipoCampeonato.INTERCONTINENTAL)
+            .flatMapLatest { camp ->
+                if (camp == null) flowOf(emptyList())
+                else partidaDao.observeCopaPartidas(camp.id)
+            }
 
     fun observarCopaPartidas(copaId: Int): Flow<List<CopaPartidaDto>> =
         partidaDao.observeCopaPartidas(copaId)
