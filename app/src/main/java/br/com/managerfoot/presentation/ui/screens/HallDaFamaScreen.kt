@@ -85,11 +85,12 @@ fun HallDaFamaScreen(
         31 to "Europa League",
         33 to "Supercopa da UEFA"
     )
-    // Competições continentais sul-americanas: a Libertadores é a 34, e a 35 fica
-    // reservada à Copa Sul-Americana, que ainda não existe no jogo.
+    // Competições continentais sul-americanas: 34 Libertadores, 35 Copa
+    // Sul-Americana.
     val opcoesAmericaDoSul = listOf(
         800 to "Todas",
-        34 to "Libertadores"
+        34 to "Libertadores",
+        35 to "Copa Sul-Americana"
     )
 
     // Intercontinental: não pertence a continente nenhum. A 37 fica reservada ao

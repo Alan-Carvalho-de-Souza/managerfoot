@@ -439,6 +439,18 @@ class InicioViewModel @Inject constructor(
                 temporadaId, 2026, timeJogadorId = timeId
             )
 
+            // ── Copa Sul-Americana — Primeira Fase nacional + 8 grupos de 4 ────
+            // Depende da Libertadores que acabou de nascer: 4 dos 32 clubes dos
+            // grupos sao os eliminados da Fase 3 da Pre dela, e os 8 adversarios
+            // dos playoffs sao os terceiros dos grupos dela. Devolve -1 enquanto o
+            // jogo nao tiver 8 clubes por associacao pequena — 4 para cada
+            // competicao.
+            val sulAmericanaId = gameRepository.criarSulAmericanaDaTemporada(
+                temporadaId, 2026,
+                libertadoresId = libertadoresId,
+                timeJogadorId  = timeId
+            )
+
             // Determina em qual divisão o time escolhido está
             val timeEntity2 = timeDao.buscarPorId(timeId)
             val divJogador = timeEntity2?.divisao ?: 1
@@ -483,6 +495,7 @@ class InicioViewModel @Inject constructor(
                 championsId = championsId,
                 europaLeagueId = europaLeagueId,
                 libertadoresId = libertadoresId,
+                sulAmericanaId = sulAmericanaId,
                 supercopaId = supercopaId,
                 ano = 2026
             )
@@ -729,7 +742,7 @@ class DashboardViewModel @Inject constructor(
         // durante a simulação para evitar exibir o resultado antes da animação finalizar
         val copaIdInicial = save.copaId
         _ultimosResultados.value = gameRepository.buscarUltimosResultados(
-            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
+            timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.championsId, save.europaLeagueId, save.libertadoresId, save.sulAmericanaId, save.campeonatoAmistososId).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
         _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
@@ -1063,6 +1076,30 @@ class DashboardViewModel @Inject constructor(
                             anoAtual = save.anoAtual, temporadaId = save.temporadaId
                         )
                     }
+                    // ── Copa Sul-Americana (Primeira Fase + grupos + mata-mata) ─────
+                    // Mesmo caminho da Libertadores, e com o id dela ao lado: os
+                    // 4 eliminados da Pre e os 8 terceiros de grupo da
+                    // Libertadores sao 12 dos 56 clubes desta competicao.
+                    if (save.sulAmericanaId > 0 && ctx.campeonatoId == save.sulAmericanaId && !resultadoFinal.precisaPenaltis) {
+                        gameRepository.verificarEAvancarFaseSulAmericana(
+                            sulAmericanaId = save.sulAmericanaId, libertadoresId = save.libertadoresId,
+                            anoAtual = save.anoAtual,
+                            timeJogadorId = save.timeIdJogador, temporadaId = save.temporadaId
+                        )
+                    }
+                    if (save.sulAmericanaId > 0 && ctx.campeonatoId == save.sulAmericanaId && resultadoFinal.precisaPenaltis) {
+                        _dadosPenaltisAdversario.value = gameRepository.buscarDadosPenaltisAdversario(
+                            copaId = save.sulAmericanaId, voltaPartidaId = resultadoFinal.partidaId,
+                            timeJogadorId = save.timeIdJogador
+                        )
+                    }
+                    if (ctx.campeonatoId != save.sulAmericanaId && save.sulAmericanaId > 0) {
+                        gameRepository.simularProximaRodadaSulAmericanaSeNecessario(
+                            sulAmericanaId = save.sulAmericanaId, libertadoresId = save.libertadoresId,
+                            timeJogadorId = save.timeIdJogador,
+                            anoAtual = save.anoAtual, temporadaId = save.temporadaId
+                        )
+                    }
                     // ── Copa Intercontinental ───────────────────────────────────────
                     // Ela nasce no meio da temporada, assim que Champions e
                     // Libertadores têm campeão; então a cada partida do usuário
@@ -1301,7 +1338,7 @@ class DashboardViewModel @Inject constructor(
                         save.timeIdJogador,
                         listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
                             save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId,
-                            save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
+                            save.championsId, save.europaLeagueId, save.libertadoresId, save.sulAmericanaId, save.campeonatoAmistososId).filter { it > 0 }
                     )
                 }
             } catch (e: Exception) {
@@ -1317,7 +1354,7 @@ class DashboardViewModel @Inject constructor(
             _ultimosResultados.value = gameRepository.buscarUltimosResultados(
                 save.timeIdJogador, listOf(save.campeonatoId, save.copaId, save.copaArgId, save.copaInglaterraId, save.supercopaId,
                     save.campeonatoArgClausuraId, save.campeonatoUruClausuraId, save.campeonatoUruIntermedId,
-                    save.championsId, save.europaLeagueId, save.libertadoresId, save.campeonatoAmistososId).filter { it > 0 }
+                    save.championsId, save.europaLeagueId, save.libertadoresId, save.sulAmericanaId, save.campeonatoAmistososId).filter { it > 0 }
             )
             _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(save.campeonatoId, save.timeIdJogador)
 
@@ -1385,6 +1422,7 @@ class DashboardViewModel @Inject constructor(
         val championsId = if (save.championsId > 0 && _contextoSimulacao?.campeonatoId == save.championsId) save.championsId else -1
         val europaLeagueId = if (save.europaLeagueId > 0 && _contextoSimulacao?.campeonatoId == save.europaLeagueId) save.europaLeagueId else -1
         val libertadoresId = if (save.libertadoresId > 0 && _contextoSimulacao?.campeonatoId == save.libertadoresId) save.libertadoresId else -1
+        val sulAmericanaId = if (save.sulAmericanaId > 0 && _contextoSimulacao?.campeonatoId == save.sulAmericanaId) save.sulAmericanaId else -1
         try {
             when {
                 _penaltisParaSupercopa -> {
@@ -1459,6 +1497,17 @@ class DashboardViewModel @Inject constructor(
                         temporadaId    = save.temporadaId
                     )
                 }
+                sulAmericanaId > 0 -> {
+                    gameRepository.persistirResultadoPenaltisJogadorSulAmericana(
+                        resultado      = resultado,
+                        sulAmericanaId = sulAmericanaId,
+                        libertadoresId = save.libertadoresId,
+                        anoAtual       = save.anoAtual,
+                        voltaPartidaId = resultadoPartida.partidaId,
+                        timeJogadorId  = save.timeIdJogador,
+                        temporadaId    = save.temporadaId
+                    )
+                }
                 libertadoresId > 0 -> {
                     gameRepository.persistirResultadoPenaltisJogadorLibertadores(
                         resultado      = resultado,
@@ -1518,6 +1567,7 @@ class DashboardViewModel @Inject constructor(
         val championsId = if (save.championsId > 0 && _contextoSimulacao?.campeonatoId == save.championsId) save.championsId else -1
         val europaLeagueId = if (save.europaLeagueId > 0 && _contextoSimulacao?.campeonatoId == save.europaLeagueId) save.europaLeagueId else -1
         val libertadoresId = if (save.libertadoresId > 0 && _contextoSimulacao?.campeonatoId == save.libertadoresId) save.libertadoresId else -1
+        val sulAmericanaId = if (save.sulAmericanaId > 0 && _contextoSimulacao?.campeonatoId == save.sulAmericanaId) save.sulAmericanaId else -1
         try {
             val penaltis = when {
                 _penaltisParaSupercopa -> {
@@ -1584,6 +1634,26 @@ class DashboardViewModel @Inject constructor(
                         avancoAlternativo    = {
                             gameRepository.verificarEAvancarFaseEuropa(
                                 europaLeagueId = europaLeagueId,
+                                anoAtual       = save.anoAtual,
+                                timeJogadorId  = save.timeIdJogador,
+                                temporadaId    = save.temporadaId
+                            )
+                        }
+                    )
+                }
+                sulAmericanaId > 0 -> {
+                    gameRepository.simularEPersistirPenaltisJogador(
+                        copaId               = sulAmericanaId,
+                        anoAtual             = save.anoAtual,
+                        voltaPartidaId       = resultado.partidaId,
+                        cobradoresJogador    = cobradores,
+                        timeJogadorId        = save.timeIdJogador,
+                        goleiroJogadorDefesa = goleiroDefesa,
+                        temporadaId          = save.temporadaId,
+                        avancoAlternativo    = {
+                            gameRepository.verificarEAvancarFaseSulAmericana(
+                                sulAmericanaId = sulAmericanaId,
+                                libertadoresId = save.libertadoresId,
                                 anoAtual       = save.anoAtual,
                                 timeJogadorId  = save.timeIdJogador,
                                 temporadaId    = save.temporadaId
@@ -1679,6 +1749,7 @@ class DashboardViewModel @Inject constructor(
                 championsId               = save.championsId,
                 europaLeagueId            = save.europaLeagueId,
                 libertadoresId            = save.libertadoresId,
+                sulAmericanaId            = save.sulAmericanaId,
                 temporadaId              = save.temporadaId,
                 ano                      = anoTemporada,
                 timeJogadorId            = save.timeIdJogador
@@ -1724,6 +1795,7 @@ class DashboardViewModel @Inject constructor(
                 championsId    = novaInfo.championsId,
                 europaLeagueId = novaInfo.europaLeagueId,
                 libertadoresId = novaInfo.libertadoresId,
+                sulAmericanaId = novaInfo.sulAmericanaId,
                 supercopaId   = novaInfo.supercopaId,
                 supercopaInglaterraId = novaInfo.supercopaInglaterraId,
                 supercopaEspanholaId  = novaInfo.supercopaEspanholaId,
@@ -2414,6 +2486,7 @@ class TabelaViewModel @Inject constructor(
     private var championsId: Int = -1
     private var europaLeagueId: Int = -1
     private var libertadoresId: Int = -1
+    private var sulAmericanaId: Int = -1
     private var copaId: Int = -1
 
     // timeId do campeão da Copa do Brasil corrente (-1 enquanto não encerrada)
@@ -2427,7 +2500,7 @@ class TabelaViewModel @Inject constructor(
     // Job do collector ativo — cancelado sempre que a divisão muda
     private var coletaJob: kotlinx.coroutines.Job? = null
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruAperturaId: Int = -1, campUruBId: Int = -1, campUruClausuraId: Int = -1, campUruIntermedId: Int = -1, campUruBCompetId: Int = -1, copaIdBrasil: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, campSulAmericanaId: Int = -1, timeJogadorId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2447,13 +2520,14 @@ class TabelaViewModel @Inject constructor(
         championsId = campChampionsId
         europaLeagueId = campEuropaId
         libertadoresId = campLibertadoresId
+        sulAmericanaId = campSulAmericanaId
         copaId = copaIdBrasil
         // Busca o campeão da Copa do Brasil se já encerrada
         _copaChampeaoTimeId.value = gameRepository.buscarCampeaoCopaSeEncerrada(copaIdBrasil)
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais
         listOf(campAId, campBId, campCId, campDId, campArgAId, campArgBId, campArgClausuraId,
-               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId, campChampionshipId, campLaLigaId, campSerieAId, campChampionsId, campEuropaId, campLibertadoresId).filter { it > 0 }.forEach { id ->
+               campUruAperturaId, campUruBId, campUruClausuraId, campUruIntermedId, campUruBCompetId, campPremierId, campChampionshipId, campLaLigaId, campSerieAId, campChampionsId, campEuropaId, campLibertadoresId, campSulAmericanaId).filter { it > 0 }.forEach { id ->
             gameRepository.recalcularClassificacao(id)
         }
         // Determina a divisão inicial pelo time do jogador; usa Série A como fallback.
@@ -2502,6 +2576,8 @@ class TabelaViewModel @Inject constructor(
         // 40 = fase de grupos da Libertadores: 8 tabelas de 4, filtradas pelo
         // rótulo do grupo em ClassificacaoEntity (ver coletarTabela).
         40 -> libertadoresId
+        // 41 = fase de grupos da Sul-Americana, com a mesma forma: 8 tabelas de 4.
+        41 -> sulAmericanaId
         else -> campeonatoArgAId
     }
 
@@ -2654,6 +2730,7 @@ class ArtilheirosViewModel @Inject constructor(
     private var championsId: Int = -1
     private var europaLeagueId: Int = -1
     private var libertadoresId: Int = -1
+    private var sulAmericanaId: Int = -1
 
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -2661,7 +2738,7 @@ class ArtilheirosViewModel @Inject constructor(
     private val _divisaoHistoricoSelecionada = MutableStateFlow(0)
     val divisaoHistoricoSelecionada: StateFlow<Int> = _divisaoHistoricoSelecionada.asStateFlow()
 
-    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
+    fun carregar(campAId: Int, campBId: Int, campCId: Int = -1, campDId: Int = -1, copaId: Int = -1, copaArgId: Int = -1, campArgAId: Int = -1, campArgBId: Int = -1, campArgClausuraId: Int = -1, campUruApertId: Int = -1, campUruInterId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1, campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1, campAmistosos: Int = -1, copaIng: Int = -1, campChampionsId: Int = -1, campEuropaId: Int = -1, campLibertadoresId: Int = -1, campSulAmericanaId: Int = -1, divisaoInicial: Int = 1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -2685,6 +2762,7 @@ class ArtilheirosViewModel @Inject constructor(
         championsId = campChampionsId
         europaLeagueId = campEuropaId
         libertadoresId = campLibertadoresId
+        sulAmericanaId = campSulAmericanaId
         _divisaoSelecionada.value = divisaoInicial
         coletarArtilheiros(divisaoInicial)
         launch { gameRepository.observarArtilheirosAllTime().collect { _artilheirosAllTime.value = it } }
@@ -2716,6 +2794,7 @@ class ArtilheirosViewModel @Inject constructor(
         35 -> championsId   // Champions League (Fase de Liga + mata-mata)
         36 -> europaLeagueId // Europa League, idem
         37 -> libertadoresId // Libertadores (Pré + grupos + mata-mata)
+        38 -> sulAmericanaId // Copa Sul-Americana (Primeira Fase + grupos + mata-mata)
         else -> -1 // div=6,25,26 (combinados) e div=0,100,200,300 (todos) tratados em coletarArtilheiros
     }
 
@@ -2732,7 +2811,7 @@ class ArtilheirosViewModel @Inject constructor(
         35, 36              -> Continentes.EUROPA
         // A Libertadores e gravada com pais = Continentes.AMERICA_DO_SUL, pelo
         // mesmo motivo: um torneio continental nao pertence a um pais.
-        37                  -> Continentes.AMERICA_DO_SUL
+        37, 38              -> Continentes.AMERICA_DO_SUL
         else                -> null
     }
 
@@ -2755,6 +2834,7 @@ class ArtilheirosViewModel @Inject constructor(
         35          -> listOf("CONTINENTAL")          // Champions League
         36          -> listOf("CONTINENTAL")          // Europa League
         37          -> listOf("CONTINENTAL")          // Libertadores
+        38          -> listOf("CONTINENTAL")          // Copa Sul-Americana
         else -> emptyList()
     }
 
@@ -2768,7 +2848,7 @@ class ArtilheirosViewModel @Inject constructor(
                            campeonatoUruBId, campeonatoUruBCompetId,
                            campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId,
                            campeonatoSerieAId, copaInglaterraId, campeonatoAmistososId,
-                           championsId, europaLeagueId, libertadoresId).filter { it > 0 }
+                           championsId, europaLeagueId, libertadoresId, sulAmericanaId).filter { it > 0 }
             // Combinados por país
             100  -> listOf(campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId).filter { it > 0 }
             200  -> listOf(campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId, copaArgId).filter { it > 0 }
@@ -3164,6 +3244,11 @@ class CopaChaveamentoViewModel @Inject constructor(
     private val _partidasLibertadores = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
     val partidasLibertadores: StateFlow<List<CopaPartidaDto>> = _partidasLibertadores.asStateFlow()
 
+    // Chaveamento da Sul-Americana: a Primeira Fase nacional e o mata-mata, dos
+    // playoffs à final. A fase de grupos fica de fora pelo mesmo motivo.
+    private val _partidasSulAmericana = MutableStateFlow<List<CopaPartidaDto>>(emptyList())
+    val partidasSulAmericana: StateFlow<List<CopaPartidaDto>> = _partidasSulAmericana.asStateFlow()
+
     fun carregar(copaId: Int) = viewModelScope.launch {
         if (copaId <= 0) return@launch
         gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it }
@@ -3174,7 +3259,8 @@ class CopaChaveamentoViewModel @Inject constructor(
         copaEspanholaId: Int = -1, copaItalianaId: Int = -1,
         championsId: Int = -1,
         europaLeagueId: Int = -1,
-        libertadoresId: Int = -1
+        libertadoresId: Int = -1,
+        sulAmericanaId: Int = -1
     ) = viewModelScope.launch {
         if (copaId > 0) {
             launch { gameRepository.observarCopaPartidas(copaId).collect { _partidas.value = it } }
@@ -3199,6 +3285,9 @@ class CopaChaveamentoViewModel @Inject constructor(
         }
         if (libertadoresId > 0) {
             launch { gameRepository.observarCopaPartidas(libertadoresId).collect { _partidasLibertadores.value = it } }
+        }
+        if (sulAmericanaId > 0) {
+            launch { gameRepository.observarCopaPartidas(sulAmericanaId).collect { _partidasSulAmericana.value = it } }
         }
     }
 }
@@ -3884,6 +3973,7 @@ class RodadaViewModel @Inject constructor(
     private var campeonatoChampionsId = -1
     private var campeonatoEuropaId = -1
     private var campeonatoLibertadoresId = -1
+    private var campeonatoSulAmericanaId = -1
 
     private var coletarJob: Job? = null
 
@@ -3891,7 +3981,7 @@ class RodadaViewModel @Inject constructor(
                  campUruApertId: Int = -1, campUruIntermedId: Int = -1, campUruClausId: Int = -1, campUruBId: Int = -1, campUruBCompetId: Int = -1,
                  campPremierId: Int = -1, campChampionshipId: Int = -1, campLaLigaId: Int = -1, campSerieAId: Int = -1,
                  campChampionsId: Int = -1, campEuropaId: Int = -1,
-                 campLibertadoresId: Int = -1) = viewModelScope.launch {
+                 campLibertadoresId: Int = -1, campSulAmericanaId: Int = -1) = viewModelScope.launch {
         campeonatoAId = campAId
         campeonatoBId = campBId
         campeonatoCId = campCId
@@ -3911,6 +4001,7 @@ class RodadaViewModel @Inject constructor(
         campeonatoChampionsId = campChampionsId
         campeonatoEuropaId = campEuropaId
         campeonatoLibertadoresId = campLibertadoresId
+        campeonatoSulAmericanaId = campSulAmericanaId
         atualizarMaxEColetar()
     }
 
@@ -3921,15 +4012,21 @@ class RodadaViewModel @Inject constructor(
         // dela é a ida da Fase 1 da Pré, que já está decidida quando o jogador
         // chega aqui. Se os grupos ainda não foram sorteados, a coerção abaixo
         // leva para a última rodada da Pré, que é a que existe.
-        _rodadaSelecionada.value =
-            if (divisao == 40) MotorCampeonato.FORMATO_LIBERTADORES.rodadaBaseGrupos else 1
+        _rodadaSelecionada.value = when (divisao) {
+            40   -> MotorCampeonato.FORMATO_LIBERTADORES.rodadaBaseGrupos
+            42   -> MotorCampeonato.FORMATO_SULAMERICANA.rodadaBaseGrupos
+            else -> 1
+        }
         atualizarMaxEColetar()
     }
 
     fun selecionarRodada(rodada: Int) = viewModelScope.launch {
         if (_rodadaSelecionada.value == rodada) return@launch
         _rodadaSelecionada.value = rodada
-        coletar(campIdAtual(), rodada, incluirFases = _divisaoSelecionada.value == 40)
+        coletar(
+            campIdAtual(), rodada,
+            incluirFases = _divisaoSelecionada.value == 40 || _divisaoSelecionada.value == 42
+        )
     }
 
     private suspend fun atualizarMaxEColetar() {
@@ -3937,12 +4034,13 @@ class RodadaViewModel @Inject constructor(
         // Divisões de mata-mata, que compartilham o campeonatoId da fase anterior:
         // 8 e 9 = Apertura/Clausura argentinos, 31 = play-off e mata-mata da Champions,
         // 33 = o mesmo na Europa League.
-        if (div == 8 || div == 9 || div == 31 || div == 33 || div == 41) {
+        if (div == 8 || div == 9 || div == 31 || div == 33 || div == 41 || div == 43) {
             val campId = when (div) {
                 8    -> campeonatoArgAId
                 9    -> campeonatoArgClausuraId
                 33   -> campeonatoEuropaId
                 41   -> campeonatoLibertadoresId
+                43   -> campeonatoSulAmericanaId
                 else -> campeonatoChampionsId
             }
             _partidas.value = emptyList()
@@ -3967,7 +4065,7 @@ class RodadaViewModel @Inject constructor(
             else rodadas.minByOrNull { kotlin.math.abs(it - anterior) } ?: rodadas.first()
         _rodadaSelecionada.value = rodada
         // Só a Libertadores mistura partidas com fase no calendário por rodada.
-        coletar(campId, rodada, incluirFases = div == 40)
+        coletar(campId, rodada, incluirFases = div == 40 || div == 42)
     }
 
     /**
@@ -3984,8 +4082,12 @@ class RodadaViewModel @Inject constructor(
      */
     private suspend fun rodadasDaDivisao(div: Int, campId: Int): List<Int> {
         val ultima = partidaDao.maxRodada(campId).coerceAtLeast(1)
-        if (div != 40) return (1..ultima).toList()
-        val formato = MotorCampeonato.FORMATO_LIBERTADORES
+        if (div != 40 && div != 42) return (1..ultima).toList()
+        // A Sul-Americana tem a mesma forma: a Primeira Fase na rodada 1, os
+        // grupos nas 11 a 16 e o mata-mata da 21 em diante.
+        val formato =
+            if (div == 42) MotorCampeonato.FORMATO_SULAMERICANA
+            else MotorCampeonato.FORMATO_LIBERTADORES
         // maxRodada só conta partidas SEM fase, ou seja, só as da fase de grupos:
         // enquanto o sorteio não acontece ela devolve 0 e só a Pré existe.
         val temGrupos = ultima >= formato.rodadaBaseGrupos
@@ -4030,6 +4132,8 @@ class RodadaViewModel @Inject constructor(
         // fase = null, mas as rodadas vão de 11 a 16, e não de 1 a 6 — a Pré
         // ocupa as rodadas 1..6 e aparece na visão de mata-mata (código 41).
         40 -> campeonatoLibertadoresId
+        // 42 = Primeira Fase e grupos da Sul-Americana; o mata-mata dela é o 43.
+        42 -> campeonatoSulAmericanaId
         else -> campeonatoArgAId
     }
 
@@ -4051,6 +4155,9 @@ class RodadaViewModel @Inject constructor(
         if (divisao == 40) {
             MotorCampeonato.FORMATO_LIBERTADORES.rotuloDaRodadaPre(rodada)?.let { return it }
         }
+        if (divisao == 42) {
+            MotorCampeonato.FORMATO_SULAMERICANA.rotuloDaRodadaPre(rodada)?.let { return it }
+        }
         return "Rodada $rodada"
     }
 
@@ -4060,6 +4167,9 @@ class RodadaViewModel @Inject constructor(
         // A Libertadores começa nas três fases da Pré-Libertadores, que antecedem
         // os grupos, e segue das oitavas à final.
         41   -> MotorCampeonato.FORMATO_LIBERTADORES.fases
+        // A Sul-Americana começa na Primeira Fase nacional e tem os playoffs
+        // entre os grupos e as oitavas.
+        43   -> MotorCampeonato.FORMATO_SULAMERICANA.fases
         else -> ARG_FASES_ORDER
     }
 }

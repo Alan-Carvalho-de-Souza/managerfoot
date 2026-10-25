@@ -899,7 +899,17 @@ object MotorCampeonato {
         val ordemGlobalPre: IntArray,
         val ordemGlobalGrupos: IntArray,
         /** Ida/volta de Oitavas, Quartas e Semi, mais a casa única da Final. */
-        val ordemGlobalMataMata: IntArray
+        val ordemGlobalMataMata: IntArray,
+        /**
+         * Se as fases prévias são de PARTIDA ÚNICA, e não de ida e volta.
+         *
+         * A Pré-Libertadores é ida e volta, e cada fase dela ocupa duas rodadas; a
+         * Primeira Fase da Sul-Americana é de partida única com pênaltis, e ocupa
+         * uma. É o que muda a numeração das rodadas da Pré e o rótulo que o
+         * jogador lê — "Primeira Fase", e não "Primeira Fase — Ida" de um jogo de
+         * volta que não existe.
+         */
+        val preDeJogoUnico: Boolean = false
     ) {
         /** Todas as fases nomeadas, na ordem — usada pelo chaveamento na UI. */
         val fases: List<String> get() = preFases + fasesMataMata
@@ -908,11 +918,17 @@ object MotorCampeonato {
         val totalRodadas: Int
             get() = rodadaBaseMataMata + rodadaIdaDeFase(fasesMataMata.lastIndex)
 
-        /** rodada de ida da fase prévia de índice [faseIndex] (0 = Fase 1). */
-        fun rodadaIdaDaPreFase(faseIndex: Int): Int = rodadaIdaDeFase(faseIndex)
+        /**
+         * rodada de ida da fase prévia de índice [faseIndex] (0 = Fase 1). Com
+         * [preDeJogoUnico] cada fase prévia ocupa uma rodada só, então a conta é
+         * sequencial em vez de de duas em duas.
+         */
+        fun rodadaIdaDaPreFase(faseIndex: Int): Int =
+            if (preDeJogoUnico) faseIndex + 1 else rodadaIdaDeFase(faseIndex)
 
         /** Última rodada da Pré: a volta da última fase prévia (6, com 3 fases). */
-        val ultimaRodadaDaPre: Int get() = rodadaIdaDaPreFase(preFases.lastIndex) + 1
+        val ultimaRodadaDaPre: Int
+            get() = rodadaIdaDaPreFase(preFases.lastIndex) + (if (preDeJogoUnico) 0 else 1)
 
         /** As rodadas que a Pré ocupa, na ordem em que são jogadas. */
         val rodadasDaPre: List<Int> get() = (1..ultimaRodadaDaPre).toList()
@@ -932,6 +948,8 @@ object MotorCampeonato {
          */
         fun rotuloDaRodadaPre(rodada: Int): String? {
             if (rodada < 1 || rodada > ultimaRodadaDaPre) return null
+            // Partida única: a rodada É a fase, sem ida nem volta a distinguir.
+            if (preDeJogoUnico) return preFases[rodada - 1]
             val fase = preFases[(rodada - 1) / 2]
             return if ((rodada - 1) % 2 == 0) "$fase — Ida" else "$fase — Volta"
         }
@@ -980,6 +998,45 @@ object MotorCampeonato {
         ordemGlobalGrupos   = intArrayOf(45, 75, 105, 135, 165, 195),
         //   Oitavas 265/275, Quartas 295/305, Semi 335/345, Final 385 (jogo único)
         ordemGlobalMataMata = intArrayOf(265, 275, 295, 305, 335, 345, 385)
+    )
+
+    /**
+     * A Copa Sul-Americana, a irmã menor da Libertadores — e **acoplada a ela**:
+     * 4 dos 32 clubes dos grupos são os eliminados da Fase 3 da Pré-Libertadores,
+     * e os 8 adversários dos playoffs são os terceiros dos grupos dela.
+     *
+     * É esse acoplamento que fixa as casas do calendário, e não o gosto:
+     *
+     *  - a Primeira Fase (41) é livre, porque não depende da Libertadores;
+     *  - os grupos (52..202) começam depois da Fase 3 da Pré (39), de onde vêm
+     *    os 4 clubes que completam os 32;
+     *  - os playoffs (212/222) começam depois da última rodada dos grupos da
+     *    Libertadores (195), que é quando os 8 terceiros existem;
+     *  - a final (372) vem antes da final da Libertadores (385), como na
+     *    competição real.
+     *
+     * Nenhuma casa coincide com as da Libertadores, com as das europeias nem com
+     * os múltiplos de 10 das ligas nacionais.
+     *
+     * As rodadas, por campeonato: a Primeira Fase ocupa a 1, os grupos 11..16 e
+     * o mata-mata 21..29 — cinco fases, porque os playoffs são uma delas.
+     */
+    val FORMATO_SULAMERICANA = FormatoLibertadores(
+        nome                = "Copa Sul-Americana",
+        // Uma fase prévia só, e de PARTIDA ÚNICA entre clubes do mesmo país.
+        preFases            = listOf(ListaDeAcessoSulAmericana.PRIMEIRA_FASE),
+        preDeJogoUnico      = true,
+        rodadaBaseGrupos    = 11,
+        rodadasGrupos       = (ListaDeAcessoSulAmericana.CLUBES_POR_GRUPO - 1) * 2,  // 6
+        rodadaBaseMataMata  = 20,
+        // Os playoffs são uma fase de mata-mata como as outras: ida e volta, e os
+        // vencedores seguem. Tratá-los como fase evita uma máquina à parte.
+        fasesMataMata       = listOf("Playoffs", "Oitavas", "Quartas", "Semi", "Final"),
+        ordemGlobalPre      = intArrayOf(41),
+        ordemGlobalGrupos   = intArrayOf(52, 82, 112, 142, 172, 202),
+        //   Playoffs 212/222, Oitavas 242/252, Quartas 282/292, Semi 322/332,
+        //   Final 372 (jogo único)
+        ordemGlobalMataMata = intArrayOf(212, 222, 242, 252, 282, 292, 322, 332, 372)
     )
 
     /**

@@ -47,6 +47,7 @@ fun CopaChaveamentoScreen(
     championsId: Int = -1,
     europaLeagueId: Int = -1,
     libertadoresId: Int = -1,
+    sulAmericanaId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit,
     vm: CopaChaveamentoViewModel = hiltViewModel()
@@ -59,10 +60,11 @@ fun CopaChaveamentoScreen(
     val partidasChampions by vm.partidasChampions.collectAsState()
     val partidasEuropa by vm.partidasEuropa.collectAsState()
     val partidasLibertadores by vm.partidasLibertadores.collectAsState()
+    val partidasSulAmericana by vm.partidasSulAmericana.collectAsState()
     val partidasIntercontinental by vm.partidasIntercontinental.collectAsState()
 
-    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId) {
-        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId)
+    LaunchedEffect(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId, sulAmericanaId) {
+        vm.carregarTodas(copaId, copaArgId, copaInglaterraId, copaEspanholaId, copaItalianaId, championsId, europaLeagueId, libertadoresId, sulAmericanaId)
     }
 
     // Copa inicial exibida: prioriza a que existe (Brasil > Argentina > Inglaterra > Espanha > Itália)
@@ -75,6 +77,7 @@ fun CopaChaveamentoScreen(
         if (championsId > 0) add("Champions")
         if (europaLeagueId > 0) add("Europa League")
         if (libertadoresId > 0) add("Libertadores")
+        if (sulAmericanaId > 0) add("Sul-Americana")
         // A Intercontinental nao tem id no save: a aba aparece quando ha partida.
         if (partidasIntercontinental.isNotEmpty()) add("Intercontinental")
     }
@@ -90,6 +93,7 @@ fun CopaChaveamentoScreen(
         "Champions" -> partidasChampions
         "Europa League" -> partidasEuropa
         "Libertadores" -> partidasLibertadores
+        "Sul-Americana" -> partidasSulAmericana
         "Intercontinental" -> partidasIntercontinental
         else -> partidas
     }
@@ -100,6 +104,7 @@ fun CopaChaveamentoScreen(
         "Champions" -> MotorCampeonato.CHAMPIONS_FASES
         "Europa League" -> MotorCampeonato.FORMATO_EUROPA_LEAGUE.fases
         "Libertadores" -> MotorCampeonato.FORMATO_LIBERTADORES.fases
+        "Sul-Americana" -> MotorCampeonato.FORMATO_SULAMERICANA.fases
         // Jogo unico: a unica fase e a decisao.
         "Intercontinental" -> listOf("Final")
         else -> MotorCampeonato.COPA_FASES
@@ -131,6 +136,7 @@ fun CopaChaveamentoScreen(
         "Champions" -> "Champions League"
         "Europa League" -> "Europa League"
         "Libertadores" -> "Libertadores"
+        "Sul-Americana" -> "Copa Sul-Americana"
         "Intercontinental" -> "Copa Intercontinental"
         else -> "Copa do Brasil"
     }
@@ -171,7 +177,7 @@ fun CopaChaveamentoScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     if (paisSelecionado == "Champions" || paisSelecionado == "Europa League") "Mata-mata ainda não sorteado — a Fase de Liga está em andamento"
-                    else if (paisSelecionado == "Libertadores") "Mata-mata ainda não sorteado — a fase de grupos está em andamento"
+                    else if (paisSelecionado == "Libertadores" || paisSelecionado == "Sul-Americana") "Mata-mata ainda não sorteado — a fase de grupos está em andamento"
                     else "Copa ainda não iniciada",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -299,6 +299,50 @@ TIMES = [
      "Estadio Olimpico de la UCV", 24900, 2200, "4-4-2", "EQUILIBRADO", 63),
     (695, "Carabobo", "Valencia", "CAR", 90, "Venezuela", 4, 4_000_000_00,
      "Estadio Misael Delgado", 15000, 2200, "4-4-2", "DEFENSIVO", 61),
+
+    # ── Ampliacao para a Copa Sul-Americana (ver regras_sulamericana.md) ──────
+    # Com 6 clubes por associacao pequena o pool nao cabia nas duas competicoes:
+    # a Libertadores consome 4 de cada pais (2 nos grupos + 2 na Pre) e a
+    # Sul-Americana precisa de outros 4. Faltavam 2 por pais, 14 no total.
+    #
+    # As reputacoes ficam DELIBERADAMENTE abaixo das dos 6 clubes que ja
+    # existiam: sem posicao de liga, a lista de acesso ordena pelo coeficiente e
+    # pela reputacao, entao estes 14 entram como 7o e 8o do seu pais — vao a
+    # Sul-Americana sem mexer em quem a Libertadores ja levava.
+    (696, "Nacional Potosi", "Potosi", "POT", 90, "Bolivia", 4, 3_500_000_00,
+     "Estadio Victor Agustin Ugarte", 32000, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (697, "Aurora", "Cochabamba", "COC", 90, "Bolivia", 4, 3_000_000_00,
+     "Estadio Felix Capriles", 32000, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (698, "Union Espanola", "Santiago", "RMS", 90, "Chile", 4, 3_500_000_00,
+     "Estadio Santa Laura", 22000, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (699, "Audax Italiano", "Santiago", "RMS", 90, "Chile", 4, 3_000_000_00,
+     "Estadio Bicentenario La Florida", 12000, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (700, "Once Caldas", "Manizales", "CAL", 90, "Colombia", 4, 3_500_000_00,
+     "Estadio Palogrande", 42600, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (701, "Deportivo Pasto", "Pasto", "NAR", 90, "Colombia", 4, 3_000_000_00,
+     "Estadio Departamental Libertad", 20700, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (702, "Macara", "Ambato", "TUN", 90, "Equador", 4, 3_500_000_00,
+     "Estadio Bellavista", 16467, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (703, "Orense", "Machala", "ORO", 90, "Equador", 4, 3_000_000_00,
+     "Estadio 9 de Mayo", 16500, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (704, "General Caballero", "Juan Leon Mallorquin", "ALP", 90, "Paraguai", 4, 3_500_000_00,
+     "Estadio Juan Canuto Pettengill", 6000, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (705, "Tacuary", "Assuncao", "ASU", 90, "Paraguai", 4, 3_000_000_00,
+     "Estadio Toribio Vargas", 3000, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (706, "Cusco FC", "Cusco", "CUS", 90, "Peru", 4, 3_500_000_00,
+     "Estadio Garcilaso", 42000, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (707, "ADT", "Tarma", "JUN", 90, "Peru", 4, 3_000_000_00,
+     "Estadio Union Tarma", 5000, 2000, "4-4-2", "DEFENSIVO", 57),
+
+    (708, "Metropolitanos", "Caracas", "DTC", 90, "Venezuela", 4, 3_500_000_00,
+     "Estadio Olimpico de la UCV", 24900, 2000, "4-4-2", "EQUILIBRADO", 59),
+    (709, "Portuguesa", "Acarigua", "POR", 90, "Venezuela", 4, 3_000_000_00,
+     "Estadio Jose Antonio Paez", 20000, 2000, "4-4-2", "DEFENSIVO", 57),
 ]
 
 # ─────────────────── Escudos (drawable) ───────────────────────────────────────

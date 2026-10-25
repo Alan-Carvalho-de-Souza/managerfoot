@@ -1468,6 +1468,10 @@ private fun competitionLabelFor(
         // tabelas de 4); a Pre-Libertadores e o mata-mata trazem o nome da fase.
         snap.libertadoresId > 0 && proximaPartida.campeonatoId == snap.libertadoresId ->
             "Libertadores — ${proximaPartida.fase ?: "Fase de Grupos"}"
+        // Sul-Americana: mesma forma — a Primeira Fase e o mata-mata trazem o
+        // nome da fase, e a fase de grupos vem com fase = null.
+        snap.sulAmericanaId > 0 && proximaPartida.campeonatoId == snap.sulAmericanaId ->
+            "Copa Sul-Americana — ${proximaPartida.fase ?: "Fase de Grupos"}"
         else -> when (proximaPartida.campeonatoId) {
             snap.campeonatoAId -> "Série A"
             snap.campeonatoBId -> "Série B"

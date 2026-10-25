@@ -57,6 +57,7 @@ fun TabelaScreen(
     campeonatoChampionsId: Int = -1,
     campeonatoEuropaId: Int = -1,
     campeonatoLibertadoresId: Int = -1,
+    campeonatoSulAmericanaId: Int = -1,
     timeJogadorId: Int,
     onVoltar: () -> Unit = {},
     vm: TabelaViewModel = hiltViewModel()
@@ -143,6 +144,7 @@ fun TabelaScreen(
     // tabelas de 4, não uma tabela única (ver regras_libertadores.md).
     val opcoesAmericaDoSul = buildList {
         if (campeonatoLibertadoresId > 0) add(40 to "Libertadores")
+        if (campeonatoSulAmericanaId > 0) add(41 to "Copa Sul-Americana")
     }
 
     val paises = buildList {
@@ -165,7 +167,7 @@ fun TabelaScreen(
             22 -> "Espanha"
             23 -> "Italia"
             30, 31 -> "Europa"
-            40 -> "América do Sul"
+            40, 41 -> "América do Sul"
             else -> "Brasil"
         }
     }
@@ -186,7 +188,7 @@ fun TabelaScreen(
     // 5 e 7 = Apertura/Clausura argentinos, 14 = Competencia uruguaio,
     // 40 = fase de grupos da Libertadores (8 grupos de 4).
     val ehGrupos = divisaoSelecionada == 5 || divisaoSelecionada == 7 ||
-        divisaoSelecionada == 14 || divisaoSelecionada == 40
+        divisaoSelecionada == 14 || divisaoSelecionada == 40 || divisaoSelecionada == 41
     val posicaoJogador = remember(tabela, timeJogadorId, ehGrupos) {
         if (ehGrupos) null
         else {
@@ -280,8 +282,19 @@ fun TabelaScreen(
                         val nomeTime = time?.nome ?: "Time ${item.timeId}"
                         val escudoRes = time?.escudoRes ?: ""
                         val ehJogador = item.timeId == timeJogadorId
-                        val classificadosPorGrupo = if (divisaoSelecionada == 14) 1 else 8
-                        val zona = if (index < classificadosPorGrupo) LibertadoresBlue else Color.Transparent
+                        // Nas continentais cada posição do grupo tem destino
+                        // próprio — oitavas, repescagem, eliminado —, e quem sabe
+                        // disso é zonaParaDivisao. O corte único de classificados
+                        // vale só para as zonas argentinas e o Competencia uruguaio.
+                        val zona = when (divisaoSelecionada) {
+                            40, 41 -> zonaParaDivisao(index + 1, divisaoSelecionada)
+                                ?: Color.Transparent
+                            else -> {
+                                val classificadosPorGrupo = if (divisaoSelecionada == 14) 1 else 8
+                                if (index < classificadosPorGrupo) LibertadoresBlue
+                                else Color.Transparent
+                            }
+                        }
 
                         StandingsRow(
                             posicao = index + 1,
@@ -453,6 +466,11 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
         posicao == 3 -> SulAmericanaTeal    // 3º vai à Copa Sul-Americana
         else -> null                        // 4º: eliminado
     }
+    41 -> when {                            // Grupo da Sul-Americana (4 clubes)
+        posicao == 1 -> LibertadoresBlue    // 1º vai direto às oitavas
+        posicao == 2 -> PlayoffOrange       // 2º vai aos playoffs
+        else -> null                        // 3º e 4º: eliminados
+    }
     20 -> when {                            // Premier League
         posicao <= 4 -> LibertadoresBlue   // Champions League
         posicao <= 6 -> SulAmericanaTeal   // Europa/Conference
@@ -507,6 +525,10 @@ private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
         40 -> listOf(
             LibertadoresBlue to "G2 Oitavas",
             SulAmericanaTeal to "3º Sul-Americana"
+        )
+        41 -> listOf(
+            LibertadoresBlue to "1º Oitavas",
+            PlayoffOrange to "2º Playoffs"
         )
         20 -> listOf(
             LibertadoresBlue to "G4 Champions League",

@@ -1126,6 +1126,7 @@ class GameRepository @Inject constructor(
         val championsId: Int,             // UEFA Champions League
         val europaLeagueId: Int,          // UEFA Europa League
         val libertadoresId: Int,          // CONMEBOL Libertadores
+        val sulAmericanaId: Int,          // CONMEBOL Copa Sul-Americana
         val supercopaId: Int,
         val supercopaInglaterraId: Int,   // Supercopa da Inglaterra
         val supercopaEspanholaId: Int,    // Supercopa da Espanha
@@ -1156,6 +1157,7 @@ class GameRepository @Inject constructor(
         championsId: Int = -1,              // UEFA Champions League da temporada que encerra
         europaLeagueId: Int = -1,           // UEFA Europa League da temporada que encerra
         libertadoresId: Int = -1,           // CONMEBOL Libertadores da temporada que encerra
+        sulAmericanaId: Int = -1,           // Copa Sul-Americana da temporada que encerra
         temporadaId: Int,
         ano: Int,
         timeJogadorId: Int = -1
@@ -1607,24 +1609,25 @@ class GameRepository @Inject constructor(
         val (novoCopaEspanholaId, novoCopaItalianaId) =
             criarCopasEspanholaItaliana(novoTemporadaId, novoAno, novoLaLigaId, novoSerieAId)
 
-        // Conclui a Champions que encerra e cria a da próxima temporada.
-        val novoChampionsId = encerrarECriarChampions(
-            championsId, ano, temporadaId, novoTemporadaId, novoAno
+        // As duas continentais europeias, em helper pelo limite de bytecode.
+        val uefa = encerrarECriarContinentaisEuropeias(
+            championsId, europaLeagueId, ano, temporadaId, novoTemporadaId, novoAno
         )
-
-        // E depois a Europa League, nesta ordem: a lista de acesso dela exclui
-        // quem já está na Champions nova, então precisa dela criada antes.
-        val novoEuropaLeagueId = encerrarECriarEuropa(
-            europaLeagueId, novoChampionsId, ano, temporadaId, novoTemporadaId, novoAno
-        )
+        val novoChampionsId    = uefa.champions
+        val novoEuropaLeagueId = uefa.europaLeague
 
         // E a Libertadores, que e independente das europeias: a lista de acesso
         // dela so olha clubes sul-americanos. Conclui a que encerra antes de criar
         // a nova, porque a vaga de campeao vigente sai do Hall da Fama e sem ela os
         // 32 dos grupos nao fecham.
-        val novoLibertadoresId = encerrarECriarLibertadores(
-            libertadoresId, ano, temporadaId, novoTemporadaId, novoAno, timeJogadorId
+        // As duas continentais sul-americanas, em helper pelo mesmo motivo das
+        // Supercopas: este metodo esbarra no limite de bytecode da JVM.
+        val conmebol = encerrarECriarContinentaisSulAmericanas(
+            libertadoresId, sulAmericanaId,
+            ano, temporadaId, novoTemporadaId, novoAno, timeJogadorId
         )
+        val novoLibertadoresId = conmebol.libertadores
+        val novoSulAmericanaId = conmebol.sulAmericana
 
         // Cria as Supercopas (Brasil/Inglaterra/Espanha/Itália) para a próxima temporada.
         // Extraído em helper para manter este método sob o limite de bytecode da JVM.
@@ -1656,54 +1659,16 @@ class GameRepository @Inject constructor(
             )
         } catch (_: Exception) { }
 
-        // ── Decay anual: times sem nenhum título no ano perdem reputação ──
-        // Times que conquistaram qualquer título no Hall da Fama (divisao 1-18)
-        // do ano que está encerrando ficam imunes ao decay. Os demais perdem 1%.
-        // Aplica decay extra a times no fundo da tabela (mau desempenho consistente).
-        try {
-            aplicarDecayAnualReputacao(ano)
-        } catch (_: Exception) { }
-
-        // ── Recalcula `nivel` de TODOS os times a partir da reputação atualizada ──
-        // Após bônus de título, penalidades de rebaixamento, bônus de promoção e decay.
-        try {
-            recalcularNiveisGlobais()
-        } catch (_: Exception) { }
-
-        // ── Demissão automática por mau desempenho ──────────────
-        // Antes de resetar os stats da temporada, usa o aproveitamento
-        // do ano que encerrou para demitir técnicos: rebaixados (≈80%)
-        // e times com aproveitamento <30% (≈40%). O técnico do usuário
-        // está protegido. Acontece ANTES de preencherVagas para que os
-        // recém-demitidos entrem no pool de livres.
-        try {
-            val rebaixadosTotais = buildSet<Int> {
-                addAll(rebaixadosA); addAll(rebaixadosB); addAll(rebaixadosC)
-                if (campeonatoArgAId > 0) addAll(rebaixadosArgA)
-                if (campeonatoUruAperturaId > 0) addAll(rebaixadosUruA)
-            }
-            tecnicoRepository.demitirPorDesempenho(rebaixadosTotais, ano)
-        } catch (_: Exception) { }
-
-        // ── Resetar stats da temporada dos técnicos ──
-        try {
-            tecnicoRepository.resetarStatsTemporada()
-        } catch (_: Exception) { }
-
-        // ── IA: preencher times sem técnico (vagos) com técnicos livres ──
-        // Garante que após o usuário ter "sequestrado" o cargo do técnico
-        // anterior do seu time, e qualquer outro time que tenha ficado sem
-        // comando, recebe um técnico livre baseado em reputação.
-        try {
-            tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
-        } catch (_: Exception) { }
-
-        // ── Mercado de técnicos de fim de temporada ──
-        // Depois de demitir os fracos e preencher as vagas, os clubes maiores
-        // podem contratar técnicos livres de destaque (efeito cascata realista).
-        try {
-            tecnicoRepository.movimentarMercadoTecnicosFimTemporada(novoAno)
-        } catch (_: Exception) { }
+        // Fecha o ano de reputação e de técnicos. Em helper por limite de bytecode.
+        fecharAnoDeReputacaoETecnicos(
+            ano                     = ano,
+            novoAno                 = novoAno,
+            rebaixadosA             = rebaixadosA,
+            rebaixadosB             = rebaixadosB,
+            rebaixadosC             = rebaixadosC,
+            rebaixadosArgA          = if (campeonatoArgAId > 0) rebaixadosArgA else emptyList(),
+            rebaixadosUruA          = if (campeonatoUruAperturaId > 0) rebaixadosUruA else emptyList()
+        )
 
         // ── Verifica cumprimento da meta de temporada do jogador ──
         // Baseado na posição final do time no seu campeonato principal (por divisão).
@@ -1723,7 +1688,7 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoLibertadoresId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoLibertadoresId, novoSulAmericanaId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
     }
 
     // ── Reputação por mudança de divisão ────────────────────────
@@ -6556,6 +6521,26 @@ class GameRepository @Inject constructor(
         verificarEAvancarFaseLibertadores(libertadoresId, anoAtual, timeJogadorId, temporadaId)
     }
 
+    /**
+     * O mesmo para a Copa Sul-Americana. Além do id dela, precisa do id da
+     * Libertadores: o avanço desta competição consulta a Libertadores para saber
+     * de onde vêm os 4 clubes dos grupos e os 8 adversários dos playoffs.
+     */
+    suspend fun persistirResultadoPenaltisJogadorSulAmericana(
+        resultado: ResultadoPenaltis,
+        sulAmericanaId: Int,
+        libertadoresId: Int,
+        anoAtual: Int,
+        voltaPartidaId: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        partidaDao.registrarPenaltis(voltaPartidaId, resultado.golsCasa, resultado.golsFora)
+        verificarEAvancarFaseSulAmericana(
+            sulAmericanaId, libertadoresId, anoAtual, timeJogadorId, temporadaId
+        )
+    }
+
     /** O mesmo para a Europa League, que tem a mesma máquina de fases. */
     suspend fun persistirResultadoPenaltisJogadorEuropa(
         resultado: ResultadoPenaltis,
@@ -8077,6 +8062,20 @@ class GameRepository @Inject constructor(
      * Libertadores tenha gravado nada em lugar nenhum. Vazia enquanto os grupos
      * não tiverem sido sorteados.
      */
+    /**
+     * Se a fase de grupos da Libertadores terminou — o que torna definitivos os
+     * terceiros colocados que a Sul-Americana leva aos seus playoffs.
+     *
+     * As partidas de grupo são as que têm `fase == null`; enquanto o sorteio dos
+     * grupos não aconteceu não existe nenhuma, e a resposta é false.
+     */
+    private suspend fun gruposDaLibertadoresConcluidos(libertadoresId: Int): Boolean {
+        if (libertadoresId <= 0) return false
+        val dosGrupos = partidaDao.buscarTodasPorCampeonato(libertadoresId)
+            .filter { it.fase == null }
+        return dosGrupos.isNotEmpty() && dosGrupos.all { it.jogada }
+    }
+
     suspend fun buscarClassificadosSulAmericana(libertadoresId: Int): List<Int> {
         if (libertadoresId <= 0) return emptyList()
         return tabelasPorGrupo(libertadoresId)
@@ -8348,12 +8347,655 @@ class GameRepository @Inject constructor(
             "Semi" in fases    -> FaseConmebol.SEMIFINAL
             "Quartas" in fases -> FaseConmebol.QUARTAS
             "Oitavas" in fases -> FaseConmebol.OITAVAS
+            // Os playoffs da Sul-Americana vêm DEPOIS da fase de grupos, então
+            // quem chegou neles não pode valer menos que um grupo: é o caso dos 8
+            // terceiros da Libertadores, que entram direto ali e não têm partida
+            // de grupo nenhuma nesta competição.
+            "Playoffs" in fases -> FaseConmebol.FASE_DE_GRUPOS
             // fase = null é a fase de grupos.
             null in fases      -> FaseConmebol.FASE_DE_GRUPOS
             "Fase 3" in fases  -> FaseConmebol.PRELIMINAR_3
             "Fase 2" in fases  -> FaseConmebol.PRELIMINAR_2
             else               -> FaseConmebol.PRELIMINAR_1
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CONMEBOL Copa Sul-Americana — ver regras_sulamericana.md
+    //
+    //  56 clubes, e eles só fecham COM a Libertadores da MESMA temporada:
+    //    44 vagas nacionais (Brasil 6 + Argentina 6 + 8 países × 4)
+    //  +  4 eliminados da Fase 3 da Pré-Libertadores → fase de grupos
+    //  +  8 terceiros dos grupos da Libertadores     → playoffs
+    //
+    //  A máquina é a da Libertadores, com três diferenças:
+    //    1. A fase prévia é NACIONAL e de partida única: os 4 clubes de cada
+    //       associação pequena se enfrentam entre si e sobram 2.
+    //    2. Só o 1º de cada grupo vai às oitavas; o 2º vai aos playoffs, contra
+    //       um terceiro colocado da Libertadores.
+    //    3. A trava de país nos grupos é PROIBIÇÃO, e não objetivo — ver
+    //       SorteioSulAmericana, que sorteia por retrocesso.
+    //
+    //  O acoplamento com a Libertadores manda no calendário: os grupos só podem
+    //  ser sorteados depois da Fase 3 da Pré dela, e os playoffs só depois da
+    //  última rodada dos grupos dela. Por isso [libertadoresId] atravessa quase
+    //  toda função aqui — sem ele a competição não sabe de onde vêm 12 dos 56.
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Código de divisão da Copa Sul-Americana no Hall da Fama. A 34 é da
+     * Libertadores e a faixa 30..33 é das continentais europeias; a 35 estava
+     * reservada a esta competição desde que a Libertadores foi implementada.
+     */
+    private val DIVISAO_HALL_SULAMERICANA = 35
+
+    /**
+     * Monta o campo nacional da Sul-Americana: as 44 vagas que saem das ligas,
+     * já sem os clubes que a Libertadores levou.
+     *
+     * Devolve menos de 44 vagas quando o jogo não tem clubes sul-americanos
+     * suficientes, e aí a competição não é criada. É o que acontece num save
+     * antigo: cada associação pequena precisa de 8 clubes — 4 para a Libertadores
+     * e 4 para cá — e o seed só passou a ter os 8 junto com esta competição.
+     */
+    suspend fun determinarParticipantesSulAmericana(
+        anoAtual: Int,
+        temporadaAnteriorId: Int = -1,
+        libertadoresId: Int = -1
+    ): List<VagaSulAmericana> {
+        val candidatos = candidatosSulAmericanos(anoAtual, temporadaAnteriorId)
+        // Um clube não disputa as duas competições na mesma temporada.
+        val naLibertadores =
+            if (libertadoresId > 0) campeonatoDao.buscarIdsParticipantes(libertadoresId).toSet()
+            else emptySet()
+        return ListaDeAcessoSulAmericana.montar(
+            candidatos       = candidatos,
+            jaNaLibertadores = naLibertadores,
+            fecharCampo      = true
+        )
+    }
+
+    /**
+     * Cria a Copa Sul-Americana de uma temporada, ou devolve -1 quando a lista de
+     * acesso não fecha as 44 vagas nacionais.
+     */
+    suspend fun criarSulAmericanaDaTemporada(
+        temporadaId: Int,
+        ano: Int,
+        temporadaAnteriorId: Int = -1,
+        libertadoresId: Int = -1,
+        /** Clube do jogador: decide se a Primeira Fase é resolvida na criação. */
+        timeJogadorId: Int = -1
+    ): Int {
+        val vagas = determinarParticipantesSulAmericana(ano, temporadaAnteriorId, libertadoresId)
+        return criarSulAmericana(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                // "Sul-Americana" no nome é o que dá a esta competição o peso 12
+                // do Ranking Mundial da IFFHS — ver RankingMundial.pesoDaVitoria.
+                nome         = "Copa Sul-Americana $ano",
+                tipo         = TipoCampeonato.CONTINENTAL,
+                formato      = FormatoCampeonato.GRUPOS_E_MATA_MATA,
+                totalRodadas = MotorCampeonato.FORMATO_SULAMERICANA.totalRodadas,
+                pais         = Continentes.AMERICA_DO_SUL
+            ),
+            vagas,
+            ano            = ano,
+            libertadoresId = libertadoresId,
+            timeJogadorId  = timeJogadorId
+        )
+    }
+
+    /**
+     * Grava a Sul-Americana: participantes marcados pela porta de entrada e as 16
+     * partidas da Primeira Fase.
+     *
+     * **A Primeira Fase é resolvida aqui quando o jogador não a disputa**, pelo
+     * mesmo motivo da Pré-Libertadores: sem isso os 12 clubes de Brasil e
+     * Argentina ficariam sem nenhuma partida no calendário até ela acabar.
+     *
+     * O sorteio dos grupos NÃO acontece necessariamente aqui, mesmo com a
+     * Primeira Fase resolvida: ele precisa dos 4 eliminados da Fase 3 da
+     * Pré-Libertadores, que podem não existir ainda quando o jogador disputa a
+     * Pré dela. Nesse caso o sorteio sai em
+     * [verificarEAvancarFaseSulAmericana], quando a Fase 3 terminar.
+     */
+    suspend fun criarSulAmericana(
+        campeonato: CampeonatoEntity,
+        vagas: List<VagaSulAmericana>,
+        ano: Int = 0,
+        libertadoresId: Int = -1,
+        timeJogadorId: Int = -1
+    ): Int {
+        val diretos = ListaDeAcessoSulAmericana.diretosNosGrupos(vagas)
+        val naPrimeira = ListaDeAcessoSulAmericana.naPrimeiraFase(vagas)
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+
+        if (diretos.size < ListaDeAcessoSulAmericana.DIRETAS_NOS_GRUPOS) return -1
+        if (naPrimeira.size < ListaDeAcessoSulAmericana.NA_PRIMEIRA_FASE) return -1
+
+        val campeonatoId = campeonatoDao.inserir(campeonato).toInt()
+
+        // A mesma convenção da Libertadores: a porta de entrada mora no rótulo de
+        // grupo até o sorteio, e depois os 32 recebem o grupo de verdade (A..H).
+        campeonatoDao.inserirParticipantes(
+            diretos.map { CampeonatoTimeEntity(campeonatoId, it.timeId, PORTA_GRUPOS) } +
+                naPrimeira.map { CampeonatoTimeEntity(campeonatoId, it.timeId, PORTA_PRE) }
+        )
+
+        // Primeira Fase: DENTRO de cada país, 1º×4º e 2º×3º pelo ranking, em
+        // partida única, o melhor ranqueado em casa. Ver
+        // SorteioSulAmericana.chavearPrimeiraFase.
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseJogoUnico(
+                campeonatoId      = campeonatoId,
+                pares             = SorteioSulAmericana.chavearPrimeiraFase(paraSorteio(naPrimeira)),
+                fase              = formato.preFases[0],
+                rodada            = formato.rodadaIdaDaPreFase(0),
+                confrontoIdInicio = 1,
+                ordemGlobal       = formato.ordemGlobalPre[0]
+            )
+        )
+
+        if (naPrimeira.none { it.timeId == timeJogadorId }) {
+            resolverPrimeiraFaseSulAmericana(
+                campeonatoId, libertadoresId, ano, timeJogadorId, campeonato.temporadaId
+            )
+        }
+        return campeonatoId
+    }
+
+    /**
+     * Joga a Primeira Fase inteira de uma vez e, se os 4 clubes que vêm da
+     * Pré-Libertadores já existem, deixa a fase de grupos sorteada.
+     *
+     * São 16 partidas simuladas, e isto é chamado de iniciarNovoJogo, que roda na
+     * thread de UI — daí o dispatcher, igual à Pré-Libertadores.
+     */
+    private suspend fun resolverPrimeiraFaseSulAmericana(
+        sulAmericanaId: Int,
+        libertadoresId: Int,
+        ano: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) = withContext(Dispatchers.Default) {
+        val todas = partidaDao.buscarTodasPorCampeonato(sulAmericanaId)
+        todas.filter { !it.jogada }.map { it.rodada }.toSortedSet()
+            .forEach { rodada -> simularRodada(sulAmericanaId, rodada) }
+        verificarEAvancarFaseSulAmericana(
+            sulAmericanaId, libertadoresId, ano, timeJogadorId, temporadaId
+        )
+    }
+
+    /**
+     * Avança a Sul-Americana, uma etapa por chamada. Devolve true quando a final
+     * foi concluída nesta chamada.
+     *
+     * A ordem das etapas: a Primeira Fase, o sorteio dos grupos quando ela
+     * termina **e** a Fase 3 da Pré-Libertadores já entregou os seus 4
+     * eliminados, os playoffs quando os grupos terminam **e** a Libertadores já
+     * tem os 8 terceiros, e daí o mata-mata até a final de jogo único.
+     *
+     * As duas esperas são por dados de outra competição, então elas simplesmente
+     * devolvem false: a próxima chamada tenta de novo, e nenhuma acontece antes
+     * da hora porque o calendário já põe esta competição atrás da Libertadores.
+     */
+    suspend fun verificarEAvancarFaseSulAmericana(
+        sulAmericanaId: Int,
+        libertadoresId: Int,
+        anoAtual: Int,
+        timeJogadorId: Int = -1,
+        temporadaId: Int = 1
+    ): Boolean {
+        if (sulAmericanaId <= 0) return false
+        val camp = campeonatoDao.buscarPorId(sulAmericanaId) ?: return false
+        if (camp.encerrado) return false
+        val todas = partidaDao.buscarTodasPorCampeonato(sulAmericanaId)
+        if (todas.isEmpty()) return false
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+
+        // ── Primeira Fase: partida única, dentro de cada país ──────────
+        val daPrimeira = todas.filter { it.fase == formato.preFases[0] }
+        if (daPrimeira.isNotEmpty() && todas.none { it.fase == null }) {
+            if (!daPrimeira.all { it.jogada }) return false
+            sortearEGerarGruposSulAmericana(
+                sulAmericanaId   = sulAmericanaId,
+                libertadoresId   = libertadoresId,
+                vencedores       = vencedoresDaFaseJogoUnico(daPrimeira),
+                anoAtual         = anoAtual
+            )
+            return false
+        }
+
+        // ── Fase de grupos (fase = null), em turno e returno ───────────
+        val grupos = todas.filter { it.fase == null }
+        if (grupos.isEmpty() || !grupos.all { it.jogada }) return false
+
+        if (todas.none { it.fase == formato.fasesMataMata.first() }) {
+            gerarPlayoffsSulAmericana(sulAmericanaId, libertadoresId)
+            return false
+        }
+
+        // ── Playoffs → Final ──────────────────────────────────────────
+        return avancarMataMataSulAmericana(
+            sulAmericanaId, todas, anoAtual, timeJogadorId, temporadaId
+        )
+    }
+
+    /** Vencedores de uma fase de PARTIDA ÚNICA, na ordem dos confrontos. */
+    private suspend fun vencedoresDaFaseJogoUnico(partidasDaFase: List<PartidaEntity>): List<Int> =
+        partidasDaFase
+            .sortedBy { it.confrontoId ?: 0 }
+            .mapNotNull { vencedorDoJogoUnico(it) }
+
+    /**
+     * Os 4 clubes ELIMINADOS na Fase 3 da Pré-Libertadores, que completam os 32
+     * da fase de grupos da Sul-Americana.
+     *
+     * Vazia enquanto a Fase 3 não terminar — e é essa lista vazia que faz o
+     * sorteio dos grupos esperar.
+     */
+    suspend fun buscarEliminadosDaPreLibertadores(libertadoresId: Int): List<Int> {
+        if (libertadoresId <= 0) return emptyList()
+        val ultimaPre = MotorCampeonato.FORMATO_LIBERTADORES.preFases.last()
+        val daFase = partidaDao.buscarTodasPorCampeonato(libertadoresId)
+            .filter { it.fase == ultimaPre }
+        if (daFase.isEmpty() || !daFase.all { it.jogada }) return emptyList()
+        return daFase
+            .groupBy { it.confrontoId }
+            .toSortedMap(compareBy { it ?: 0 })
+            .mapNotNull { (_, jogos) ->
+                val vencedor = vencedorDoTie(jogos) ?: return@mapNotNull null
+                val ida = jogos.minByOrNull { it.rodada } ?: return@mapNotNull null
+                if (vencedor == ida.timeCasaId) ida.timeForaId else ida.timeCasaId
+            }
+    }
+
+    /**
+     * Sorteia a fase de grupos e grava as 96 partidas do turno e returno.
+     *
+     * Os 32 são os 12 diretos de Brasil e Argentina, os 16 vencedores da Primeira
+     * Fase e os 4 eliminados da Fase 3 da Pré-Libertadores. Sem esses 4 o sorteio
+     * não acontece: a função sai sem fazer nada e a próxima chamada tenta de novo.
+     *
+     * Os 4 que vêm da Libertadores entram como participantes AQUI, e não na
+     * criação: eles não eram conhecidos quando a competição nasceu.
+     */
+    private suspend fun sortearEGerarGruposSulAmericana(
+        sulAmericanaId: Int,
+        libertadoresId: Int,
+        vencedores: List<Int>,
+        anoAtual: Int,
+        random: kotlin.random.Random = kotlin.random.Random.Default
+    ) {
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+        val daLibertadores = buscarEliminadosDaPreLibertadores(libertadoresId)
+        if (daLibertadores.size < ListaDeAcessoSulAmericana.DA_PRE_LIBERTADORES) return
+
+        val participantes = campeonatoDao.buscarParticipantesComGrupo(sulAmericanaId)
+        val diretos = participantes.filter { it.grupo == PORTA_GRUPOS }.map { it.timeId }
+        val nosGrupos = (diretos + vencedores + daLibertadores).distinct()
+        if (nosGrupos.size != ListaDeAcessoSulAmericana.CLUBES_NA_FASE_DE_GRUPOS) return
+
+        val clubes = paraSorteioPorId(nosGrupos, anoAtual)
+        if (clubes.size != nosGrupos.size) return
+
+        // Trava de país ESTRITA, por retrocesso. Devolve null quando não há
+        // arranjo possível — e aí não criamos uma fase de grupos irregular.
+        val sorteio = SorteioSulAmericana.sortearGrupos(clubes, random) ?: return
+
+        campeonatoDao.inserirParticipantes(
+            sorteio.grupos.flatMap { grupo ->
+                grupo.clubes.map { CampeonatoTimeEntity(sulAmericanaId, it.timeId, grupo.rotulo) }
+            }
+        )
+        classificacaoDao.inserirTodos(
+            sorteio.grupos.flatMap { grupo ->
+                MotorCampeonato.gerarClassificacaoInicial(
+                    sulAmericanaId, grupo.clubes.map { it.timeId }, grupo.rotulo
+                )
+            }
+        )
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarGruposTurnoReturno(
+                campeonatoId         = sulAmericanaId,
+                grupos               = sorteio.grupos.map { g -> g.clubes.map { it.timeId } },
+                rodadaBase           = formato.rodadaBaseGrupos,
+                ordemGlobalPorRodada = formato.ordemGlobalGrupos
+            )
+        )
+    }
+
+    /**
+     * Playoffs: os 8 SEGUNDOS colocados dos grupos contra os 8 TERCEIROS dos
+     * grupos da Libertadores, em ida e volta.
+     *
+     * Os terceiros da Libertadores são os cabeças de chave e decidem em casa, que
+     * é o que [MotorCampeonato.paresOitavasLibertadores] faz com os seus dois
+     * parâmetros. Eles também entram como participantes aqui.
+     *
+     * Sem os 8 terceiros a função sai sem fazer nada: a fase de grupos da
+     * Libertadores ainda não acabou, e a próxima chamada tenta de novo.
+     */
+    private suspend fun gerarPlayoffsSulAmericana(sulAmericanaId: Int, libertadoresId: Int) {
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+        // A tabela de grupo em andamento tem terceiro colocado, e ele não é o
+        // terceiro FINAL. As duas competições andam uma rodada por partida do
+        // jogador, cada uma no seu ritmo, então a dela pode acabar primeiro —
+        // e aí os playoffs sairiam contra os clubes errados, sem erro nenhum à
+        // vista. Esperar é o que [verificarEAvancarFaseSulAmericana] faz de graça.
+        if (!gruposDaLibertadoresConcluidos(libertadoresId)) return
+        val terceiros = buscarClassificadosSulAmericana(libertadoresId)
+        if (terceiros.size < ListaDeAcessoSulAmericana.TERCEIROS_DA_LIBERTADORES) return
+
+        recalcularClassificacao(sulAmericanaId)
+        val porGrupo = tabelasPorGrupo(sulAmericanaId)
+        if (porGrupo.size != ListaDeAcessoSulAmericana.GRUPOS) return
+        if (porGrupo.any { it.value.size < 2 }) return
+
+        val rotulos = porGrupo.keys.sorted()
+        val segundos = rotulos.map { porGrupo.getValue(it)[1].timeId }
+
+        // Os terceiros da Libertadores passam a ser participantes desta
+        // competição; o rótulo "P" os marca como quem entrou por fora dos grupos.
+        campeonatoDao.inserirParticipantes(
+            terceiros.map { CampeonatoTimeEntity(sulAmericanaId, it, PORTA_PRE) }
+        )
+
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = sulAmericanaId,
+                pares             = MotorCampeonato.paresOitavasLibertadores(
+                    primeiros = terceiros, segundos = segundos
+                ),
+                fase              = formato.fasesMataMata.first(),
+                rodadaIda         = formato.rodadaIdaDeFaseMataMata(0),
+                confrontoIdInicio = (partidaDao.buscarTodasPorCampeonato(sulAmericanaId)
+                    .mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1,
+                ordemGlobalIda    = formato.ordemGlobalMataMata[0],
+                ordemGlobalVolta  = formato.ordemGlobalMataMata[1]
+            )
+        )
+    }
+
+    /**
+     * Mata-mata da Sul-Americana, dos playoffs à final.
+     *
+     * A diferença em relação ao da Libertadores está só nas OITAVAS: elas não
+     * sorteiam os vencedores da fase anterior entre si, porque metade do campo
+     * vem de outro lugar — os 8 primeiros de grupo, que não jogaram os playoffs e
+     * decidem em casa. As quartas e a semi são sorteio normal, e a final é de
+     * jogo único em campo neutro.
+     */
+    private suspend fun avancarMataMataSulAmericana(
+        sulAmericanaId: Int,
+        todas: List<PartidaEntity>,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ): Boolean {
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+        for ((indice, fase) in formato.fasesMataMata.withIndex()) {
+            val daFase = todas.filter { it.fase == fase }
+            if (daFase.isEmpty()) continue
+            if (!daFase.all { it.jogada }) return false
+
+            val proxima = formato.fasesMataMata.getOrNull(indice + 1)
+            if (proxima != null && todas.any { it.fase == proxima }) continue
+
+            if (proxima == null) {
+                encerrarSulAmericana(sulAmericanaId, daFase, anoAtual, timeJogadorId, temporadaId)
+                return true
+            }
+
+            val vencedores = vencedoresDaFase(daFase)
+            if (vencedores.size < 2) return false
+            val confrontoIdInicio = (todas.mapNotNull { it.confrontoId }.maxOrNull() ?: 0) + 1
+            val rodadaIda = formato.rodadaIdaDeFaseMataMata(indice + 1)
+
+            val pares = when {
+                // Oitavas: 8 primeiros de grupo (cabeças, decidem em casa) contra
+                // os 8 vencedores dos playoffs.
+                indice == 0 -> {
+                    recalcularClassificacao(sulAmericanaId)
+                    val porGrupo = tabelasPorGrupo(sulAmericanaId)
+                    if (porGrupo.size != ListaDeAcessoSulAmericana.GRUPOS) return false
+                    val primeiros = porGrupo.keys.sorted().map { porGrupo.getValue(it)[0].timeId }
+                    MotorCampeonato.paresOitavasLibertadores(
+                        primeiros = primeiros, segundos = vencedores
+                    )
+                }
+                else -> MotorCampeonato.sortearPares(vencedores)
+            }
+
+            val novas = if (formato.ehFinal(proxima)) {
+                // A FINAL é de jogo único, em campo neutro — ehCampoNeutro liga
+                // sozinho, porque a fase se chama "Final" e o confronto tem uma
+                // partida só.
+                MotorCampeonato.gerarFaseJogoUnico(
+                    campeonatoId      = sulAmericanaId,
+                    pares             = listOf(vencedores[0] to vencedores[1]),
+                    fase              = proxima,
+                    rodada            = rodadaIda,
+                    confrontoIdInicio = confrontoIdInicio,
+                    ordemGlobal       = formato.ordemGlobalMataMata.last()
+                )
+            } else {
+                MotorCampeonato.gerarFaseIdaVolta(
+                    campeonatoId      = sulAmericanaId,
+                    pares             = pares,
+                    fase              = proxima,
+                    rodadaIda         = rodadaIda,
+                    confrontoIdInicio = confrontoIdInicio,
+                    ordemGlobalIda    = formato.ordemGlobalMataMata[(indice + 1) * 2],
+                    ordemGlobalVolta  = formato.ordemGlobalMataMata[(indice + 1) * 2 + 1]
+                )
+            }
+            partidaDao.inserirTodas(novas)
+            return false
+        }
+        return false
+    }
+
+    /**
+     * Final concluída: Hall da Fama, premiação, reputação, campanhas no Ranking
+     * CONMEBOL e competição encerrada. O mesmo encerramento da Libertadores, com
+     * o código de Hall e os prêmios próprios.
+     */
+    private suspend fun encerrarSulAmericana(
+        sulAmericanaId: Int,
+        partidasDaFinal: List<PartidaEntity>,
+        anoAtual: Int,
+        timeJogadorId: Int,
+        temporadaId: Int
+    ) {
+        val decisao = partidasDaFinal.minByOrNull { it.rodada } ?: return
+        val campeaoId = vencedorDoJogoUnico(decisao) ?: return
+        val viceId = if (campeaoId == decisao.timeCasaId) decisao.timeForaId else decisao.timeCasaId
+
+        val campeao    = timeRepository.buscarEntityPorId(campeaoId)
+        val vice       = timeRepository.buscarEntityPorId(viceId)
+        val entidade   = campeonatoDao.buscarPorId(sulAmericanaId)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(sulAmericanaId)
+        val assistente = partidaDao.buscarAssisteTop1(sulAmericanaId)
+
+        inserirNoHallDaFamaComTecnico(
+            HallDaFamaEntity(
+                ano                 = anoAtual,
+                nomeCampeonato      = entidade?.nome ?: "Copa Sul-Americana $anoAtual",
+                campeaoTimeId       = campeaoId,
+                campeaoNome         = campeao?.nome ?: "",
+                campeaoEscudo       = campeao?.escudoRes ?: "",
+                viceTimeId          = viceId,
+                viceNome            = vice?.nome ?: "",
+                viceEscudo          = vice?.escudoRes ?: "",
+                artilheiroId        = artilheiro?.jogadorId ?: -1,
+                artilheiroNome      = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols      = artilheiro?.total ?: 0,
+                artilheiroNomeTime  = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo    = artilheiro?.escudoRes ?: "",
+                assistenteId        = assistente?.jogadorId ?: -1,
+                assistenteNome      = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev = assistente?.nomeAbrev ?: "",
+                assistenciasTotais  = assistente?.total ?: 0,
+                assistenteNomeTime  = assistente?.nomeTime ?: "",
+                assistenteEscudo    = assistente?.escudoRes ?: "",
+                divisao             = DIVISAO_HALL_SULAMERICANA
+            )
+        )
+
+        val rankBase = rankingGeralDao.buscarPorTime(campeaoId)
+            ?: RankingGeralEntity(
+                timeId = campeaoId, nomeTime = campeao?.nome ?: "",
+                escudoRes = campeao?.escudoRes ?: "", divisaoAtual = campeao?.divisao ?: 1
+            )
+        rankingGeralDao.inserirOuAtualizar(rankBase.copy(copasVencidas = rankBase.copasVencidas + 1))
+
+        campeonatoDao.encerrar(sulAmericanaId)
+
+        val nomePremio = entidade?.nome ?: "Copa Sul-Americana $anoAtual"
+        val premios = listOf(
+            campeaoId to (PREMIO_CAMPEAO_SULAMERICANA to "Campeão"),
+            viceId    to (PREMIO_VICE_SULAMERICANA    to "Vice-campeão")
+        )
+        for ((timePremiado, info) in premios) {
+            val (valor, posicao) = info
+            if (timeJogadorId > 0 && timePremiado == timeJogadorId) {
+                timeRepository.creditarSaldo(timeJogadorId, valor)
+                financaDao.inserir(
+                    FinancaEntity(
+                        timeId            = timeJogadorId,
+                        temporadaId       = temporadaId,
+                        mes               = 13,
+                        receitaPremiacoes = valor,
+                        descricaoPremio   = "$nomePremio — $posicao",
+                        saldoFinal        = valor
+                    )
+                )
+            }
+        }
+
+        campeao?.let {
+            val bonus = (it.reputacao * 0.025f).coerceAtLeast(0.1f)
+            timeRepository.atualizarReputacao(it.id, it.reputacao + bonus)
+        }
+
+        registrarCampanhasSulAmericana(sulAmericanaId, anoAtual, campeaoId, viceId)
+    }
+
+    /**
+     * Prêmios da Sul-Americana: menos da metade dos da Libertadores, que é a
+     * proporção das duas competições na vida real.
+     */
+    private val PREMIO_CAMPEAO_SULAMERICANA = 25_000_000_00L
+    private val PREMIO_VICE_SULAMERICANA    = 12_000_000_00L
+
+    /**
+     * Registra a campanha de cada participante no Ranking CONMEBOL, na competição
+     * SUL_AMERICANA — que vale menos por fase e por jogo que a Libertadores.
+     *
+     * As vitórias e empates contam da FASE DE GRUPOS em diante: a Primeira Fase
+     * pontua só pela fase prévia alcançada, igual à Pré-Libertadores.
+     */
+    private suspend fun registrarCampanhasSulAmericana(
+        sulAmericanaId: Int,
+        ano: Int,
+        campeaoId: Int,
+        viceId: Int
+    ) {
+        rankingConmebolDao.apagarLancamentos(ano, CompeticaoConmebol.SUL_AMERICANA.name)
+        val formato = MotorCampeonato.FORMATO_SULAMERICANA
+        val partidas = partidaDao.buscarTodasPorCampeonato(sulAmericanaId).filter { it.jogada }
+        val participantes = campeonatoDao.buscarIdsParticipantes(sulAmericanaId)
+
+        for (timeId in participantes) {
+            val doClube = partidas.filter { it.timeCasaId == timeId || it.timeForaId == timeId }
+            if (doClube.isEmpty()) continue
+            val pontuaveis = doClube.filter { it.fase !in formato.preFases }
+            var vitorias = 0
+            var empates  = 0
+            for (partida in pontuaveis) {
+                val pro    = if (partida.timeCasaId == timeId) partida.golsCasa else partida.golsFora
+                val contra = if (partida.timeCasaId == timeId) partida.golsFora else partida.golsCasa
+                if (pro == null || contra == null) continue
+                when {
+                    pro > contra  -> vitorias++
+                    pro == contra -> empates++
+                }
+            }
+            registrarCampanhaContinental(
+                timeId     = timeId,
+                ano        = ano,
+                competicao = CompeticaoConmebol.SUL_AMERICANA,
+                fase       = faseConmebolAlcancada(doClube, timeId, campeaoId, viceId),
+                vitorias   = vitorias,
+                empates    = empates
+            )
+        }
+    }
+
+    /**
+     * Mantém a Sul-Americana andando quando o jogador não tem jogo pendente nela:
+     * uma rodada de grupo por chamada e as rodadas pendentes das eliminatórias de
+     * uma vez. O gêmeo de [simularProximaRodadaLibertadoresSeNecessario].
+     */
+    suspend fun simularProximaRodadaSulAmericanaSeNecessario(
+        sulAmericanaId: Int,
+        libertadoresId: Int,
+        timeJogadorId: Int,
+        anoAtual: Int,
+        temporadaId: Int
+    ) {
+        if (sulAmericanaId <= 0) return
+        val camp = campeonatoDao.buscarPorId(sulAmericanaId) ?: return
+        if (camp.encerrado) return
+        val todas = partidaDao.buscarTodasPorCampeonato(sulAmericanaId)
+        if (todas.any { !it.jogada && (it.timeCasaId == timeJogadorId || it.timeForaId == timeJogadorId) }) return
+
+        val pendentesGrupos = todas.filter { !it.jogada && it.fase == null }
+        if (pendentesGrupos.isNotEmpty()) {
+            simularRodada(sulAmericanaId, pendentesGrupos.minOf { it.rodada })
+        } else {
+            todas.filter { !it.jogada && it.fase != null }
+                .map { it.rodada }.toSortedSet()
+                .forEach { rodada -> simularRodada(sulAmericanaId, rodada) }
+        }
+        verificarEAvancarFaseSulAmericana(
+            sulAmericanaId, libertadoresId, anoAtual, timeJogadorId, temporadaId
+        )
+    }
+
+    /**
+     * Conclui a Sul-Americana da temporada que encerra e cria a da temporada nova.
+     *
+     * Recebe o id da Libertadores NOVA, e não da antiga: é dela que saem os 12
+     * clubes que completam os 56 da edição seguinte. Por isso esta função é
+     * chamada depois de [encerrarECriarLibertadores], no rollover.
+     */
+    private suspend fun encerrarECriarSulAmericana(
+        sulAmericanaIdAnterior: Int,
+        libertadoresIdAnterior: Int,
+        novoLibertadoresId: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int,
+        timeJogadorId: Int
+    ): Int {
+        concluirCompeticaoContinental(sulAmericanaIdAnterior) {
+            simularProximaRodadaSulAmericanaSeNecessario(
+                sulAmericanaIdAnterior, libertadoresIdAnterior, -1, ano, temporadaId
+            )
+        }
+        return try {
+            criarSulAmericanaDaTemporada(
+                novoTemporadaId, novoAno,
+                temporadaAnteriorId = temporadaId,
+                libertadoresId      = novoLibertadoresId,
+                timeJogadorId       = timeJogadorId
+            )
+        } catch (_: Exception) { -1 }
     }
 
     /**
@@ -8383,6 +9025,146 @@ class GameRepository @Inject constructor(
                 .forEach { rodada -> simularRodada(libertadoresId, rodada) }
         }
         verificarEAvancarFaseLibertadores(libertadoresId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    /**
+     * Fecha o ano no que depende de reputação e de técnicos, na ordem em que as
+     * etapas dependem umas das outras: decay → níveis → demissões → reset →
+     * preencher vagas → mercado.
+     *
+     * A ordem não é arbitrária. O decay vem depois de todo bônus de título, os
+     * níveis saem da reputação já decaída, as demissões usam o aproveitamento do
+     * ano que encerrou e precisam acontecer ANTES de preencher vagas — é o que
+     * põe os recém-demitidos no pool de livres —, e o mercado vem por último,
+     * quando as vagas já estão tapadas e sobram os técnicos de destaque.
+     *
+     * Helper pela mesma razão de máquina dos outros deste rollover: o método
+     * estoura o limite de bytecode de um método da JVM.
+     */
+    private suspend fun fecharAnoDeReputacaoETecnicos(
+        ano: Int,
+        novoAno: Int,
+        rebaixadosA: List<Int>,
+        rebaixadosB: List<Int>,
+        rebaixadosC: List<Int>,
+        rebaixadosArgA: List<Int>,
+        rebaixadosUruA: List<Int>
+    ) {
+        // ── Decay anual: times sem nenhum título no ano perdem reputação ──
+        // Times que conquistaram qualquer título no Hall da Fama (divisao 1-18)
+        // do ano que está encerrando ficam imunes ao decay. Os demais perdem 1%.
+        // Aplica decay extra a times no fundo da tabela (mau desempenho consistente).
+        try {
+            aplicarDecayAnualReputacao(ano)
+        } catch (_: Exception) { }
+
+        // ── Recalcula `nivel` de TODOS os times a partir da reputação atualizada ──
+        // Após bônus de título, penalidades de rebaixamento, bônus de promoção e decay.
+        try {
+            recalcularNiveisGlobais()
+        } catch (_: Exception) { }
+
+        // ── Demissão automática por mau desempenho ──────────────
+        // Antes de resetar os stats da temporada, usa o aproveitamento
+        // do ano que encerrou para demitir técnicos: rebaixados (≈80%)
+        // e times com aproveitamento <30% (≈40%). O técnico do usuário
+        // está protegido. Acontece ANTES de preencherVagas para que os
+        // recém-demitidos entrem no pool de livres.
+        try {
+            // As listas estrangeiras já chegam vazias quando aquele campeonato não
+            // existe nesta partida: quem sabe disso é quem chama.
+            val rebaixadosTotais = buildSet<Int> {
+                addAll(rebaixadosA); addAll(rebaixadosB); addAll(rebaixadosC)
+                addAll(rebaixadosArgA); addAll(rebaixadosUruA)
+            }
+            tecnicoRepository.demitirPorDesempenho(rebaixadosTotais, ano)
+        } catch (_: Exception) { }
+
+        // ── Resetar stats da temporada dos técnicos ──
+        try {
+            tecnicoRepository.resetarStatsTemporada()
+        } catch (_: Exception) { }
+
+        // ── IA: preencher times sem técnico (vagos) com técnicos livres ──
+        // Garante que após o usuário ter "sequestrado" o cargo do técnico
+        // anterior do seu time, e qualquer outro time que tenha ficado sem
+        // comando, recebe um técnico livre baseado em reputação.
+        try {
+            tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
+        } catch (_: Exception) { }
+
+        // ── Mercado de técnicos de fim de temporada ──
+        // Depois de demitir os fracos e preencher as vagas, os clubes maiores
+        // podem contratar técnicos livres de destaque (efeito cascata realista).
+        try {
+            tecnicoRepository.movimentarMercadoTecnicosFimTemporada(novoAno)
+        } catch (_: Exception) { }
+    }
+
+    /** Os ids das duas continentais da UEFA na temporada nova. */
+    private data class ContinentaisEuropeias(val champions: Int, val europaLeague: Int)
+
+    /**
+     * Vira as duas continentais europeias, NA ORDEM: a Champions primeiro, porque
+     * a lista de acesso da Europa League exclui quem já está na Champions nova.
+     *
+     * Helper pela mesma razão de máquina do seu gêmeo sul-americano: o rollover
+     * estoura o limite de bytecode de um método da JVM.
+     */
+    private suspend fun encerrarECriarContinentaisEuropeias(
+        championsId: Int,
+        europaLeagueId: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int
+    ): ContinentaisEuropeias {
+        val novoChampionsId = encerrarECriarChampions(
+            championsId, ano, temporadaId, novoTemporadaId, novoAno
+        )
+        val novoEuropaLeagueId = encerrarECriarEuropa(
+            europaLeagueId, novoChampionsId, ano, temporadaId, novoTemporadaId, novoAno
+        )
+        return ContinentaisEuropeias(novoChampionsId, novoEuropaLeagueId)
+    }
+
+    /** Os ids das duas continentais da CONMEBOL na temporada nova. */
+    private data class ContinentaisSulAmericanas(val libertadores: Int, val sulAmericana: Int)
+
+    /**
+     * Vira as duas continentais sul-americanas, NA ORDEM: a Libertadores primeiro,
+     * porque a Sul-Americana depende da edição nova dela — 4 dos 32 clubes dos
+     * grupos saem da Pré-Libertadores e os 8 adversários dos playoffs são os
+     * terceiros dos grupos dela.
+     *
+     * Existe como helper por uma razão de máquina, e não de desenho: o rollover
+     * já estava no limite de bytecode de um método da JVM, e as duas chamadas
+     * inline o estouravam. Ver [criarSupercopasDaTemporada], extraída pelo mesmo
+     * motivo.
+     */
+    private suspend fun encerrarECriarContinentaisSulAmericanas(
+        libertadoresId: Int,
+        sulAmericanaId: Int,
+        ano: Int,
+        temporadaId: Int,
+        novoTemporadaId: Int,
+        novoAno: Int,
+        timeJogadorId: Int
+    ): ContinentaisSulAmericanas {
+        val novoLibertadoresId = encerrarECriarLibertadores(
+            libertadoresId, ano, temporadaId, novoTemporadaId, novoAno, timeJogadorId
+        )
+        val novoSulAmericanaId = encerrarECriarSulAmericana(
+            sulAmericanaIdAnterior = sulAmericanaId,
+            libertadoresIdAnterior = libertadoresId,
+            novoLibertadoresId     = novoLibertadoresId,
+            ano                    = ano,
+            temporadaId            = temporadaId,
+            novoTemporadaId        = novoTemporadaId,
+            novoAno                = novoAno,
+            timeJogadorId          = timeJogadorId
+        )
+        return ContinentaisSulAmericanas(novoLibertadoresId, novoSulAmericanaId)
     }
 
     /**

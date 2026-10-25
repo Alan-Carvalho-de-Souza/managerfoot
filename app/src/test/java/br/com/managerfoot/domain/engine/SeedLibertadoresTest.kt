@@ -326,25 +326,30 @@ class SeedLibertadoresTest {
             "divisao nao pode ser de pool e jogavel ao mesmo tempo",
             RankingEuropa.DIVISOES_POOL.none { it in DIVISOES_JOGAVEIS }
         )
-        // Os 42 sul-americanos novos estao todos na 90, logo todos filtrados.
-        assertEquals(42, porDivisao[90]?.size)
+        // Os 56 sul-americanos do pool estao todos na 90, logo todos filtrados.
+        // Eram 42 (6 por pais) ate a Copa Sul-Americana existir: ela precisa de 4
+        // clubes por associacao pequena, alem dos 4 que a Libertadores leva.
+        assertEquals(56, porDivisao[90]?.size)
         assertTrue(porDivisao.getValue(90).all { it.divisao in RankingEuropa.DIVISOES_POOL })
     }
 
     // ── O pool em si ─────────────────────────────────────────────────────
 
     @Test
-    fun `o pool sul-americano tem seis clubes para cada um dos sete paises`() {
+    fun `o pool sul-americano tem oito clubes para cada um dos sete paises`() {
         val pool = lerClubes().filter { it.divisao == 90 }
         val porPais = pool.groupBy { acesso.paisCanonico(it.pais) }
 
-        assertEquals(42, pool.size)
+        // Oito, e nao seis: a Libertadores consome 4 de cada associacao pequena
+        // (2 nos grupos + 2 na Pre) e a Copa Sul-Americana precisa de outros 4.
+        // Ver regras_sulamericana.md.
+        assertEquals(56, pool.size)
         assertEquals(
             setOf("Bolívia", "Chile", "Colômbia", "Equador", "Paraguai", "Peru", "Venezuela"),
             porPais.keys.filterNotNull().toSet()
         )
         porPais.forEach { (pais, clubes) ->
-            assertEquals("$pais no pool", 6, clubes.size)
+            assertEquals("$pais no pool", 8, clubes.size)
         }
         // Brasil, Argentina e Uruguai NÃO entram pelo pool: eles têm liga própria.
         assertTrue(porPais.keys.none { it in listOf("Brasil", "Argentina", "Uruguai") })

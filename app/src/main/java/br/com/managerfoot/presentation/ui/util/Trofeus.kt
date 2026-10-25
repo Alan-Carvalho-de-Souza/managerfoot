@@ -121,6 +121,12 @@ object Trofeus {
             if (nome.contains("libertadores")) {
                 return@run TrofeuInfo(LIBERTADORES, LibertadoresBlue, "Libertadores", Pais.INTERNACIONAL)
             }
+            // Antes do ramo genérico de "copa", que capturaria "Copa
+            // Sul-Americana". Ainda sem imagem própria: quando houver, basta
+            // trocar GENERICO por ela, como nas supercopas.
+            if (nome.contains("sul-americana") || nome.contains("sul americana")) {
+                return@run TrofeuInfo(GENERICO, SulAmericanaTeal, "Copa Sul-Americana", Pais.INTERNACIONAL)
+            }
 
             // ── Supercopas ────────────────────────────────────────────
             // O ramo antigo era só `contains("supercopa")` e devolvia SEMPRE

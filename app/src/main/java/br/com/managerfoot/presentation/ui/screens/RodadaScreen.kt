@@ -53,6 +53,7 @@ fun RodadaScreen(
     campeonatoChampionsId: Int = -1,
     campeonatoEuropaId: Int = -1,
     campeonatoLibertadoresId: Int = -1,
+    campeonatoSulAmericanaId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: RodadaViewModel = hiltViewModel()
 ) {
@@ -67,13 +68,14 @@ fun RodadaScreen(
     val esMataMataDivisao =
         divisaoSelecionada == 8 || divisaoSelecionada == 9 ||
             divisaoSelecionada == 31 || divisaoSelecionada == 33 ||
-            divisaoSelecionada == 41
+            divisaoSelecionada == 41 || divisaoSelecionada == 43
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId, campeonatoArgClausuraId,
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId, campeonatoUruBId, campeonatoUruBCompetId,
         campeonatoPremierId, campeonatoChampionshipId, campeonatoLaLigaId, campeonatoSerieAId,
-        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId
+        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId,
+        campeonatoSulAmericanaId
     ) {
         vm.carregar(
             campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, campeonatoArgAId, campeonatoArgBId,
@@ -86,7 +88,8 @@ fun RodadaScreen(
             campSerieAId = campeonatoSerieAId,
             campChampionsId = campeonatoChampionsId,
             campEuropaId = campeonatoEuropaId,
-            campLibertadoresId = campeonatoLibertadoresId
+            campLibertadoresId = campeonatoLibertadoresId,
+            campSulAmericanaId = campeonatoSulAmericanaId
         )
     }
 
@@ -156,6 +159,13 @@ fun RodadaScreen(
             add(40 to "Libertadores — Pré e Grupos")
             add(41 to "Libertadores — Mata-Mata")
         }
+        // A Sul-Americana divide o mesmo filtro, com a mesma separação: a
+        // Primeira Fase (rodada 1) e os grupos (11 a 16) no calendário, e os
+        // playoffs em diante nas chaves.
+        if (campeonatoSulAmericanaId > 0) {
+            add(42 to "Sul-Americana — 1ª Fase e Grupos")
+            add(43 to "Sul-Americana — Mata-Mata")
+        }
     }
     val temArgentina = opcoesArgentina.isNotEmpty()
     val temUruguai   = opcoesUruguai.isNotEmpty()
@@ -177,7 +187,7 @@ fun RodadaScreen(
                 divisaoSelecionada == 22      -> "Espanha"
                 divisaoSelecionada == 23      -> "Italia"
                 divisaoSelecionada in 30..33  -> "Europa"
-                divisaoSelecionada in 40..41  -> "América do Sul"
+                divisaoSelecionada in 40..43  -> "América do Sul"
                 else -> "Brasil"
             }
         )
@@ -190,7 +200,7 @@ fun RodadaScreen(
             divisaoSelecionada == 22      -> "Espanha"
             divisaoSelecionada == 23      -> "Italia"
             divisaoSelecionada in 30..33  -> "Europa"
-            divisaoSelecionada in 40..41  -> "América do Sul"
+            divisaoSelecionada in 40..43  -> "América do Sul"
             else -> "Brasil"
         }
     }

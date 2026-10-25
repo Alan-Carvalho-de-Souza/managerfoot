@@ -60,6 +60,7 @@ fun ArtilheirosScreen(
     campeonatoChampionsId: Int = -1,
     campeonatoEuropaId: Int = -1,
     campeonatoLibertadoresId: Int = -1,
+    campeonatoSulAmericanaId: Int = -1,
     onVoltar: () -> Unit = {},
     vm: ArtilheirosViewModel = hiltViewModel()
 ) {
@@ -78,7 +79,7 @@ fun ArtilheirosScreen(
     val temEspanha = campeonatoLaLigaId > 0
     val temItalia = campeonatoSerieAId > 0
     val temEuropa = campeonatoChampionsId > 0 || campeonatoEuropaId > 0
-    val temAmericaDoSul = campeonatoLibertadoresId > 0
+    val temAmericaDoSul = campeonatoLibertadoresId > 0 || campeonatoSulAmericanaId > 0
 
     LaunchedEffect(
         campeonatoAId, campeonatoBId, campeonatoCId, campeonatoDId, copaId, copaArgId,
@@ -86,7 +87,8 @@ fun ArtilheirosScreen(
         campeonatoUruAperturaId, campeonatoUruIntermedId, campeonatoUruClausuraId,
         campeonatoUruBId, campeonatoUruBCompetId, campeonatoPremierId, campeonatoChampionshipId,
         campeonatoLaLigaId, copaInglaterraId, campeonatoSerieAId, campeonatoAmistososId,
-        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId
+        campeonatoChampionsId, campeonatoEuropaId, campeonatoLibertadoresId,
+        campeonatoSulAmericanaId
     ) {
         vm.carregar(
             campAId           = campeonatoAId,
@@ -112,6 +114,7 @@ fun ArtilheirosScreen(
             campChampionsId   = campeonatoChampionsId,
             campEuropaId      = campeonatoEuropaId,
             campLibertadoresId = campeonatoLibertadoresId,
+            campSulAmericanaId = campeonatoSulAmericanaId,
             divisaoInicial    = 0
         )
     }
@@ -168,6 +171,7 @@ fun ArtilheirosScreen(
     // mata-mata, que é o torneio inteiro.
     val opcoesAmericaDoSul = buildList<Pair<Int, String>> {
         if (campeonatoLibertadoresId > 0) add(37 to "Libertadores")
+        if (campeonatoSulAmericanaId > 0) add(38 to "Copa Sul-Americana")
     }
 
     val paisDaDivisao = remember(divisaoSelecionada) {
@@ -178,7 +182,7 @@ fun ArtilheirosScreen(
             32 -> "Espanha"
             34 -> "Italia"
             35, 36 -> "Europa"
-            37 -> "América do Sul"
+            37, 38 -> "América do Sul"
             else -> "Brasil"
         }
     }
