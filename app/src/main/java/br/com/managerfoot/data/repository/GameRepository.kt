@@ -5156,7 +5156,7 @@ class GameRepository @Inject constructor(
                 paisCampeonato = c.paisCampeonato,
                 nomeCampeonato = c.nomeCampeonato,
                 fase = c.fase
-            ) ?: continue   // competição que não pontua, ou fase anterior às oitavas
+            ) ?: continue   // amistoso ou jogo de seleção: não pontua
             val pontos = RankingMundial.pontos(peso, c.vitorias, c.empates)
             if (pontos <= 0.0) continue
 
@@ -5164,14 +5164,20 @@ class GameRepository @Inject constructor(
                 timeId = c.timeId, nomeTime = c.nomeTime,
                 escudoRes = c.escudoRes, pais = c.pais
             )
-            val ehLiga = RankingMundial.profundidadeDaDivisao(c.tipo) != null
+            // Os três baldes da decomposição são exaustivos de propósito: liga
+            // (pontos corridos, inclusive o estadual) e internacional são testados,
+            // e TODO o resto cai em copa — copas nacionais, supercopas e o Troféu
+            // dos Campeões. Assim a soma exibida fecha com o total, inclusive se um
+            // tipo de campeonato novo aparecer.
+            val ehLiga = RankingMundial.profundidadeDaDivisao(c.tipo) != null ||
+                c.tipo == TipoCampeonato.ESTADUAL
             val ehInternacional = c.tipo == TipoCampeonato.CONTINENTAL ||
                 c.tipo == TipoCampeonato.MUNDIAL_CLUBES
             acumulado[c.timeId] = atual.copy(
                 pontos             = atual.pontos + pontos,
                 pontosLiga         = atual.pontosLiga + if (ehLiga) pontos else 0.0,
                 pontosCopa         = atual.pontosCopa +
-                    if (c.tipo == TipoCampeonato.COPA_NACIONAL) pontos else 0.0,
+                    if (!ehLiga && !ehInternacional) pontos else 0.0,
                 pontosInternacional = atual.pontosInternacional + if (ehInternacional) pontos else 0.0,
                 jogos              = atual.jogos + c.vitorias + c.empates
             )

@@ -92,35 +92,43 @@ o Uruguai precisou de arbítrio.
 
 ---
 
-## 3. Copas nacionais
+## 3. Copas nacionais, supercopas e estaduais
 
-As copas nacionais entram na conta, mas **apenas das oitavas de final em diante**. Os
-pontos por vitória seguem o **nível da liga do país** — uma vitória nas oitavas da Copa do
-Brasil vale os mesmos 4 pontos de uma vitória no Brasileirão.
+**Todo jogo oficial de clube pontua, em todas as fases.** Os pontos por vitória seguem o
+**nível da liga do país** — uma vitória na Copa do Brasil vale os mesmos 4 pontos de uma
+vitória no Brasileirão, inclusive na Primeira Fase.
 
-| Copa no jogo | Fases que existem | Pontuam | Vitória |
-|---|---|---|---:|
-| Copa do Brasil | Primeira, Segunda, Oitavas, Quartas, Semi, Final | das Oitavas | 4 |
-| Copa da Inglaterra | Primeira, Oitavas, Quartas, Semi, Final | das Oitavas | 4 |
-| Copa do Rei (Espanha) | Oitavas, Quartas, Semi, Final | todas | 4 |
-| Coppa Italia | Oitavas, Quartas, Semi, Final | todas | 4 |
-| Copa Argentina | Primeira, Oitavas, Quartas, Semi, Final | das Oitavas | 3 |
+| Competição no jogo | Fases que pontuam | Vitória |
+|---|---|---:|
+| Copa do Brasil | todas | 4 |
+| Copa da Inglaterra | todas | 4 |
+| Copa do Rei (Espanha) | todas | 4 |
+| Coppa Italia | todas | 4 |
+| Copa Argentina | todas | 3 |
+| Supercopa Rei / Inglaterra / Espanha / Itália | o jogo único | 4 |
+| Troféu dos Campeões (Argentina) | o jogo único | 3 |
+| Estaduais (dormentes: nenhum existe no jogo) | todas | 3 (um degrau abaixo) |
 
-As copas da Espanha e da Itália já começam nas oitavas, então pontuam integralmente. Nas
-fases de ida e volta, **cada jogo conta separadamente** — uma eliminatória rende dois
+Nas fases de ida e volta, **cada jogo conta separadamente** — uma eliminatória rende dois
 resultados, não um.
+
+O estadual vale um degrau abaixo da liga nacional do país, pela mesma cascata das divisões
+inferiores: é um torneio paralelo à elite, não a elite.
 
 ## 4. O que é ignorado
 
-- **Torneios secundários**, como a Copa da Liga, são completamente ignorados.
-- **Fases de copa anteriores às oitavas** não pontuam, nem com valor reduzido.
-- **Campeonatos estaduais** não pontuam.
-- **Amistosos** não são competição oficial e não pontuam.
+Só duas coisas:
 
-> **Decisão pendente — Supercopas e Troféu dos Campeões.** O jogo tem Supercopa Rei,
-> Supercopa da Inglaterra, da Espanha, da Itália e o Troféu dos Campeões argentino, todos
-> de jogo único entre dois campeões. São exatamente o tipo de "torneio secundário" que o
-> enunciado manda ignorar, então a proposta é **não pontuarem**. Confirme.
+- **Amistosos**, que não são competição oficial.
+- **Jogos de seleções**, que não são futebol de clubes.
+
+> **Por que as exclusões antigas caíram.** A primeira versão seguia o enunciado ao pé da
+> letra: copas só das oitavas em diante, e supercopas, Troféu dos Campeões e estaduais
+> ignorados como "torneios secundários". Na prática isso deixava o ranking cego para boa
+> parte do calendário — o clube eliminado na Primeira Fase da Copa do Brasil não somava
+> nada por aqueles jogos, e os 95 clubes do jogo que não disputam liga nenhuma (o pool das
+> divisões 90/91/92) dependiam de uma vaga continental para sequer aparecer no ranking.
+> A decisão passou a ser contabilizar todo jogo oficial de todo clube.
 
 > **Decisão pendente — pênaltis.** O enunciado não trata de decisão por pênaltis. A
 > proposta é seguir o mesmo critério do coeficiente da UEFA: vale o resultado dos 90
@@ -136,16 +144,16 @@ Clube brasileiro, nos últimos 12 meses:
 | Competição | Campanha | Cálculo | Pontos |
 |---|---|---|---:|
 | Brasileirão Série A | 22 V, 8 E, 8 D | 22×4 + 8×2 | 104 |
-| Copa do Brasil (das oitavas) | 4 V, 3 E, 1 D | 4×4 + 3×2 | 22 |
-| | | **Total** | **126** |
+| Copa do Brasil (todas as fases) | 6 V, 3 E, 1 D | 6×4 + 3×2 | 30 |
+| | | **Total** | **134** |
 
 Clube inglês, no mesmo período:
 
 | Competição | Campanha | Cálculo | Pontos |
 |---|---|---|---:|
 | Premier League | 24 V, 7 E, 7 D | 24×4 + 7×2 | 110 |
-| Copa da Inglaterra (das oitavas) | 3 V, 1 E | 3×4 + 1×2 | 14 |
-| | | **Total** | **124** |
+| Copa da Inglaterra (todas as fases) | 4 V, 1 E | 4×4 + 1×2 | 18 |
+| | | **Total** | **128** |
 
 ## Por que os brasileiros dominam o ranking real — e por que não vão dominar aqui
 
@@ -154,10 +162,11 @@ matemáticos: o Brasileirão tem peso máximo, e o calendário sul-americano tem
 jogos oficiais do que o europeu, porque o clube soma Libertadores e Brasileirão ao longo
 dos 12 meses.
 
-**No jogo, esse segundo fator não existe.** Não há Libertadores, e Brasileirão, Premier,
-LaLiga e Serie A têm 20 clubes e 38 rodadas cada, todas de Nível 4. O exemplo acima mostra
-o resultado: 126 contra 124, praticamente empatados. A vantagem brasileira só aparecerá
-quando as competições continentais forem implementadas.
+**No jogo esse fator agora existe**, desde que a Libertadores, a Champions e a Europa
+League foram implementadas: quem avança nelas soma jogos de peso 12 e 14 por cima da liga.
+Entre dois clubes que ficam só no âmbito nacional, porém, a distância é pequena:
+Brasileirão, Premier, LaLiga e Serie A têm 20 clubes e 38 rodadas cada, todas de Nível 4, e
+o exemplo acima dá 134 contra 128.
 
 > **Ponto de calibragem a observar:** a Argentina tem 30 clubes na primeira divisão e
 > disputa Apertura, Clausura e mata-mata na mesma temporada. Mesmo valendo 3 por vitória
@@ -171,7 +180,7 @@ quando as competições continentais forem implementadas.
 Implementado e funcionando, com as três decisões abaixo tomadas.
 
 - Entrada: aba **Colocação** da tela Ranking de Clubes, recorte **Mundo**.
-- Regras em `RankingMundial.kt`, cobertas por 22 testes unitários.
+- Regras em `RankingMundial.kt`, cobertas por testes unitários.
 - **Sem tabela de lançamentos** — o único dos quatro conjuntos assim. A pontuação é
   derivada das partidas já gravadas, na leitura: `partidas` guarda toda partida oficial de
   todas as temporadas (só amistosos são apagados, e eles não pontuam) com resultado, fase e
@@ -183,22 +192,25 @@ Implementado e funcionando, com as três decisões abaixo tomadas.
   `(ano = atual E og ≤ agora) OU (ano = atual−1 E og > agora)`. Isso é exatamente um ciclo
   de 12 meses no calendário do próprio jogo, sem nenhuma conversão de mês.
 - O SQL só agrega vitórias e empates por clube, competição e fase; os pesos são aplicados
-  em Kotlin, então o banco não precisa conhecer níveis de liga nem o corte das oitavas.
+  em Kotlin, então o banco não precisa conhecer níveis de liga.
 
 ### Decisões tomadas
 
 | Questão | Decisão |
 |---|---|
 | Divisões inferiores | **Cascata**: o nível cai um degrau por divisão abaixo da elite do país, com piso no nível 1. No Brasil, Série A 4 / B 3 / C 2 / D 1; na Inglaterra, Premier 4 / Championship 3; na Argentina, Primera 3 / segunda 2. |
-| Supercopas e Troféu dos Campeões | **Não pontuam** — jogo único entre campeões, o "torneio secundário" que o enunciado manda ignorar. |
+| Fases de copa | **Todas pontuam**, com o nível do país. Revisto: antes só valiam das oitavas em diante. |
+| Supercopas e Troféu dos Campeões | **Pontuam**, com o nível do país. Revisto: antes eram tratados como torneio secundário. |
 | Pênaltis | Vale o resultado dos 90 minutos ou da prorrogação; a disputa conta como empate para os dois clubes. |
 
 ## O que ainda falta
 
-1. **As competições internacionais**, que são as linhas de maior peso da tabela 1. Os pesos
-   já estão implementados e testados, mas ficam dormentes: `TipoCampeonato.CONTINENTAL` e
-   `MUNDIAL_CLUBES` existem no enum e nenhum campeonato é criado com eles. No dia em que
-   uma Libertadores existir, ela pontua sozinha, sem alteração nenhuma aqui.
+1. **O Mundial de Clubes da FIFA**, a linha de peso 21 da tabela 1. O peso já está
+   implementado e testado, mas fica dormente: `TipoCampeonato.MUNDIAL_CLUBES` existe no
+   enum e nenhum campeonato é criado com ele. No dia em que existir, pontua sozinho.
+
+   A Libertadores, a Champions e a Europa League **já pontuam**: são criadas como
+   `CONTINENTAL` e o nome de cada uma é o que seleciona o peso (14, 14 e 12).
 2. **Nível de liga variável.** Hoje é fixo no código; nas regras reais ele muda a cada ano
-   conforme o desempenho internacional dos clubes do país — o que só faz sentido calcular
-   quando o item 1 existir.
+   conforme o desempenho internacional dos clubes do país. Agora que as competições
+   continentais existem, já há de onde medir esse desempenho.

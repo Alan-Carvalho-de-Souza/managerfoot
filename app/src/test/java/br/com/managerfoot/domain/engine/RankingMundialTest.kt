@@ -125,8 +125,10 @@ class RankingMundialTest {
     // ── Copas nacionais ──────────────────────────────────────────────────
 
     @Test
-    fun `copa nacional pontua das oitavas em diante`() {
-        for (fase in listOf("Oitavas", "Quartas", "Semi", "Final")) {
+    fun `copa nacional pontua em todas as fases`() {
+        // Todo jogo oficial conta: a Primeira Fase vale o mesmo que a Final, que é
+        // o que põe no ranking o clube de divisão inferior eliminado cedo.
+        for (fase in MotorCampeonato.COPA_FASES) {
             assertEquals(
                 "fase $fase",
                 4.0,
@@ -139,28 +141,20 @@ class RankingMundialTest {
     }
 
     @Test
-    fun `fases de copa anteriores as oitavas nao pontuam`() {
-        assertNull(
-            RankingMundial.pesoDaVitoria(
-                TipoCampeonato.COPA_NACIONAL, "Brasil", "Copa do Brasil 2026", "Primeira Fase"
-            )
-        )
-        assertNull(
-            RankingMundial.pesoDaVitoria(
-                TipoCampeonato.COPA_NACIONAL, "Brasil", "Copa do Brasil 2026", "Segunda Fase"
-            )
-        )
-        assertNull(
+    fun `copa pontua mesmo sem fase gravada`() {
+        assertEquals(
+            4.0,
             RankingMundial.pesoDaVitoria(
                 TipoCampeonato.COPA_NACIONAL, "Brasil", "Copa do Brasil 2026", null
-            )
+            )!!,
+            delta
         )
     }
 
     @Test
     fun `copa segue o nivel do pais, nao a divisao do clube`() {
-        // Uma vitória nas oitavas da Copa Argentina vale 3, o nível do país,
-        // mesmo que o clube seja da segunda divisão.
+        // Uma vitória na Copa Argentina vale 3, o nível do país, mesmo que o clube
+        // seja da segunda divisão.
         assertEquals(
             3.0,
             RankingMundial.pesoDaVitoria(
@@ -170,24 +164,59 @@ class RankingMundialTest {
         )
     }
 
-    // ── O que é ignorado ─────────────────────────────────────────────────
+    // ── Supercopas, Troféu dos Campeões e estaduais ──────────────────────
 
     @Test
-    fun `supercopas e trofeu dos campeoes nao pontuam`() {
-        assertNull(
-            RankingMundial.pesoDaVitoria(TipoCampeonato.SUPERCOPA, "Brasil", "Supercopa Rei 2026", "Final")
+    fun `supercopas e trofeu dos campeoes valem o nivel do pais`() {
+        assertEquals(
+            4.0,
+            RankingMundial.pesoDaVitoria(
+                TipoCampeonato.SUPERCOPA, "Brasil", "Supercopa Rei 2026", "Final"
+            )!!,
+            delta
         )
-        assertNull(
+        assertEquals(
+            3.0,
             RankingMundial.pesoDaVitoria(
                 TipoCampeonato.TROFEU_CAMPEOES, "Argentina", "Trofeo de Campeones", "Final"
-            )
+            )!!,
+            delta
         )
     }
 
     @Test
-    fun `amistosos e estaduais nao pontuam`() {
+    fun `estadual vale um degrau abaixo da liga do pais`() {
+        // Brasil é nível 4, então o estadual vale 3.
+        assertEquals(
+            3.0,
+            RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Brasil", "Paulistão", null)!!,
+            delta
+        )
+        // País sem nível mapeado já está no piso: o estadual continua valendo 1.
+        assertEquals(
+            1.0,
+            RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Portugal", "Regional", null)!!,
+            delta
+        )
+    }
+
+    // ── O que é ignorado ─────────────────────────────────────────────────
+
+    @Test
+    fun `so amistoso e selecoes nao pontuam`() {
         assertNull(RankingMundial.pesoDaVitoria(TipoCampeonato.AMISTOSO, "Brasil", "Amistoso", null))
-        assertNull(RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Brasil", "Paulistão", null))
+        assertNull(RankingMundial.pesoDaVitoria(TipoCampeonato.SELECOES, "Brasil", "Eliminatórias", null))
+    }
+
+    @Test
+    fun `todo tipo de campeonato de clube pontua`() {
+        val semPontuar = TipoCampeonato.values().filter {
+            RankingMundial.pesoDaVitoria(it, "Brasil", "X", "Final") == null
+        }
+        assertEquals(
+            listOf(TipoCampeonato.SELECOES, TipoCampeonato.AMISTOSO),
+            semPontuar
+        )
     }
 
     // ── Competições internacionais (dormentes) ──────────────────────────

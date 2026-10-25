@@ -117,21 +117,33 @@ object RankingMundial {
         return NivelLiga.de(nivelDoPais(pais).nivel - (profundidade - 1))
     }
 
-    // ── Copas nacionais ──────────────────────────────────────────────────
-    /** Fases de copa que pontuam: das oitavas de final em diante. */
-    private val FASES_QUE_PONTUAM = setOf("Oitavas", "Quartas", "Semi", "Final")
-
-    fun faseDeCopaPontua(fase: String?): Boolean = fase in FASES_QUE_PONTUAM
+    // ── Competições regionais ────────────────────────────────────────────
+    /**
+     * Nível de um torneio regional (estadual): um degrau abaixo da liga nacional
+     * do país, com piso no nível 1 — a mesma cascata que as divisões inferiores
+     * usam. Um estadual corre em paralelo à elite, não é a elite.
+     *
+     * Dormente: nenhum campeonato ESTADUAL é criado no jogo hoje.
+     */
+    fun nivelDoEstadual(pais: String): NivelLiga =
+        NivelLiga.de(nivelDoPais(pais).nivel - 1)
 
     // ── Peso de uma partida ──────────────────────────────────────────────
     /**
      * Pontos que uma VITÓRIA naquela partida vale, ou null quando a partida não
      * pontua. O empate sai disso por [pontosPorEmpate].
      *
-     * Não pontuam: amistosos (não são competição oficial), estaduais, supercopas e
-     * o Troféu dos Campeões (jogo único entre campeões — o "torneio secundário"
-     * que o enunciado manda ignorar, como a Copa da Liga) e as fases de copa
-     * anteriores às oitavas.
+     * **Todo jogo oficial de clube pontua.** Ficam de fora apenas o amistoso, que
+     * não é competição oficial, e os jogos de SELEÇÕES, que não são de clube.
+     *
+     * Antes as copas pontuavam só das oitavas em diante, e supercopas, o Troféu
+     * dos Campeões e os estaduais não pontuavam, por serem "torneios secundários"
+     * na leitura do enunciado da IFFHS. Isso deixava o ranking mundial cego para
+     * boa parte do calendário: o clube eliminado na Primeira Fase da Copa do
+     * Brasil não somava nada por aqueles jogos, e os clubes que não disputam liga
+     * nenhuma (o pool das divisões 90/91/92) dependiam de uma vaga continental
+     * para sequer aparecer. Agora cada clube soma tudo que disputa, com o peso do
+     * torneio em que o jogo aconteceu.
      */
     fun pesoDaVitoria(
         tipo: TipoCampeonato,
@@ -143,11 +155,18 @@ object RankingMundial {
 
         TipoCampeonato.CONTINENTAL -> pesoContinentalPorNome(nomeCampeonato)
 
-        // Copa nacional: só das oitavas em diante, e vale o nível da liga do PAÍS,
-        // não o da divisão do clube — uma vitória nas oitavas da Copa do Brasil
-        // vale os mesmos 4 pontos de uma vitória no Brasileirão.
-        TipoCampeonato.COPA_NACIONAL ->
-            if (faseDeCopaPontua(fase)) nivelDoPais(paisCampeonato).pontosVitoria else null
+        // Copa nacional: todas as fases, e vale o nível da liga do PAÍS, não o da
+        // divisão do clube — uma vitória na Copa do Brasil vale os mesmos 4 pontos
+        // de uma vitória no Brasileirão, inclusive na Primeira Fase. É o que põe no
+        // ranking o clube de Série C ou D que cai cedo na copa.
+        //
+        // Supercopa e Troféu dos Campeões são jogo único entre campeões, decidido
+        // em campo e oficial: mesmo peso das copas do país.
+        TipoCampeonato.COPA_NACIONAL,
+        TipoCampeonato.SUPERCOPA,
+        TipoCampeonato.TROFEU_CAMPEOES -> nivelDoPais(paisCampeonato).pontosVitoria
+
+        TipoCampeonato.ESTADUAL -> nivelDoEstadual(paisCampeonato).pontosVitoria
 
         TipoCampeonato.NACIONAL_DIVISAO1,
         TipoCampeonato.NACIONAL_DIVISAO2,
@@ -157,9 +176,6 @@ object RankingMundial {
         TipoCampeonato.EXTRANGEIRO_DIVISAO2 ->
             nivelDaLiga(paisCampeonato, tipo)?.pontosVitoria
 
-        TipoCampeonato.SUPERCOPA,
-        TipoCampeonato.TROFEU_CAMPEOES,
-        TipoCampeonato.ESTADUAL,
         TipoCampeonato.SELECOES,
         TipoCampeonato.AMISTOSO -> null
     }
