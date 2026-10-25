@@ -56,6 +56,14 @@ object Trofeus {
     @DrawableRes val CLAUSURA_URU: Int   = R.drawable.ic_trophy_placeholder
     @DrawableRes val COMPETENCIA_URU: Int = R.drawable.ic_trophy_placeholder
 
+    // ── Continentais ──────────────────────────────────────────
+    @DrawableRes val CHAMPIONS_LEAGUE: Int = R.drawable.ic_trophy_championsleague
+    @DrawableRes val EUROPA_LEAGUE: Int    = R.drawable.ic_trophy_europaleague
+    @DrawableRes val LIBERTADORES: Int     = R.drawable.ic_trophy_libertadores
+    // Sem imagem própria ainda: para usar PNG real, adicione
+    // `ic_trophy_supercopauefa.png` em res/drawable/ e troque a referência.
+    @DrawableRes val SUPERCOPA_UEFA: Int   = R.drawable.ic_trophy_placeholder
+
     // ── Genérico (fallback) ───────────────────────────────────
     @DrawableRes val GENERICO: Int = R.drawable.ic_trophy_placeholder
 
@@ -90,9 +98,42 @@ object Trofeus {
         val nome = nomeCampeonato.lowercase()
 
         val raw: TrofeuInfo = run {
-            // Supercopa (especial — verde elétrico)
+            // ── Continentais, antes de tudo ───────────────────────────
+            // Precisam vir primeiro porque os ramos abaixo casam por palavras
+            // genéricas ("supercopa", "copa") e capturariam estas competições.
+            //
+            // "champions league" completo, e não só "champions": a EFL
+            // Championship contém "champions" dentro de "championship" e seria
+            // confundida com a Champions League.
+            if (nome.contains("champions league")) {
+                return@run TrofeuInfo(CHAMPIONS_LEAGUE, GoldChampion, "Champions League", Pais.INTERNACIONAL)
+            }
+            if (nome.contains("europa league")) {
+                return@run TrofeuInfo(EUROPA_LEAGUE, AmberAccent, "Europa League", Pais.INTERNACIONAL)
+            }
+            // Cobre também a "Pré-Libertadores", que é a mesma competição.
+            if (nome.contains("libertadores")) {
+                return@run TrofeuInfo(LIBERTADORES, LibertadoresBlue, "Libertadores", Pais.INTERNACIONAL)
+            }
+
+            // ── Supercopas ────────────────────────────────────────────
+            // O ramo antigo era só `contains("supercopa")` e devolvia SEMPRE
+            // "Supercopa Rei" com o troféu brasileiro — então as supercopas da
+            // UEFA, Inglaterra, Espanha e Itália todas apareciam como Supercopa
+            // Rei. Agora cada uma se identifica antes do caso brasileiro.
             if (nome.contains("supercopa") || nome.contains("super copa")) {
-                return@run TrofeuInfo(SUPERCOPA_REI, GreenElectric, "Supercopa Rei", Pais.BRASIL)
+                return@run when {
+                    nome.contains("uefa") ->
+                        TrofeuInfo(SUPERCOPA_UEFA, GreenElectric, "Supercopa da UEFA", Pais.INTERNACIONAL)
+                    nome.contains("inglaterra") ->
+                        TrofeuInfo(GENERICO, GreenElectric, "Supercopa da Inglaterra", Pais.INTERNACIONAL)
+                    nome.contains("espanha") ->
+                        TrofeuInfo(GENERICO, GreenElectric, "Supercopa da Espanha", Pais.INTERNACIONAL)
+                    nome.contains("italia") || nome.contains("itália") ->
+                        TrofeuInfo(GENERICO, GreenElectric, "Supercopa da Itália", Pais.INTERNACIONAL)
+                    else ->
+                        TrofeuInfo(SUPERCOPA_REI, GreenElectric, "Supercopa Rei", Pais.BRASIL)
+                }
             }
 
             // Troféu dos Campeões (ARG) — campeão Apertura x campeão Clausura
