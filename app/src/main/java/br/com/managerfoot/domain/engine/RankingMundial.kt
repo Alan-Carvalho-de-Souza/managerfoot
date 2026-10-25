@@ -117,24 +117,17 @@ object RankingMundial {
         return NivelLiga.de(nivelDoPais(pais).nivel - (profundidade - 1))
     }
 
-    // ── Competições regionais ────────────────────────────────────────────
-    /**
-     * Nível de um torneio regional (estadual): um degrau abaixo da liga nacional
-     * do país, com piso no nível 1 — a mesma cascata que as divisões inferiores
-     * usam. Um estadual corre em paralelo à elite, não é a elite.
-     *
-     * Dormente: nenhum campeonato ESTADUAL é criado no jogo hoje.
-     */
-    fun nivelDoEstadual(pais: String): NivelLiga =
-        NivelLiga.de(nivelDoPais(pais).nivel - 1)
 
     // ── Peso de uma partida ──────────────────────────────────────────────
     /**
      * Pontos que uma VITÓRIA naquela partida vale, ou null quando a partida não
      * pontua. O empate sai disso por [pontosPorEmpate].
      *
-     * **Todo jogo oficial de clube pontua.** Ficam de fora apenas o amistoso, que
-     * não é competição oficial, e os jogos de SELEÇÕES, que não são de clube.
+     * As copas nacionais pontuam em **todas as fases**, não só das oitavas em
+     * diante: é o que põe no ranking o clube de Série C ou D que cai cedo na copa.
+     *
+     * Já supercopas, Troféu dos Campeões e estaduais **não pontuam**, e o amistoso
+     * e os jogos de seleções também não — ver a lista no fim deste `when`.
      *
      * Antes as copas pontuavam só das oitavas em diante, e supercopas, o Troféu
      * dos Campeões e os estaduais não pontuavam, por serem "torneios secundários"
@@ -162,11 +155,7 @@ object RankingMundial {
         //
         // Supercopa e Troféu dos Campeões são jogo único entre campeões, decidido
         // em campo e oficial: mesmo peso das copas do país.
-        TipoCampeonato.COPA_NACIONAL,
-        TipoCampeonato.SUPERCOPA,
-        TipoCampeonato.TROFEU_CAMPEOES -> nivelDoPais(paisCampeonato).pontosVitoria
-
-        TipoCampeonato.ESTADUAL -> nivelDoEstadual(paisCampeonato).pontosVitoria
+        TipoCampeonato.COPA_NACIONAL -> nivelDoPais(paisCampeonato).pontosVitoria
 
         TipoCampeonato.NACIONAL_DIVISAO1,
         TipoCampeonato.NACIONAL_DIVISAO2,
@@ -176,6 +165,14 @@ object RankingMundial {
         TipoCampeonato.EXTRANGEIRO_DIVISAO2 ->
             nivelDaLiga(paisCampeonato, tipo)?.pontosVitoria
 
+        // Não pontuam, por decisão de produto registrada em ranking_mundial.md:
+        // supercopa e Troféu dos Campeões são jogo único entre campeões — o
+        // "torneio secundário" que o enunciado da IFFHS manda ignorar, como a Copa
+        // da Liga —, e o enunciado também exclui os campeonatos estaduais. O
+        // amistoso não é competição oficial, e seleções não são clube.
+        TipoCampeonato.SUPERCOPA,
+        TipoCampeonato.TROFEU_CAMPEOES,
+        TipoCampeonato.ESTADUAL,
         TipoCampeonato.SELECOES,
         TipoCampeonato.AMISTOSO -> null
     }

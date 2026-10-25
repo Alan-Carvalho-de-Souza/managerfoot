@@ -164,40 +164,33 @@ class RankingMundialTest {
         )
     }
 
-    // ── Supercopas, Troféu dos Campeões e estaduais ──────────────────────
+    // ── Supercopas, Troféu dos Campeões e estaduais: não pontuam ─────────
 
     @Test
-    fun `supercopas e trofeu dos campeoes valem o nivel do pais`() {
-        assertEquals(
-            4.0,
+    fun `supercopas e trofeu dos campeoes nao pontuam`() {
+        // Jogo unico entre campeoes: o "torneio secundario" que o enunciado da
+        // IFFHS manda ignorar, como a Copa da Liga. Decisao registrada em
+        // ranking_mundial.md.
+        assertNull(
             RankingMundial.pesoDaVitoria(
                 TipoCampeonato.SUPERCOPA, "Brasil", "Supercopa Rei 2026", "Final"
-            )!!,
-            delta
+            )
         )
-        assertEquals(
-            3.0,
+        assertNull(
+            RankingMundial.pesoDaVitoria(
+                TipoCampeonato.SUPERCOPA, "Europa", "Supercopa da UEFA 2027", "Final"
+            )
+        )
+        assertNull(
             RankingMundial.pesoDaVitoria(
                 TipoCampeonato.TROFEU_CAMPEOES, "Argentina", "Trofeo de Campeones", "Final"
-            )!!,
-            delta
+            )
         )
     }
 
     @Test
-    fun `estadual vale um degrau abaixo da liga do pais`() {
-        // Brasil é nível 4, então o estadual vale 3.
-        assertEquals(
-            3.0,
-            RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Brasil", "Paulistão", null)!!,
-            delta
-        )
-        // País sem nível mapeado já está no piso: o estadual continua valendo 1.
-        assertEquals(
-            1.0,
-            RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Portugal", "Regional", null)!!,
-            delta
-        )
+    fun `estaduais nao pontuam`() {
+        assertNull(RankingMundial.pesoDaVitoria(TipoCampeonato.ESTADUAL, "Brasil", "Paulistão", null))
     }
 
     // ── O que é ignorado ─────────────────────────────────────────────────
@@ -209,12 +202,20 @@ class RankingMundialTest {
     }
 
     @Test
-    fun `todo tipo de campeonato de clube pontua`() {
+    fun `so cinco tipos de campeonato nao pontuam`() {
+        // A lista inteira, de uma vez, para uma competicao nova nunca entrar ou
+        // sair do ranking sem que este teste aponte.
         val semPontuar = TipoCampeonato.values().filter {
             RankingMundial.pesoDaVitoria(it, "Brasil", "X", "Final") == null
-        }
+        }.toSet()
         assertEquals(
-            listOf(TipoCampeonato.SELECOES, TipoCampeonato.AMISTOSO),
+            setOf(
+                TipoCampeonato.ESTADUAL,        // excluido pelo enunciado
+                TipoCampeonato.SUPERCOPA,       // jogo unico entre campeoes
+                TipoCampeonato.TROFEU_CAMPEOES, // idem
+                TipoCampeonato.SELECOES,        // nao e clube
+                TipoCampeonato.AMISTOSO         // nao e competicao oficial
+            ),
             semPontuar
         )
     }

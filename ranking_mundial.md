@@ -92,11 +92,11 @@ o Uruguai precisou de arbítrio.
 
 ---
 
-## 3. Copas nacionais, supercopas e estaduais
+## 3. Copas nacionais
 
-**Todo jogo oficial de clube pontua, em todas as fases.** Os pontos por vitória seguem o
-**nível da liga do país** — uma vitória na Copa do Brasil vale os mesmos 4 pontos de uma
-vitória no Brasileirão, inclusive na Primeira Fase.
+As copas nacionais pontuam em **todas as fases**. Os pontos por vitória seguem o **nível da
+liga do país** — uma vitória na Copa do Brasil vale os mesmos 4 pontos de uma vitória no
+Brasileirão, inclusive na Primeira Fase.
 
 | Competição no jogo | Fases que pontuam | Vitória |
 |---|---|---:|
@@ -105,30 +105,30 @@ vitória no Brasileirão, inclusive na Primeira Fase.
 | Copa do Rei (Espanha) | todas | 4 |
 | Coppa Italia | todas | 4 |
 | Copa Argentina | todas | 3 |
-| Supercopa Rei / Inglaterra / Espanha / Itália | o jogo único | 4 |
-| Troféu dos Campeões (Argentina) | o jogo único | 3 |
-| Estaduais (dormentes: nenhum existe no jogo) | todas | 3 (um degrau abaixo) |
 
 Nas fases de ida e volta, **cada jogo conta separadamente** — uma eliminatória rende dois
 resultados, não um.
 
-O estadual vale um degrau abaixo da liga nacional do país, pela mesma cascata das divisões
-inferiores: é um torneio paralelo à elite, não a elite.
+> **Isto é um desvio consciente do enunciado**, que manda contar a copa só das oitavas em
+> diante. O corte deixava o ranking cego para boa parte do calendário: o clube eliminado na
+> Primeira Fase da Copa do Brasil não somava nada por aqueles jogos, e um clube de Série C
+> ou D, que raramente passa das primeiras fases, não tinha como aparecer. A cobertura
+> ganhou do literalismo aqui — e só aqui.
 
 ## 4. O que é ignorado
 
-Só duas coisas:
-
+- **Supercopas e Troféu dos Campeões.** Jogo único entre campeões: exatamente o "torneio
+  secundário" que o enunciado manda ignorar, como a Copa da Liga. Vale para a Supercopa
+  Rei, as três europeias, a Supercopa da UEFA e o Troféu dos Campeões argentino.
+- **Campeonatos estaduais**, excluídos pelo enunciado.
 - **Amistosos**, que não são competição oficial.
 - **Jogos de seleções**, que não são futebol de clubes.
 
-> **Por que as exclusões antigas caíram.** A primeira versão seguia o enunciado ao pé da
-> letra: copas só das oitavas em diante, e supercopas, Troféu dos Campeões e estaduais
-> ignorados como "torneios secundários". Na prática isso deixava o ranking cego para boa
-> parte do calendário — o clube eliminado na Primeira Fase da Copa do Brasil não somava
-> nada por aqueles jogos, e os 95 clubes do jogo que não disputam liga nenhuma (o pool das
-> divisões 90/91/92) dependiam de uma vaga continental para sequer aparecer no ranking.
-> A decisão passou a ser contabilizar todo jogo oficial de todo clube.
+> **Por que as copas foram abertas e estas não.** Abrir as fases de copa amplia a cobertura
+> de competições que o ranking já contava — é mais do mesmo calendário. Incluir supercopa,
+> Troféu dos Campeões e estadual seria incluir **torneios que o enunciado exclui por
+> natureza**, não por fase. Um teste fixa a lista inteira de tipos que não pontuam, para
+> que nenhuma competição nova entre ou saia sem aviso.
 
 > **Decisão pendente — pênaltis.** O enunciado não trata de decisão por pênaltis. A
 > proposta é seguir o mesmo critério do coeficiente da UEFA: vale o resultado dos 90
@@ -200,7 +200,8 @@ Implementado e funcionando, com as três decisões abaixo tomadas.
 |---|---|
 | Divisões inferiores | **Cascata**: o nível cai um degrau por divisão abaixo da elite do país, com piso no nível 1. No Brasil, Série A 4 / B 3 / C 2 / D 1; na Inglaterra, Premier 4 / Championship 3; na Argentina, Primera 3 / segunda 2. |
 | Fases de copa | **Todas pontuam**, com o nível do país. Revisto: antes só valiam das oitavas em diante. |
-| Supercopas e Troféu dos Campeões | **Pontuam**, com o nível do país. Revisto: antes eram tratados como torneio secundário. |
+| Supercopas e Troféu dos Campeões | **Não pontuam** — torneio secundário, pelo enunciado. |
+| Estaduais | **Não pontuam**, pelo enunciado. |
 | Pênaltis | Vale o resultado dos 90 minutos ou da prorrogação; a disputa conta como empate para os dois clubes. |
 
 ## O que ainda falta
