@@ -2812,6 +2812,7 @@ class HallDaFamaViewModel @Inject constructor(
                 600  -> lista.filter { it.divisao == 24 || it.divisao == 26 || it.divisao == 29 }       // Italia (Serie A + Copa + Supercopa)
                 700  -> lista.filter { it.divisao in 30..33 }                                          // Europa (Champions, Europa League, Supercopa da UEFA e futura Conference)
                 800  -> lista.filter { it.divisao in 34..35 }                                          // América do Sul (Libertadores e futura Sul-Americana)
+                900  -> lista.filter { it.divisao in 36..37 }                                          // Intercontinental (Copa Intercontinental e futuro Mundial de Clubes)
                 else -> lista.filter { it.divisao == div }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

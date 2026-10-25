@@ -37,6 +37,10 @@ enum class TipoCampeonato {
     SUPERCOPA,              // Supercopa Rei (campeão brasileiro x campeão da copa)
     CONTINENTAL,            // Libertadores / Copa Sul-Americana
     MUNDIAL_CLUBES,
+    // Copa Intercontinental: jogo único entre o campeão da Champions League e o
+    // campeão da Libertadores, último jogo oficial da temporada. Separada de
+    // MUNDIAL_CLUBES, que segue reservada ao Mundial de Clubes da FIFA.
+    INTERCONTINENTAL,
     SELECOES,
     EXTRANGEIRO_DIVISAO1,   // Primera División Argentina (e futuros)
     EXTRANGEIRO_DIVISAO2,   // Segunda División Argentina (Primera Nacional)

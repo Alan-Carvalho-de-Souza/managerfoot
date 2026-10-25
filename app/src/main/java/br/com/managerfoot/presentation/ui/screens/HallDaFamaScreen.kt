@@ -92,6 +92,13 @@ fun HallDaFamaScreen(
         34 to "Libertadores"
     )
 
+    // Intercontinental: não pertence a continente nenhum. A 37 fica reservada ao
+    // Mundial de Clubes da FIFA, que ainda não existe no jogo.
+    val opcoesIntercontinental = listOf(
+        900 to "Todas",
+        36 to "Copa Intercontinental"
+    )
+
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
             in 7..10, 17, 200 -> "Argentina"
@@ -101,6 +108,7 @@ fun HallDaFamaScreen(
             24, 26, 29, 600 -> "Italia"
             30, 31, 32, 33, 700 -> "Europa"
             34, 35, 800 -> "América do Sul"
+            36, 37, 900 -> "Intercontinental"
             0 -> "Todos"
             else -> "Brasil"
         }
@@ -155,6 +163,7 @@ fun HallDaFamaScreen(
                             "Italia" -> 600
                             "Europa" -> 700
                             "América do Sul" -> 800
+                            "Intercontinental" -> 900
                             else -> 0
                         }
                         vm.selecionarDivisao(div)

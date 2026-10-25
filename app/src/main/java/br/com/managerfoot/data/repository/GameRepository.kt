@@ -1641,6 +1641,15 @@ class GameRepository @Inject constructor(
             criarESimularTrofeuCampeoes(ano = ano, temporadaId = temporadaId, timeJogadorId = timeJogadorId)
         } catch (_: Exception) { }
 
+        // Copa Intercontinental — ÚLTIMO jogo oficial da temporada, entre os
+        // campeões da Champions e da Libertadores. Vem aqui porque as duas já
+        // encerraram acima e os seus campeões estão no Hall da Fama deste ano.
+        try {
+            criarESimularCopaIntercontinental(
+                ano = ano, temporadaId = temporadaId, timeJogadorId = timeJogadorId
+            )
+        } catch (_: Exception) { }
+
         // ── Decay anual: times sem nenhum título no ano perdem reputação ──
         // Times que conquistaram qualquer título no Hall da Fama (divisao 1-18)
         // do ano que está encerrando ficam imunes ao decay. Os demais perdem 1%.
@@ -4313,6 +4322,140 @@ class GameRepository @Inject constructor(
             )
         ))
         return supercopaId
+    }
+
+    /** Hall da Fama da Copa Intercontinental. O 37 fica reservado ao Mundial de Clubes. */
+    private val DIVISAO_HALL_INTERCONTINENTAL = 36
+
+    /**
+     * Último jogo oficial da temporada: depois de toda competição (a maior
+     * ordemGlobal em uso é 425) e antes dos amistosos de dezembro, em 451.
+     */
+    private val ORDEM_GLOBAL_INTERCONTINENTAL = 440
+
+    // ─────────────────────────────────────────────────────────────
+    //  Copa Intercontinental
+    //  Jogo único entre o campeão da Champions League (Hall 30) e o
+    //  campeão da Libertadores (Hall 34) da MESMA temporada.
+    //  - Hall da Fama: divisao = 36
+    //  - ordemGlobal = 440: depois de TODA competição oficial e antes dos
+    //    amistosos de dezembro. É, por construção, o último jogo oficial.
+    //  - Campo neutro sai de graça: simularPartidaInterna liga campoNeutro
+    //    quando a fase é "Final".
+    //  - Auto-simulada dentro de encerrarTemporadaComHallDaFama, depois de
+    //    Champions e Libertadores já terem campeão registrado.
+    // ─────────────────────────────────────────────────────────────
+    suspend fun criarESimularCopaIntercontinental(
+        ano: Int,
+        temporadaId: Int,
+        timeJogadorId: Int = -1
+    ): Int {
+        val champEuropa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_CHAMPIONS)
+        val champAmerica = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_LIBERTADORES)
+        if (champEuropa == null || champAmerica == null) return -1
+
+        // Não existe o caso de "mesmo clube campeão dos dois": Champions e
+        // Libertadores são de confederações diferentes, e nenhum clube disputa as
+        // duas. Por isso não há aqui o desempate que o Troféu dos Campeões faz.
+
+        // Evita duplicata se a função for chamada de novo no mesmo ano.
+        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(ano, DIVISAO_HALL_INTERCONTINENTAL) != null) return -1
+
+        val nomeCampeonato = "Copa Intercontinental $ano"
+
+        val copaId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = nomeCampeonato,
+                tipo         = TipoCampeonato.INTERCONTINENTAL,
+                formato      = FormatoCampeonato.MATA_MATA_SIMPLES,
+                totalRodadas = 1,
+                // Não pertence a país nem a continente: é entre confederações.
+                pais         = "Intercontinental"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(listOf(
+            CampeonatoTimeEntity(copaId, champEuropa.campeaoTimeId),
+            CampeonatoTimeEntity(copaId, champAmerica.campeaoTimeId)
+        ))
+
+        // Campeão da Libertadores como mandante nominal; o jogo é em campo neutro.
+        val partidaId = partidaDao.inserir(
+            PartidaEntity(
+                campeonatoId = copaId,
+                rodada       = 1,
+                timeCasaId   = champAmerica.campeaoTimeId,
+                timeForaId   = champEuropa.campeaoTimeId,
+                fase         = "Final",
+                ordemGlobal  = ORDEM_GLOBAL_INTERCONTINENTAL
+            )
+        ).toInt()
+
+        val partidaCriada = partidaDao.buscarPorId(partidaId) ?: return copaId
+        try { simularPartidaInterna(partidaCriada) } catch (_: Exception) { }
+
+        val partidaJogada = partidaDao.buscarPorId(partidaId) ?: return copaId
+        val gCasa = partidaJogada.golsCasa ?: 0
+        val gFora = partidaJogada.golsFora ?: 0
+        val campeaoId = when {
+            gCasa > gFora -> partidaJogada.timeCasaId
+            gFora > gCasa -> partidaJogada.timeForaId
+            else -> {
+                val pCasa = partidaJogada.penaltisCasa
+                val pFora = partidaJogada.penaltisForaId
+                if (pCasa != null && pFora != null) {
+                    if (pCasa > pFora) partidaJogada.timeCasaId else partidaJogada.timeForaId
+                } else {
+                    simularEPersistirPenaltisIA(partidaJogada, partidaJogada)
+                }
+            }
+        }
+        val viceId = if (campeaoId == partidaJogada.timeCasaId)
+            partidaJogada.timeForaId else partidaJogada.timeCasaId
+
+        val campeao = timeRepository.buscarEntityPorId(campeaoId)
+        val vice    = timeRepository.buscarEntityPorId(viceId)
+        val artilheiro = partidaDao.buscarArtilheiroTop1(copaId)
+        val assistente = partidaDao.buscarAssisteTop1(copaId)
+
+        inserirNoHallDaFamaComTecnico(
+            HallDaFamaEntity(
+                ano                  = ano,
+                nomeCampeonato       = nomeCampeonato,
+                campeaoTimeId        = campeaoId,
+                campeaoNome          = campeao?.nome ?: "",
+                campeaoEscudo        = campeao?.escudoRes ?: "",
+                viceTimeId           = viceId,
+                viceNome             = vice?.nome ?: "",
+                viceEscudo           = vice?.escudoRes ?: "",
+                artilheiroId         = artilheiro?.jogadorId ?: -1,
+                artilheiroNome       = artilheiro?.nomeJogador ?: "",
+                artilheiroNomeAbrev  = artilheiro?.nomeAbrev ?: "",
+                artilheiroGols       = artilheiro?.total ?: 0,
+                artilheiroNomeTime   = artilheiro?.nomeTime ?: "",
+                artilheiroEscudo     = artilheiro?.escudoRes ?: "",
+                assistenteId         = assistente?.jogadorId ?: -1,
+                assistenteNome       = assistente?.nomeJogador ?: "",
+                assistenteNomeAbrev  = assistente?.nomeAbrev ?: "",
+                assistenciasTotais   = assistente?.total ?: 0,
+                assistenteNomeTime   = assistente?.nomeTime ?: "",
+                assistenteEscudo     = assistente?.escudoRes ?: "",
+                divisao              = DIVISAO_HALL_INTERCONTINENTAL
+            )
+        )
+
+        // Premiação: é o título mundial de clubes, acima de qualquer supercopa.
+        if (timeJogadorId > 0) {
+            val premio = when (timeJogadorId) {
+                campeaoId -> 30_000_000_00L
+                viceId    -> 12_000_000_00L
+                else      -> 0L
+            }
+            if (premio > 0L) timeRepository.creditarSaldo(timeJogadorId, premio)
+        }
+
+        campeonatoDao.encerrar(copaId)
+        return copaId
     }
 
     // ─────────────────────────────────────────────────────────────

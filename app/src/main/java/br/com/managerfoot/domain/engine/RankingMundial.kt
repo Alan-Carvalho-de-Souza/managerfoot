@@ -146,6 +146,11 @@ object RankingMundial {
     ): Double? = when (tipo) {
         TipoCampeonato.MUNDIAL_CLUBES -> PESO_MUNDIAL_FIFA
 
+        // Copa Intercontinental: decide o título mundial entre os campeões da
+        // Champions e da Libertadores, então vale o mesmo peso da final do
+        // Mundial da FIFA, de quem é a antecessora direta.
+        TipoCampeonato.INTERCONTINENTAL -> PESO_MUNDIAL_FIFA
+
         TipoCampeonato.CONTINENTAL -> pesoContinentalPorNome(nomeCampeonato)
 
         // Copa nacional: todas as fases, e vale o nível da liga do PAÍS, não o da

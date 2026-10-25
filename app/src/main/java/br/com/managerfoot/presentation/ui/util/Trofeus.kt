@@ -60,6 +60,7 @@ object Trofeus {
     @DrawableRes val CHAMPIONS_LEAGUE: Int = R.drawable.ic_trophy_championsleague
     @DrawableRes val EUROPA_LEAGUE: Int    = R.drawable.ic_trophy_europaleague
     @DrawableRes val LIBERTADORES: Int     = R.drawable.ic_trophy_libertadores
+    @DrawableRes val INTERCONTINENTAL: Int = R.drawable.ic_trophy_intercontinental
     // Sem imagem própria ainda: para usar PNG real, adicione
     // `ic_trophy_supercopauefa.png` em res/drawable/ e troque a referência.
     @DrawableRes val SUPERCOPA_UEFA: Int   = R.drawable.ic_trophy_placeholder
@@ -112,6 +113,11 @@ object Trofeus {
                 return@run TrofeuInfo(EUROPA_LEAGUE, AmberAccent, "Europa League", Pais.INTERNACIONAL)
             }
             // Cobre também a "Pré-Libertadores", que é a mesma competição.
+            // Antes da Libertadores: "Copa Intercontinental" não contém
+            // "libertadores", mas contém "copa", que é casado mais abaixo.
+            if (nome.contains("intercontinental")) {
+                return@run TrofeuInfo(INTERCONTINENTAL, GoldChampion, "Copa Intercontinental", Pais.INTERNACIONAL)
+            }
             if (nome.contains("libertadores")) {
                 return@run TrofeuInfo(LIBERTADORES, LibertadoresBlue, "Libertadores", Pais.INTERNACIONAL)
             }
