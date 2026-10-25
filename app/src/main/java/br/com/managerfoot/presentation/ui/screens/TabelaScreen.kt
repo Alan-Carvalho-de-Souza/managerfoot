@@ -268,12 +268,36 @@ fun TabelaScreen(
             else emptyList()
         }
 
+        // As continentais sul-americanas nascem SEM fase de grupos: a tabela delas
+        // só passa a existir quando a fase prévia termina e o sorteio acontece —
+        // a Pré-Libertadores na 40, a Primeira Fase na 41. Até ali a tela ficava
+        // em branco, sem dizer ao jogador que não havia nada errado.
+        val aindaNaoSorteada = ehGrupos && gruposCompetencia.isEmpty() &&
+            (divisaoSelecionada == 40 || divisaoSelecionada == 41)
+
         if (!ehGrupos) {
             TabelaColunasHeader()
         }
 
         LazyColumn(modifier = Modifier.weight(1f)) {
-            if (ehGrupos) {
+            if (aindaNaoSorteada) {
+                item {
+                    Box(
+                        Modifier.fillMaxWidth().padding(Spacing.xl),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (divisaoSelecionada == 41)
+                                "Fase de grupos ainda não sorteada — a Primeira Fase está em andamento"
+                            else
+                                "Fase de grupos ainda não sorteada — a Pré-Libertadores está em andamento",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else if (ehGrupos) {
                 gruposCompetencia.forEach { (grupo, grupoTabela) ->
                     item { GrupoHeader("Grupo $grupo") }
                     item { TabelaColunasHeader() }
@@ -342,7 +366,9 @@ fun TabelaScreen(
             item { Spacer(Modifier.height(Spacing.sm)) }
         }
 
-        LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
+        if (!aindaNaoSorteada) {
+            LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
+        }
     }
 }
 
