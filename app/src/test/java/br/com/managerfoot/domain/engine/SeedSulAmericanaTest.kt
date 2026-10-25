@@ -235,6 +235,76 @@ class SeedSulAmericanaTest {
         }
     }
 
+    // ── A vaga que a Sul-Americana devolve à Libertadores ────────────────
+
+    @Test
+    fun `com os dois campeoes vigentes as cotas voltam a tabela oficial`() {
+        val todos = candidatos()
+        val naLib = naLibertadores()
+        // Os dois campeões vigentes, de países diferentes e nenhum deles entrando
+        // pela vaga de título do Brasil — o caso em que as duas vagas estruturais
+        // da fase de grupos têm titular.
+        val campeaoLib = todos.first { it.pais == "Chile" }.timeId
+        val campeaoSul = todos.first { it.timeId !in naLib && it.pais == "Peru" }.timeId
+
+        val vagas = libertadores.montar(
+            todos,
+            campeaoLibertadores = campeaoLib,
+            campeaoSulAmericana = campeaoSul,
+            fecharFaseDeGrupos = true
+        )
+
+        // Com as duas ocupadas, nenhuma vaga é remanejada: é esse remanejamento
+        // que dava ao Brasil e à Argentina uma vaga além da tabela oficial.
+        assertEquals(
+            0,
+            vagas.count { it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA }
+        )
+        // E cada associação entra com exatamente a sua cota.
+        val porPais = vagas.groupBy { it.candidato.pais }
+        for ((pais, cota) in libertadores.COTAS_OFICIAIS) {
+            val esperado = cota.total +
+                listOf(campeaoLib, campeaoSul).count { id ->
+                    todos.first { it.timeId == id }.pais == pais
+                }
+            assertEquals("$pais", esperado, porPais.getValue(pais).size)
+        }
+        assertEquals(libertadores.TOTAL_DE_CLUBES, vagas.size)
+    }
+
+    @Test
+    fun `a vaga do campeao da Sul-Americana tira uma vaga remanejada`() {
+        val todos = candidatos()
+        val naLib = naLibertadores()
+        val campeaoSul = todos.first { it.timeId !in naLib && it.pais == "Peru" }.timeId
+
+        val semVaga = libertadores.montar(todos, fecharFaseDeGrupos = true)
+        val comVaga = libertadores.montar(
+            todos, campeaoSulAmericana = campeaoSul, fecharFaseDeGrupos = true
+        )
+
+        val remanejadasSem = semVaga.count { it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA }
+        val remanejadasCom = comVaga.count { it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA }
+        assertEquals(remanejadasSem - 1, remanejadasCom)
+
+        // O campeão entra pela porta de campeão vigente, por fora da cota do país.
+        assertTrue(
+            comVaga.any {
+                it.candidato.timeId == campeaoSul &&
+                    it.porta == PortaDaLibertadores.CAMPEAO_VIGENTE
+            }
+        )
+
+        // A remanejada que sobra é oferecida na ordem da cota, então quem devolve a
+        // vaga a mais é a ÚLTIMA da fila — a Argentina, e não o Brasil. O Brasil só
+        // volta às suas 7 quando as duas vagas estruturais têm titular.
+        assertEquals(
+            libertadores.COTAS_OFICIAIS.getValue("Argentina").total,
+            comVaga.count { it.candidato.pais == "Argentina" }
+        )
+        assertEquals(libertadores.TOTAL_DE_CLUBES, comVaga.size)
+    }
+
     @Test
     fun `nenhum pais passa de 8 clubes na fase de grupos`() {
         // É o teto de viabilidade: 8 clubes de um país em 8 grupos só cabem com

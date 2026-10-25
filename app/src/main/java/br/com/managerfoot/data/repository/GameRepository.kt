@@ -7439,8 +7439,7 @@ class GameRepository @Inject constructor(
     /**
      * Código de divisão da Libertadores no Hall da Fama. A faixa 30..33 é dos
      * continentais europeus (30 Champions, 31 Europa League, 32 reservada à
-     * Conference, 33 Supercopa da UEFA); a 35 fica reservada à Copa
-     * Sul-Americana, que ainda não existe.
+     * Conference, 33 Supercopa da UEFA); a 35 é da Copa Sul-Americana.
      */
     private val DIVISAO_HALL_LIBERTADORES = 34
 
@@ -7482,10 +7481,17 @@ class GameRepository @Inject constructor(
         return ListaDeAcessoLibertadores.montar(
             candidatos          = candidatos,
             campeaoLibertadores = if (campeaoEntraPelaVagaDoBrasil) null else campeaoLibertadores,
-            // A Copa Sul-Americana ainda não existe no jogo. Quando existir, basta
-            // o seu código de Hall da Fama entrar aqui: a lista de acesso já trata
-            // a vaga do campeão vigente dela, inclusive a regra de queda.
-            campeaoSulAmericana = null,
+            // O campeão vigente da Copa Sul-Americana, que entra direto na fase de
+            // grupos. É uma vaga ESTRUTURAL, por fora da cota do país dele: sem ela
+            // os 32 dos grupos não fecham e a vaga desce para o próximo colocado de
+            // uma associação — o que, enquanto esta linha era null, dava ao Brasil e
+            // à Argentina uma vaga a mais do que a tabela oficial prevê.
+            //
+            // Não há risco de um clube ocupar duas vagas: quem joga a Sul-Americana
+            // não joga a Libertadores na mesma temporada, então o campeão dela nunca
+            // é também o campeão da Libertadores, e `montar` ainda desconta quem já
+            // entrou por outra porta.
+            campeaoSulAmericana = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_SULAMERICANA),
             vagasDeTitulo       = vagasDeTitulo,
             // Fecha os 32 dos grupos: as vagas de campeao vigente sem titular descem
             // para os proximos colocados. Sem isso a primeira temporada, que nao tem
@@ -8055,12 +8061,12 @@ class GameRepository @Inject constructor(
      * Os TERCEIROS colocados de cada grupo, que na competição real são
      * transferidos para os playoffs da Copa Sul-Americana.
      *
-     * A Sul-Americana ainda não existe no jogo, e inventá-la não é o escopo desta
-     * fiação. Então a lista é DERIVADA das tabelas de grupo em vez de armazenada:
-     * quem for implementar a Sul-Americana chama esta função com o id da
-     * Libertadores da temporada e recebe os 8 clubes, sem precisar que a
-     * Libertadores tenha gravado nada em lugar nenhum. Vazia enquanto os grupos
-     * não tiverem sido sorteados.
+     * A lista é DERIVADA das tabelas de grupo em vez de armazenada: a
+     * Sul-Americana chama esta função com o id da Libertadores da temporada e
+     * recebe os 8 clubes, sem a Libertadores ter de gravar nada em lugar nenhum.
+     * Vazia enquanto os grupos não tiverem sido sorteados — e quem consome espera
+     * a fase de grupos terminar, porque terceiro de tabela em andamento não é
+     * terceiro final (ver gruposDaLibertadoresConcluidos).
      */
     /**
      * Se a fase de grupos da Libertadores terminou — o que torna definitivos os
