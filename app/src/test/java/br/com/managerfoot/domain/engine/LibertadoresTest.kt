@@ -147,6 +147,117 @@ class LibertadoresTest {
             clubes("Argentina", 30, 20_000) +
             clubes("Uruguai", 20, 30_000)
 
+    /**
+     * As DEZ associações, com clubes de sobra. Diferente de [candidatos], que tem
+     * três: com menos de dez a redistribuição entra em cena e as cotas deixam de
+     * ser as oficiais — o Brasil chega a 19 vagas. Para medir vaga por vaga é este
+     * o pool certo.
+     */
+    private fun candidatosDasDezAssociacoes() =
+        acesso.COTAS_OFICIAIS.keys.flatMapIndexed { i, pais ->
+            clubes(pais, 14, 100_000 + i * 1_000)
+        }
+
+    // ── A vaga de título que começa na Pré ───────────────────────────────
+    // É a do vice-campeão da Copa do Brasil: sai da cota de PRÉ do país, e não da
+    // de grupos. Ver regras_libertadores.md.
+
+    @Test
+    fun `a vaga de titulo na pre leva o detentor para as fases previas`() {
+        val todos = candidatos()
+        // 12º do Brasileirão como vice da Copa: fora de qualquer vaga pela liga.
+        val vice = todos.first { it.pais == "Brasil" && it.posicaoLiga == 12 }.timeId
+        val vagas = acesso.montar(todos, vagasDeTituloNaPre = mapOf("Brasil" to vice))
+
+        val doVice = vagas.first { it.candidato.timeId == vice }
+        assertEquals(PortaDaLibertadores.VAGA_DE_TITULO_PRE, doVice.porta)
+        // Ele começa na Pré, e não nos grupos.
+        assertTrue(acesso.naPreLibertadores(vagas).any { it.timeId == vice })
+        assertTrue(acesso.diretosNosGrupos(vagas).none { it.timeId == vice })
+    }
+
+    @Test
+    fun `a vaga de titulo na pre sai da cota de pre, nao da de grupos`() {
+        val todos = candidatosDasDezAssociacoes()
+        val vice = todos.first { it.pais == "Brasil" && it.posicaoLiga == 12 }.timeId
+        val vagas = acesso.montar(todos, vagasDeTituloNaPre = mapOf("Brasil" to vice))
+        val doBrasil = vagas.filter { it.candidato.pais == "Brasil" }
+        val cota = acesso.COTAS_OFICIAIS.getValue("Brasil")
+
+        // O total do país não muda: a vaga é de dentro da cota.
+        assertEquals(cota.total, doBrasil.size)
+        assertEquals(cota.grupos, doBrasil.count { it.porta == PortaDaLibertadores.GRUPOS })
+        // E a Pré: uma por título, as outras pela liga.
+        assertEquals(
+            cota.pre,
+            doBrasil.count {
+                it.porta == PortaDaLibertadores.PRE_LIBERTADORES ||
+                    it.porta == PortaDaLibertadores.VAGA_DE_TITULO_PRE
+            }
+        )
+    }
+
+    @Test
+    fun `as duas vagas de titulo do Brasil convivem`() {
+        // O caso real: campeão da Copa do Brasil nos grupos e vice na Pré, que
+        // deixa a liga com o G4 direto nos grupos e o 5º na Pré.
+        val todos = candidatosDasDezAssociacoes()
+        val campeao = todos.first { it.pais == "Brasil" && it.posicaoLiga == 9 }.timeId
+        val vice = todos.first { it.pais == "Brasil" && it.posicaoLiga == 12 }.timeId
+        val vagas = acesso.montar(
+            todos,
+            vagasDeTitulo = mapOf("Brasil" to campeao),
+            vagasDeTituloNaPre = mapOf("Brasil" to vice)
+        )
+        val doBrasil = vagas.filter { it.candidato.pais == "Brasil" }
+        assertEquals(acesso.COTAS_OFICIAIS.getValue("Brasil").total, doBrasil.size)
+
+        // Os quatro primeiros da liga nos grupos, o 5º na Pré.
+        val porPosicao = doBrasil.associate { it.candidato.posicaoLiga to it.porta }
+        assertTrue((1..4).all { porPosicao[it] == PortaDaLibertadores.GRUPOS })
+        assertEquals(PortaDaLibertadores.PRE_LIBERTADORES, porPosicao[5])
+        assertEquals(PortaDaLibertadores.VAGA_DE_TITULO, porPosicao[9])
+        assertEquals(PortaDaLibertadores.VAGA_DE_TITULO_PRE, porPosicao[12])
+        // E o 6º já fica de fora: a Libertadores do Brasil fechou em 7.
+        assertEquals(null, porPosicao[6])
+    }
+
+    @Test
+    fun `sem detentor a vaga da pre desce para a liga`() {
+        // Regra de queda: um vice que não é candidato — rebaixado para a Série B,
+        // ou de outro país — devolve a vaga ao Brasileirão.
+        val todos = candidatosDasDezAssociacoes()
+        val vagas = acesso.montar(todos, vagasDeTituloNaPre = mapOf("Brasil" to 999_999))
+        val doBrasil = vagas.filter { it.candidato.pais == "Brasil" }
+        val cota = acesso.COTAS_OFICIAIS.getValue("Brasil")
+
+        assertEquals(cota.total, doBrasil.size)
+        assertTrue(doBrasil.none { it.porta == PortaDaLibertadores.VAGA_DE_TITULO_PRE })
+        assertEquals(
+            cota.pre,
+            doBrasil.count { it.porta == PortaDaLibertadores.PRE_LIBERTADORES }
+        )
+    }
+
+    @Test
+    fun `um detentor que ja entrou por outra porta nao ocupa duas vagas`() {
+        // Campeão e vice da Copa sendo o mesmo clube é impossível, mas o campeão
+        // vigente da Libertadores pode ser o vice da Copa: ele entra pela
+        // estrutural, e a vaga da Pré desce para a liga.
+        val todos = candidatos()
+        val clube = todos.first { it.pais == "Brasil" && it.posicaoLiga == 12 }.timeId
+        val vagas = acesso.montar(
+            todos,
+            campeaoLibertadores = clube,
+            vagasDeTituloNaPre = mapOf("Brasil" to clube)
+        )
+        assertEquals(1, vagas.count { it.candidato.timeId == clube })
+        assertEquals(
+            PortaDaLibertadores.CAMPEAO_VIGENTE,
+            vagas.first { it.candidato.timeId == clube }.porta
+        )
+    }
+
     @Test
     fun `montar entrega 45 vagas nacionais`() {
         val vagas = acesso.montar(candidatos())

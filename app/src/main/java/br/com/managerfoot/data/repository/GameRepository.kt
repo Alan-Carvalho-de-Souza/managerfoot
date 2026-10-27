@@ -2377,8 +2377,64 @@ class GameRepository @Inject constructor(
         campeonatoDao.buscarPorId(campeonatoId)?.encerrado == true
 
     /**
+     * O que a tabela da Série A precisa saber para pintar as zonas continentais
+     * sem mentir. Ver [VagasDoBrasileirao], que aplica a distribuição e o efeito
+     * cascata.
+     */
+    data class VagasContinentaisDoBrasil(
+        /**
+         * Campeão vigente da **Copa do Brasil**: vaga de título na FASE DE GRUPOS.
+         * -1 quando não existe ou não está entre os elegíveis — um campeão da
+         * Série B, por exemplo —, e aí a vaga desce para o Brasileirão.
+         */
+        val campeaoDaCopaTimeId: Int = -1,
+        /** **Vice-campeão** da Copa do Brasil: vaga de título na PRÉ. */
+        val viceDaCopaTimeId: Int = -1,
+        /**
+         * Campeões vigentes da Libertadores e da Sul-Americana, quando
+         * brasileiros. Entram pela vaga ESTRUTURAL, por fora da cota do país: se
+         * também se classificariam pela liga, a vaga da liga cascateia para o
+         * próximo colocado, e é isso que estica o G-5 para G-6 ou mais.
+         */
+        val campeoesContinentaisTimeIds: List<Int> = emptyList(),
+        /**
+         * Vagas estruturais de campeão vigente que ficaram sem titular e desceram
+         * para o Brasil, 0 ou 1. O Brasil é o primeiro da fila na ordem da cota;
+         * a segunda, quando existe, vai para a Argentina.
+         */
+        val vagasRemanejadas: Int = 0
+    )
+
+    /**
+     * Monta [VagasContinentaisDoBrasil] para o ano corrente, a partir do Hall da
+     * Fama da temporada que encerrou.
+     */
+    suspend fun buscarVagasContinentaisDoBrasil(anoAtual: Int): VagasContinentaisDoBrasil {
+        suspend fun brasileiro(timeId: Int?): Int =
+            timeId?.takeIf { it > 0 }
+                ?.takeIf { id ->
+                    timeRepository.buscarEntityPorId(id)?.pais?.let { Continentes.ehBrasil(it) } == true
+                } ?: -1
+
+        val copa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoAtual - 1, DIVISAO_HALL_COPA_BRASIL)
+        val campeaoLib = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES)
+        val campeaoSul = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_SULAMERICANA)
+
+        val orfas = (if (campeaoLib == null) 1 else 0) + (if (campeaoSul == null) 1 else 0)
+
+        return VagasContinentaisDoBrasil(
+            campeaoDaCopaTimeId = brasileiro(copa?.campeaoTimeId),
+            viceDaCopaTimeId    = brasileiro(copa?.viceTimeId),
+            campeoesContinentaisTimeIds =
+                listOfNotNull(campeaoLib, campeaoSul).map { brasileiro(it) }.filter { it > 0 },
+            vagasRemanejadas = orfas.coerceAtMost(1)
+        )
+    }
+
+    /**
      * Retorna o timeId do campeão da Copa (ida/volta) se encerrada, ou -1 caso contrário.
-     * Usado para exibir a vaga extra da Copa do Brasil na tabela da Série A.
+     * Usado pelo Hall da Fama. As vagas da Copa do Brasil na tabela da Série A
+     * saem de [buscarVagasContinentaisDoBrasil], que lê campeão E vice.
      */
     suspend fun buscarCampeaoCopaSeEncerrada(copaId: Int): Int {
         if (copaId <= 0) return -1
@@ -5239,7 +5295,7 @@ class GameRepository @Inject constructor(
     /**
      * Campeão de uma copa ida/volta a partir das partidas da Final, sem exigir que a
      * competição já esteja marcada como encerrada — diferente de
-     * [buscarCampeaoCopaSeEncerrada], que é usada pela UI da tabela.
+     * [buscarCampeaoCopaSeEncerrada], que é usada pelo Hall da Fama.
      */
     private suspend fun determinarCampeaoCopa(copaId: Int): Int {
         val finais = partidaDao.buscarTodasPorCampeonato(copaId)
@@ -7468,19 +7524,15 @@ class GameRepository @Inject constructor(
     ): List<VagaLibertadores> {
         val candidatos = candidatosSulAmericanos(anoAtual, temporadaAnteriorId)
         val campeaoLibertadores = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES)
-        val vagasDeTitulo = vagasDeTituloPorPais(candidatos, anoAtual, campeaoLibertadores)
-
-        // O campeão da Libertadores entra pela vaga de título do Brasil quando é
-        // brasileiro; nesse caso NÃO recebe também a vaga estrutural de campeão
-        // vigente, senão ocuparia duas. Sendo de outro país, a vaga de título do
-        // Brasil desce para o Brasileirão e ele entra pela vaga estrutural — que é
-        // o que garante que o campeão vigente sempre disputa a edição seguinte.
-        val campeaoEntraPelaVagaDoBrasil =
-            campeaoLibertadores != null && vagasDeTitulo[PAIS_BRASIL] == campeaoLibertadores
+        val vagasDeTitulo = vagasDeTituloPorPais(candidatos, anoAtual)
 
         return ListaDeAcessoLibertadores.montar(
             candidatos          = candidatos,
-            campeaoLibertadores = if (campeaoEntraPelaVagaDoBrasil) null else campeaoLibertadores,
+            // O campeão vigente da Libertadores entra pela vaga ESTRUTURAL, por
+            // fora da cota do seu país — e isso vale também quando ele é
+            // brasileiro. A vaga de título do Brasil é do campeão da Copa do
+            // Brasil, então não há como um clube ocupar as duas.
+            campeaoLibertadores = campeaoLibertadores,
             // O campeão vigente da Copa Sul-Americana, que entra direto na fase de
             // grupos. É uma vaga ESTRUTURAL, por fora da cota do país dele: sem ela
             // os 32 dos grupos não fecham e a vaga desce para o próximo colocado de
@@ -7492,7 +7544,8 @@ class GameRepository @Inject constructor(
             // é também o campeão da Libertadores, e `montar` ainda desconta quem já
             // entrou por outra porta.
             campeaoSulAmericana = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_SULAMERICANA),
-            vagasDeTitulo       = vagasDeTitulo,
+            vagasDeTitulo       = vagasDeTitulo.grupos,
+            vagasDeTituloNaPre  = vagasDeTitulo.pre,
             // Fecha os 32 dos grupos: as vagas de campeao vigente sem titular descem
             // para os proximos colocados. Sem isso a primeira temporada, que nao tem
             // campeao vigente nenhum, teria 30 clubes nos grupos em vez de 32.
@@ -7504,43 +7557,61 @@ class GameRepository @Inject constructor(
     private val PAIS_BRASIL    = "Brasil"
     private val PAIS_ARGENTINA = "Argentina"
 
-    /** Código de divisão da Copa Argentina no Hall da Fama. */
+    /** Códigos de divisão das copas nacionais no Hall da Fama. */
+    private val DIVISAO_HALL_COPA_BRASIL    = 5
     private val DIVISAO_HALL_COPA_ARGENTINA = 9
 
+    /** As vagas de título de um país, por destino. */
+    private data class VagasDeTituloPorPais(
+        /** Detentor por país da vaga de título que entra na FASE DE GRUPOS. */
+        val grupos: Map<String, Int>,
+        /** Detentor por país da vaga de título que entra na PRÉ-LIBERTADORES. */
+        val pre: Map<String, Int>
+    )
+
     /**
-     * O detentor da vaga de título de cada país, para a edição de [anoAtual].
+     * Os detentores das vagas de título de cada país, para a edição de [anoAtual].
      *
-     * Duas associações reservam uma das suas vagas a um título em vez de à
-     * colocação na liga:
+     * Duas associações reservam vagas a títulos em vez de à colocação na liga:
      *
-     *  - **Brasil** → campeão da **Libertadores** da temporada que encerrou.
-     *  - **Argentina** → campeão da **Copa Argentina** da temporada que encerrou.
+     *  - **Brasil** → campeão da **Copa do Brasil** na fase de grupos e
+     *    **vice-campeão** da mesma copa na Pré-Libertadores. É o que deixa a liga
+     *    com o **G4** direto nos grupos e o **5º** na Pré.
+     *  - **Argentina** → campeão da **Copa Argentina**, na fase de grupos.
      *
      * O Uruguai não reserva nenhuma: as quatro vagas dele saem todas da liga.
      *
-     * Um detentor só é considerado se for clube do próprio país e estiver entre os
-     * candidatos — não faz sentido dar uma vaga brasileira a um campeão argentino.
-     * Fora isso a vaga desce para o colocado seguinte da liga, o que é o que
-     * acontece em toda primeira temporada, quando nenhum título foi decidido ainda.
+     * Um detentor só é considerado se for clube do próprio país **e estiver entre
+     * os candidatos** — e é esse segundo filtro que aplica, de graça, a regra da
+     * CONMEBOL que proíbe clube rebaixado: o rollover atualiza as divisões ANTES
+     * de criar a Libertadores, então um finalista de copa que caiu para a Série B
+     * deixa de ser candidato e a vaga dele volta para o Brasileirão.
+     *
+     * O campeão vigente da Libertadores não entra por aqui: a vaga dele é a
+     * estrutural de campeão vigente, por fora da cota de qualquer país.
      */
     private suspend fun vagasDeTituloPorPais(
         candidatos: List<CandidatoLibertadores>,
-        anoAtual: Int,
-        campeaoLibertadores: Int?
-    ): Map<String, Int> {
+        anoAtual: Int
+    ): VagasDeTituloPorPais {
         val paisPorTime = candidatos.associate { it.timeId to it.pais }
-        val vagas = HashMap<String, Int>()
+        val nosGrupos = HashMap<String, Int>()
+        val naPre = HashMap<String, Int>()
 
-        fun reservar(pais: String, timeId: Int?) {
-            if (timeId == null) return
+        fun reservar(destino: HashMap<String, Int>, pais: String, timeId: Int?) {
+            if (timeId == null || timeId <= 0) return
             // O clube tem de ser do país que está reservando a vaga.
             if (paisPorTime[timeId] != pais) return
-            vagas[pais] = timeId
+            destino[pais] = timeId
         }
 
-        reservar(PAIS_BRASIL, campeaoLibertadores)
-        reservar(PAIS_ARGENTINA, campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_COPA_ARGENTINA))
-        return vagas
+        val copaDoBrasil = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(
+            anoAtual - 1, DIVISAO_HALL_COPA_BRASIL
+        )
+        reservar(nosGrupos, PAIS_BRASIL, copaDoBrasil?.campeaoTimeId)
+        reservar(naPre, PAIS_BRASIL, copaDoBrasil?.viceTimeId)
+        reservar(nosGrupos, PAIS_ARGENTINA, campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_COPA_ARGENTINA))
+        return VagasDeTituloPorPais(grupos = nosGrupos, pre = naPre)
     }
 
     /** Campeão vigente registrado no Hall da Fama, ou null na primeira temporada. */

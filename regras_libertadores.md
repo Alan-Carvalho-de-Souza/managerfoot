@@ -48,9 +48,47 @@ Libertadores vale 14 pontos, o mesmo peso da Champions.
 | Venezuela | 4 | 2 | 2 |
 | **Soma** | **45** | **26** | **19** |
 
-> **No jogo**, o Brasil reserva uma das suas vagas ao campeão da Libertadores e a
-> Argentina reserva uma das suas ao campeão da Copa Argentina — vagas de título
-> dentro da cota do país, não extras. Ver "A fiação", mais abaixo.
+### Como as 7 vagas do Brasil são distribuídas
+
+| Forma de classificação | Vagas | Destino |
+|---|---:|---|
+| Campeonato Brasileiro, 1º ao 4º | 4 | Fase de grupos |
+| Copa do Brasil, **campeão** | 1 | Fase de grupos |
+| Campeonato Brasileiro, 5º | 1 | **Pré-Libertadores** |
+| Copa do Brasil, **vice-campeão** | 1 | **Pré-Libertadores** |
+| **Total** | **7** | |
+
+A Argentina reserva uma das suas ao campeão da **Copa Argentina**, na fase de
+grupos. O Uruguai não reserva nenhuma. São vagas de título **dentro** da cota do
+país, e não extras.
+
+### O efeito cascata
+
+Nenhum clube ocupa duas vagas, e vaga que sobra não se perde: ela **desce para o
+próximo colocado** da Série A, mantendo o seu destino — uma vaga de grupo continua
+de grupo, uma de Pré continua de Pré. É daí que o G-5 vira G-6, G-7 e, no acúmulo
+máximo, G-9:
+
+- **Campeão continental brasileiro.** O campeão vigente da Libertadores ou da
+  Sul-Americana entra pela vaga **estrutural**, por fora da cota do país. Se ele
+  também se classificaria pela liga, a vaga da liga cascateia e um colocado a mais
+  entra — e isso vale inclusive quando ele é brasileiro, porque a vaga de título
+  do Brasil é da Copa do Brasil.
+- **Finalista da Copa já classificado.** Campeão ou vice que termina dentro do
+  G-4/G-5 ocupa a vaga de título, e a que ele teria pela colocação desce. A conta
+  por destino não muda: 5 nos grupos e 2 na Pré, sempre.
+- **Rebaixado não joga.** É regulamento da CONMEBOL. Um finalista de copa que cai
+  para a Série B perde a vaga, que volta para o Brasileirão. No jogo isso sai de
+  graça: o rollover atualiza as divisões **antes** de criar a Libertadores, então o
+  clube deixa de ser candidato e a regra de queda age sozinha.
+- **Detentor que não existe.** Primeira temporada, ou um campeão da Copa que não
+  está na Série A: a vaga desce para a liga, e o Brasileirão volta a entregar o
+  G-5 mais o 6º na Pré.
+
+Na tela de Classificação essa distribuição é aplicada por
+`VagasDoBrasileirao.distribuir`, que recebe as posições dos detentores e devolve a
+zona de cada linha — as cores da tabela e os números da legenda saem da mesma
+conta, então não há como uma dizer 5 e a outra mostrar 6.
 
 **Vagas extras:** os campeões vigentes da **Libertadores** e da **Copa Sul-Americana**
 entram direto na fase de grupos da edição seguinte, independentemente do que fizeram na
@@ -295,17 +333,22 @@ Somar é melhor que pegar a melhor colocação entre os torneios, porque é a
 regularidade no ano que a classificação anual existe para medir.
 
 Duas associações reservam **uma das suas vagas a um título**, e não à colocação:
-o **Brasil** ao campeão da **Libertadores** e a **Argentina** ao campeão da **Copa
-Argentina**. O Uruguai não reserva nenhuma. A vaga sai da cota de grupos daquele
-país — não é uma vaga extra —, e quando o detentor não existe, não é clube daquele
-país ou já entrou por outra porta, ela **desce para o colocado seguinte** da liga.
-É a porta `VAGA_DE_TITULO`, no mesmo molde da vaga de copa da Europa League.
+o **Brasil** aos finalistas da **Copa do Brasil** e a **Argentina** ao campeão da
+**Copa Argentina**. O Uruguai não reserva nenhuma. A vaga sai da cota de grupos
+daquele país — não é uma vaga extra —, e quando o detentor não existe, não é clube
+daquele país ou já entrou por outra porta, ela **desce para o colocado seguinte**
+da liga. É a porta `VAGA_DE_TITULO`, no mesmo molde da vaga de copa da Europa
+League.
 
-Quando o campeão da Libertadores é brasileiro ele entra pela vaga de título do
-Brasil e **não** recebe também a vaga estrutural de campeão vigente, senão ocuparia
-duas. Sendo de outro país, a vaga do Brasil desce para o Brasileirão e ele entra
-pela estrutural — que é o que garante que o campeão vigente sempre disputa a
-edição seguinte.
+O Brasil usa **duas**: a do campeão da Copa do Brasil, que sai da cota de grupos,
+e a do vice, que sai da cota de **Pré** — é a porta `VAGA_DE_TITULO_PRE`, separada
+justamente porque o destino faz parte da vaga. Daí a conta: 1 + **G4** nos grupos,
+1 + o **5º** na Pré. Ver a tabela da seção 2 e o efeito cascata.
+
+O campeão vigente da **Libertadores** não entra por essa porta: a vaga dele é a
+estrutural de campeão vigente, por fora da cota de qualquer país, e vale também
+quando ele é brasileiro. Como a vaga de título do Brasil é da Copa do Brasil, não
+há como um clube ocupar as duas.
 
 Na **primeira temporada** nenhum campeonato encerrou e nenhum título foi decidido,
 então não há tabela anual nem detentores: a lista de acesso cai no coeficiente e na

@@ -2457,7 +2457,8 @@ class ClubesViewModel @Inject constructor(
 @HiltViewModel
 class TabelaViewModel @Inject constructor(
     private val gameRepository: GameRepository,
-    private val timeRepository: TimeRepository
+    private val timeRepository: TimeRepository,
+    private val gameDataStore: GameDataStore
 ) : ViewModel() {
 
     private val _tabela = MutableStateFlow<List<ClassificacaoEntity>>(emptyList())
@@ -2489,9 +2490,14 @@ class TabelaViewModel @Inject constructor(
     private var sulAmericanaId: Int = -1
     private var copaId: Int = -1
 
-    // timeId do campeão da Copa do Brasil corrente (-1 enquanto não encerrada)
-    private val _copaChampeaoTimeId = MutableStateFlow(-1)
-    val copaChampeaoTimeId: StateFlow<Int> = _copaChampeaoTimeId.asStateFlow()
+    // O que a tabela da Série A precisa para pintar as zonas continentais: quem
+    // ocupa a vaga de título do Brasil (o campeão vigente da Libertadores, quando
+    // brasileiro) e se uma vaga de campeão vigente desceu para cá.
+    //
+    // Antes isto era o campeão da COPA DO BRASIL, que no jogo não recebe vaga
+    // nenhuma — a tabela pintava uma vaga que a lista de acesso não concede.
+    private val _vagasBrasil = MutableStateFlow(GameRepository.VagasContinentaisDoBrasil())
+    val vagasBrasil: StateFlow<GameRepository.VagasContinentaisDoBrasil> = _vagasBrasil.asStateFlow()
 
     // Divisão selecionada em exibição (1=Série A, 2=B, 3=C, 4=D, 5=Apertura, 6=Segunda Arg, 7=Clausura, 8=Geral Arg, 9=Apertura Uru, 10=Segunda Uru, 11=Intermédio Uru, 12=Clausura Uru, 13=Geral Uru)
     private val _divisaoSelecionada = MutableStateFlow(1)
@@ -2522,8 +2528,11 @@ class TabelaViewModel @Inject constructor(
         libertadoresId = campLibertadoresId
         sulAmericanaId = campSulAmericanaId
         copaId = copaIdBrasil
-        // Busca o campeão da Copa do Brasil se já encerrada
-        _copaChampeaoTimeId.value = gameRepository.buscarCampeaoCopaSeEncerrada(copaIdBrasil)
+        _vagasBrasil.value = try {
+            gameRepository.buscarVagasContinentaisDoBrasil(gameDataStore.saveState.first().anoAtual)
+        } catch (_: Exception) {
+            GameRepository.VagasContinentaisDoBrasil()
+        }
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais
         listOf(campAId, campBId, campCId, campDId, campArgAId, campArgBId, campArgClausuraId,

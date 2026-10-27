@@ -33,6 +33,16 @@ enum class PortaDaLibertadores {
      */
     VAGA_DE_TITULO,
     /**
+     * Vaga que o país reserva a um detentor de título e que começa na **Pré**, e
+     * não na fase de grupos. Hoje é a do **vice-campeão da Copa do Brasil**.
+     *
+     * É uma porta separada de [VAGA_DE_TITULO] porque o destino faz parte da
+     * vaga: esta sai da cota de PRÉ do país, e quem a recebe joga as fases
+     * prévias. Misturá-las colocaria o vice direto nos grupos.
+     */
+    VAGA_DE_TITULO_PRE,
+
+    /**
      * Vaga de campeão vigente que não tinha titular e foi REMANEJADA a uma
      * associação, respeitando a hierarquia das cotas.
      *
@@ -210,6 +220,12 @@ object ListaDeAcessoLibertadores {
          */
         vagasDeTitulo: Map<String, Int> = emptyMap(),
         /**
+         * O mesmo, para a vaga de título que começa na PRÉ: ela sai da conta das
+         * vagas de Pré daquela associação. Hoje é a do vice-campeão da Copa do
+         * Brasil. Vazio deixa a cota de Pré inteira para a liga.
+         */
+        vagasDeTituloNaPre: Map<String, Int> = emptyMap(),
+        /**
          * Quando true, as vagas de campeão vigente que não têm titular descem para
          * os próximos colocados, de modo que a fase de grupos feche os 32. Ver o
          * bloco no fim desta função.
@@ -248,16 +264,33 @@ object ListaDeAcessoLibertadores {
                 vagasDeGrupoUsadas++
             }
 
-            // ── Porta 2: a colocação na liga nacional ───────────────────
+            // ── Porta 2: a vaga de título que começa na Pré ─────────────
+            // Mesma regra de queda da anterior, mas descontando da cota de PRÉ:
+            // sem detentor elegível, a vaga desce para a liga e o país manda um
+            // colocado a mais às fases prévias.
+            var vagasDePreUsadas = 0
+            val detentorNaPre = vagasDeTituloNaPre[pais]
+                ?.let { id -> porPais[pais].orEmpty().firstOrNull { it.timeId == id } }
+                ?.takeIf { it.timeId !in escolhidos }
+            if (detentorNaPre != null && cota.pre > 0) {
+                vagas += VagaLibertadores(detentorNaPre, PortaDaLibertadores.VAGA_DE_TITULO_PRE)
+                escolhidos += detentorNaPre.timeId
+                vagasDePreUsadas++
+            }
+
+            // ── Porta 3: a colocação na liga nacional ───────────────────
             // A fila já está na ordem de preferência, então os melhores pegam as
-            // vagas diretas e os seguintes vão à Pré-Libertadores.
+            // vagas diretas e os seguintes vão à Pré-Libertadores. Quem entrou
+            // por título já saiu da fila, que é o que faz a vaga dele CASCATEAR
+            // para o próximo colocado quando ele se classificaria de todo jeito.
             val fila = porPais[pais].orEmpty().filter { it.timeId !in escolhidos }
             val vagasDeGrupoRestantes = cota.grupos - vagasDeGrupoUsadas
+            val vagasDePreRestantes = cota.pre - vagasDePreUsadas
             fila.take(vagasDeGrupoRestantes).forEach {
                 vagas += VagaLibertadores(it, PortaDaLibertadores.GRUPOS)
                 escolhidos += it.timeId
             }
-            fila.drop(vagasDeGrupoRestantes).take(cota.pre).forEach {
+            fila.drop(vagasDeGrupoRestantes).take(vagasDePreRestantes).forEach {
                 vagas += VagaLibertadores(it, PortaDaLibertadores.PRE_LIBERTADORES)
                 escolhidos += it.timeId
             }
@@ -332,7 +365,13 @@ object ListaDeAcessoLibertadores {
                 it.porta == PortaDaLibertadores.VAGA_DE_CAMPEAO_REMANEJADA
         }.map { it.candidato }
 
-    /** Os clubes que começam na Pré-Libertadores. */
+    /**
+     * Os clubes que começam na Pré-Libertadores — os da cota de Pré e o detentor
+     * da vaga de título que entra por ela, hoje o vice-campeão da Copa do Brasil.
+     */
     fun naPreLibertadores(vagas: List<VagaLibertadores>): List<CandidatoLibertadores> =
-        vagas.filter { it.porta == PortaDaLibertadores.PRE_LIBERTADORES }.map { it.candidato }
+        vagas.filter {
+            it.porta == PortaDaLibertadores.PRE_LIBERTADORES ||
+                it.porta == PortaDaLibertadores.VAGA_DE_TITULO_PRE
+        }.map { it.candidato }
 }

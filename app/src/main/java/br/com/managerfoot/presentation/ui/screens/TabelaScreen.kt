@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
+import br.com.managerfoot.domain.engine.VagasDoBrasileirao
+import br.com.managerfoot.domain.engine.ZonaBrasileirao
+import br.com.managerfoot.domain.engine.ZonasDoBrasileirao
 import br.com.managerfoot.presentation.ui.components.ScreenTopBar
 import br.com.managerfoot.presentation.ui.components.StandingsRow
 import br.com.managerfoot.presentation.ui.theme.GoldChampion
@@ -32,7 +35,9 @@ import br.com.managerfoot.presentation.ui.theme.Spacing
 import br.com.managerfoot.presentation.ui.theme.SulAmericanaTeal
 import br.com.managerfoot.presentation.viewmodel.TabelaViewModel
 
-// Cor especial para playoff (Uruguai Segunda Divisão) — sem token semântico ainda
+// Cor de repescagem: playoff de acesso da Segunda uruguaia, vagas de
+// Pré-Libertadores na Série A e os playoffs da Sul-Americana — sem token
+// semântico ainda
 private val PlayoffOrange = Color(0xFFFF6F00)
 
 @Composable
@@ -65,13 +70,27 @@ fun TabelaScreen(
     val tabela by vm.tabela.collectAsState()
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
-    val copaChampeaoTimeId by vm.copaChampeaoTimeId.collectAsState()
+    val vagasBrasil by vm.vagasBrasil.collectAsState()
 
-    // Posição (1-indexed) do campeão da Copa na tabela da Série A, -1 se não aplicável
-    val copaChampeaoPosSerieA = remember(tabela, copaChampeaoTimeId, divisaoSelecionada) {
-        if (divisaoSelecionada == 1 && copaChampeaoTimeId > 0)
-            tabela.indexOfFirst { it.timeId == copaChampeaoTimeId }.let { if (it >= 0) it + 1 else -1 }
-        else -1
+    // A distribuição das vagas continentais sobre a tabela da Série A, com o
+    // efeito cascata já resolvido: o campeão da Copa do Brasil na vaga de grupo,
+    // o vice na da Pré, os campeões continentais pela vaga estrutural, e a liga
+    // preenchendo o resto de cima para baixo. Ver VagasDoBrasileirao.
+    val zonasSerieA = remember(tabela, vagasBrasil, divisaoSelecionada) {
+        if (divisaoSelecionada != 1) null
+        else {
+            fun posicaoDe(timeId: Int) =
+                if (timeId <= 0) -1
+                else tabela.indexOfFirst { it.timeId == timeId }.let { if (it >= 0) it + 1 else -1 }
+            VagasDoBrasileirao.distribuir(
+                posicaoDoCampeaoDaCopa = posicaoDe(vagasBrasil.campeaoDaCopaTimeId),
+                posicaoDoViceDaCopa    = posicaoDe(vagasBrasil.viceDaCopaTimeId),
+                posicoesDosCampeoesContinentais =
+                    vagasBrasil.campeoesContinentaisTimeIds.map { posicaoDe(it) },
+                vagasRemanejadas = vagasBrasil.vagasRemanejadas,
+                clubes = tabela.size.coerceAtLeast(VagasDoBrasileirao.CLUBES)
+            )
+        }
     }
 
     LaunchedEffect(
@@ -346,7 +365,7 @@ fun TabelaScreen(
                     val nomeTime = time?.nome ?: "Time ${item.timeId}"
                     val escudoRes = time?.escudoRes ?: ""
                     val ehJogador = item.timeId == timeJogadorId
-                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada, copaChampeaoPosSerieA)
+                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada, zonasSerieA)
 
                     StandingsRow(
                         posicao = index + 1,
@@ -369,7 +388,7 @@ fun TabelaScreen(
         }
 
         if (!aindaNaoSorteada) {
-            LegendaZonas(divisaoSelecionada, copaChampeaoPosSerieA)
+            LegendaZonas(divisaoSelecionada, zonasSerieA)
         }
     }
 }
@@ -446,16 +465,21 @@ private fun GrupoHeader(nome: String) {
 }
 
 /** Cor da zona pela posição na tabela. Cobre todas as competições. */
-private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: Int = -1): Color? = when (divisao) {
-    1 -> when {
-        // Copa campeão já está no top-6 → 7º também entra para Libertadores
-        copaChampeaoPosSerieA in 1..6 && posicao == 7 -> LibertadoresBlue
-        posicao <= 4 -> LibertadoresBlue
-        posicao <= 6 -> SulAmericanaTeal
-        // Copa campeão fora do top-6 → sua posição fica azul (vaga Copa)
-        copaChampeaoPosSerieA >= 7 && posicao == copaChampeaoPosSerieA -> LibertadoresBlue
-        posicao >= 17 -> RelegationRed
-        else -> null
+private fun zonaParaDivisao(
+    posicao: Int,
+    divisao: Int,
+    zonasSerieA: ZonasDoBrasileirao? = null
+): Color? = when (divisao) {
+    // A Série A é a única divisão cujas zonas vêm das COTAS das competições
+    // continentais, e não de um número escrito aqui: 7 vagas na Libertadores (5
+    // de grupo + 2 na Pré) e 6 na Sul-Americana, com o efeito cascata por cima.
+    // Ver VagasDoBrasileirao.
+    1 -> when (zonasSerieA?.zona(posicao) ?: ZonaBrasileirao.NENHUMA) {
+        ZonaBrasileirao.LIBERTADORES_GRUPOS -> LibertadoresBlue
+        ZonaBrasileirao.LIBERTADORES_PRE    -> PlayoffOrange
+        ZonaBrasileirao.SUL_AMERICANA       -> SulAmericanaTeal
+        ZonaBrasileirao.REBAIXAMENTO        -> RelegationRed
+        ZonaBrasileirao.NENHUMA             -> null
     }
     2 -> when {
         posicao <= 4 -> LibertadoresBlue
@@ -512,19 +536,19 @@ private fun zonaParaDivisao(posicao: Int, divisao: Int, copaChampeaoPosSerieA: I
 }
 
 @Composable
-private fun LegendaZonas(divisao: Int, copaChampeaoPosSerieA: Int = -1) {
+private fun LegendaZonas(divisao: Int, zonasSerieA: ZonasDoBrasileirao? = null) {
     val itens = when (divisao) {
         1 -> buildList {
-            if (copaChampeaoPosSerieA in 1..6) {
-                add(LibertadoresBlue to "G7 Libertadores (incl. Copa)")
-            } else {
-                add(LibertadoresBlue to "G4 Libertadores")
-            }
-            add(SulAmericanaTeal to "G6 Sul-Americana")
-            if (copaChampeaoPosSerieA >= 7) {
-                add(LibertadoresBlue to "${copaChampeaoPosSerieA}º Libertadores (Copa)")
-            }
-            add(RelegationRed to "Z4 Rebaixamento")
+            // As contagens saem da MESMA distribuição que pinta as linhas, então
+            // a legenda nunca diz um número e a tabela mostra outro — inclusive
+            // quando a cascata estica as vagas.
+            val grupos = zonasSerieA?.quantas(ZonaBrasileirao.LIBERTADORES_GRUPOS) ?: 0
+            val pre = zonasSerieA?.quantas(ZonaBrasileirao.LIBERTADORES_PRE) ?: 0
+            val sulAmericana = zonasSerieA?.quantas(ZonaBrasileirao.SUL_AMERICANA) ?: 0
+            if (grupos > 0) add(LibertadoresBlue to "$grupos vagas Libertadores (grupos)")
+            if (pre > 0) add(PlayoffOrange to "$pre vagas Pré-Libertadores")
+            if (sulAmericana > 0) add(SulAmericanaTeal to "$sulAmericana vagas Sul-Americana")
+            add(RelegationRed to "Z${VagasDoBrasileirao.REBAIXADOS} Rebaixamento")
         }
         2 -> listOf(
             LibertadoresBlue to "G4 Acesso à Série A",
