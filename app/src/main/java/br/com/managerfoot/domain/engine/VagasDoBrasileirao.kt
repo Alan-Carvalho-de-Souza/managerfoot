@@ -25,6 +25,10 @@ package br.com.managerfoot.domain.engine
 //  - **Finalista da Copa do Brasil já classificado** pelo G-4/G-5 ocupa a vaga
 //    de título e a dele na liga cascateia — o efeito é o mesmo, visto do outro
 //    lado: a conta do país não muda, e um colocado a mais entra.
+//  - **Copa em andamento não libera vaga.** Durante a temporada as duas vagas da
+//    Copa do Brasil ficam RESERVADAS: a liga distribui o G4 e o 5º, e nada mais.
+//    Cascatear uma vaga só porque o dono dela ainda não é conhecido prometeria ao
+//    5º e ao 6º lugares que a copa vai levar.
 //  - **Rebaixado não joga a Libertadores**: é regulamento da CONMEBOL. Um
 //    finalista de copa que cai para a Série B perde a vaga, que volta para o
 //    Brasileirão. Aqui isso aparece como a zona de rebaixamento vindo ANTES de
@@ -35,6 +39,28 @@ package br.com.managerfoot.domain.engine
 // clubes; aqui ela é aplicada sobre POSIÇÕES, que é o que a tabela conhece. As
 // quantidades saem das cotas, então mudar uma cota lá muda a tabela aqui.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O estado de uma vaga de título — a do campeão da Copa do Brasil e a do vice.
+ *
+ * A diferença entre [Indefinida] e [SemDetentor] é o que esta tabela errava: uma
+ * vaga cuja copa ainda está em andamento **não** é uma vaga sem dono. Ela tem
+ * dono, só não se sabe qual ainda, e portanto NÃO desce para a liga — senão a
+ * tabela promete ao 5º e ao 6º uma vaga que a Copa do Brasil vai levar.
+ */
+sealed interface VagaDeTitulo {
+    /** A copa ainda não terminou: a vaga fica reservada e não cascateia. */
+    data object Indefinida : VagaDeTitulo
+
+    /** Decidida, e o detentor está nesta tabela, na [posicao]. */
+    data class De(val posicao: Int) : VagaDeTitulo
+
+    /**
+     * Decidida, mas sem detentor que possa usá-la: campeão da Série B, de outro
+     * país ou rebaixado. Aí sim a vaga desce para o Brasileirão.
+     */
+    data object SemDetentor : VagaDeTitulo
+}
 
 /** O destino de uma posição na tabela da Série A. */
 enum class ZonaBrasileirao {
@@ -96,16 +122,17 @@ object VagasDoBrasileirao {
      * está na Série A. Nesse caso a vaga dele desce para a liga, que é a regra de
      * queda da lista de acesso.
      *
-     * @param posicaoDoCampeaoDaCopa campeão da Copa do Brasil — vaga de grupo.
-     * @param posicaoDoViceDaCopa vice da Copa do Brasil — vaga de Pré.
+     * @param campeaoDaCopa estado da vaga do campeão da Copa do Brasil, que é de
+     *        GRUPO. Enquanto a copa não termina ela fica reservada.
+     * @param viceDaCopa o mesmo para a vaga do vice, que é de PRÉ.
      * @param posicoesDosCampeoesContinentais campeões vigentes da Libertadores e
      *        da Sul-Americana, quando brasileiros: entram pela vaga estrutural.
      * @param vagasRemanejadas vagas estruturais sem titular que desceram para o
      *        Brasil, 0 ou 1.
      */
     fun distribuir(
-        posicaoDoCampeaoDaCopa: Int = -1,
-        posicaoDoViceDaCopa: Int = -1,
+        campeaoDaCopa: VagaDeTitulo = VagaDeTitulo.Indefinida,
+        viceDaCopa: VagaDeTitulo = VagaDeTitulo.Indefinida,
         posicoesDosCampeoesContinentais: List<Int> = emptyList(),
         vagasRemanejadas: Int = 0,
         clubes: Int = CLUBES
@@ -141,19 +168,29 @@ object VagasDoBrasileirao {
         var deGrupoNaLiga = VAGAS_DE_GRUPO_DA_LIGA + vagasRemanejadas
         var naPreNaLiga = VAGAS_DE_PRE_DA_LIGA
 
-        if (elegivel(posicaoDoCampeaoDaCopa)) {
-            zonas[posicaoDoCampeaoDaCopa - 1] = ZonaBrasileirao.LIBERTADORES_GRUPOS
-            jaDentro += posicaoDoCampeaoDaCopa
-        } else {
-            deGrupoNaLiga++
+        /**
+         * Resolve uma vaga de título. Devolve true quando ela volta para a liga —
+         * e só volta quando a copa JÁ TERMINOU sem detentor que possa usá-la.
+         * Copa em andamento mantém a vaga reservada: ninguém é pintado, e a liga
+         * não ganha nada.
+         */
+        fun resolver(vaga: VagaDeTitulo, zona: ZonaBrasileirao): Boolean = when (vaga) {
+            is VagaDeTitulo.Indefinida -> false
+            is VagaDeTitulo.SemDetentor -> true
+            is VagaDeTitulo.De -> {
+                if (elegivel(vaga.posicao)) {
+                    zonas[vaga.posicao - 1] = zona
+                    jaDentro += vaga.posicao
+                    false
+                } else {
+                    // Decidida, mas o detentor foi rebaixado: a vaga volta.
+                    true
+                }
+            }
         }
 
-        if (elegivel(posicaoDoViceDaCopa)) {
-            zonas[posicaoDoViceDaCopa - 1] = ZonaBrasileirao.LIBERTADORES_PRE
-            jaDentro += posicaoDoViceDaCopa
-        } else {
-            naPreNaLiga++
-        }
+        if (resolver(campeaoDaCopa, ZonaBrasileirao.LIBERTADORES_GRUPOS)) deGrupoNaLiga++
+        if (resolver(viceDaCopa, ZonaBrasileirao.LIBERTADORES_PRE)) naPreNaLiga++
 
         // ── 4. A liga preenche o resto, de cima para baixo ─────────────
         var restamGrupo = deGrupoNaLiga

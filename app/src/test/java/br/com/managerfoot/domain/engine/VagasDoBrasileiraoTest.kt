@@ -20,6 +20,14 @@ class VagasDoBrasileiraoTest {
     private val Z = ZonaBrasileirao.REBAIXAMENTO
     private val NADA = ZonaBrasileirao.NENHUMA
 
+    private fun De(posicao: Int) = VagaDeTitulo.De(posicao)
+    private val SemDetentor = VagaDeTitulo.SemDetentor
+    private val Indefinida = VagaDeTitulo.Indefinida
+
+    /** -1 vira "decidida e sem detentor", que é o que os cenários antigos diziam. */
+    private fun vagaDe(posicao: Int): VagaDeTitulo =
+        if (posicao > 0) VagaDeTitulo.De(posicao) else VagaDeTitulo.SemDetentor
+
     private fun posicoes(zona: ZonaBrasileirao, z: ZonasDoBrasileirao) =
         (1..VagasDoBrasileirao.CLUBES).filter { z.zona(it) == zona }
 
@@ -41,8 +49,8 @@ class VagasDoBrasileiraoTest {
         // Campeão da Copa em 10º e vice em 12º: fora do G5, então a liga entrega
         // exatamente a tabela da distribuição padrão.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 10,
-            posicaoDoViceDaCopa = 12
+            campeaoDaCopa = De(10),
+            viceDaCopa = De(12)
         )
         assertEquals(listOf(1, 2, 3, 4, 10), posicoes(G, z))
         assertEquals(listOf(5, 12), posicoes(P, z))
@@ -59,7 +67,7 @@ class VagasDoBrasileiraoTest {
         for (campeao in listOf(-1, 1, 5, 9)) {
             for (vice in listOf(-1, 2, 6, 13)) {
                 if (campeao == vice && campeao > 0) continue
-                val z = VagasDoBrasileirao.distribuir(campeao, vice)
+                val z = VagasDoBrasileirao.distribuir(vagaDe(campeao), vagaDe(vice))
                 assertEquals("campeão $campeao, vice $vice: grupos", 5, z.quantas(G))
                 assertEquals("campeão $campeao, vice $vice: Pré", 2, z.quantas(P))
                 assertEquals("campeão $campeao, vice $vice: Sul", 6, z.quantas(S))
@@ -68,12 +76,45 @@ class VagasDoBrasileiraoTest {
         }
     }
 
+    // ── Copa em andamento: a vaga fica reservada ─────────────────────────
+
+    @Test
+    fun `com a Copa em andamento a liga entrega so o G4 e o 5o`() {
+        // O caso que a tabela errava: no meio da temporada a Copa do Brasil ainda
+        // não tem campeão, e as duas vagas dela NÃO podem descer para a liga —
+        // senão o 5º e o 6º aparecem com uma vaga que a copa vai levar.
+        val z = VagasDoBrasileirao.distribuir(Indefinida, Indefinida)
+        assertEquals(listOf(1, 2, 3, 4), posicoes(G, z))
+        assertEquals(listOf(5), posicoes(P, z))
+        assertEquals(listOf(6, 7, 8, 9, 10, 11), posicoes(S, z))
+        // Só 5 vagas pintadas: as outras 2 estão reservadas à Copa do Brasil.
+        assertEquals(5, z.quantas(G) + z.quantas(P))
+    }
+
+    @Test
+    fun `indefinida e diferente de sem detentor`() {
+        val emAndamento = VagasDoBrasileirao.distribuir(Indefinida, Indefinida)
+        val decididaSemDono = VagasDoBrasileirao.distribuir(SemDetentor, SemDetentor)
+        assertEquals(4, emAndamento.quantas(G))
+        assertEquals(5, decididaSemDono.quantas(G))
+        assertEquals(1, emAndamento.quantas(P))
+        assertEquals(2, decididaSemDono.quantas(P))
+    }
+
+    @Test
+    fun `a Copa decidida no meio da temporada ja pinta os dois finalistas`() {
+        val z = VagasDoBrasileirao.distribuir(De(9), De(11))
+        assertEquals(listOf(1, 2, 3, 4, 9), posicoes(G, z))
+        assertEquals(listOf(5, 11), posicoes(P, z))
+    }
+
     // ── Queda: sem detentor, a vaga volta para a liga ────────────────────
 
     @Test
     fun `sem finalistas elegiveis a liga entrega o G5 e o 6o na pre`() {
-        // Nenhum dos dois na Série A — campeão da Série B, por exemplo.
-        val z = VagasDoBrasileirao.distribuir()
+        // Copa JÁ decidida, mas nenhum dos dois na Série A — campeão da Série B,
+        // por exemplo. Só aí as duas vagas descem para a liga.
+        val z = VagasDoBrasileirao.distribuir(SemDetentor, SemDetentor)
         assertEquals(listOf(1, 2, 3, 4, 5), posicoes(G, z))
         assertEquals(listOf(6, 7), posicoes(P, z))
         assertEquals(listOf(8, 9, 10, 11, 12, 13), posicoes(S, z))
@@ -81,7 +122,10 @@ class VagasDoBrasileiraoTest {
 
     @Test
     fun `so o campeao elegivel deixa a liga com G4 e dois na pre`() {
-        val z = VagasDoBrasileirao.distribuir(posicaoDoCampeaoDaCopa = 11)
+        val z = VagasDoBrasileirao.distribuir(
+            campeaoDaCopa = De(11),
+            viceDaCopa = SemDetentor
+        )
         assertEquals(listOf(1, 2, 3, 4, 11), posicoes(G, z))
         assertEquals(listOf(5, 6), posicoes(P, z))
     }
@@ -90,8 +134,8 @@ class VagasDoBrasileiraoTest {
     fun `um finalista rebaixado perde a vaga, que volta para a liga`() {
         // Regulamento da CONMEBOL: rebaixado não disputa a Libertadores.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 18,
-            posicaoDoViceDaCopa = 19
+            campeaoDaCopa = De(18),
+            viceDaCopa = De(19)
         )
         assertEquals(Z, z.zona(18))
         assertEquals(Z, z.zona(19))
@@ -107,8 +151,8 @@ class VagasDoBrasileiraoTest {
         // Ele fica com a vaga de título, e a da liga cascateia: o 5º passa a ter
         // vaga de grupo e o 6º a de Pré.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 2,
-            posicaoDoViceDaCopa = 14
+            campeaoDaCopa = De(2),
+            viceDaCopa = De(14)
         )
         assertEquals(listOf(1, 2, 3, 4, 5), posicoes(G, z))
         assertEquals(listOf(6, 14), posicoes(P, z))
@@ -118,8 +162,8 @@ class VagasDoBrasileiraoTest {
     @Test
     fun `os dois finalistas no topo esticam a liga`() {
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 1,
-            posicaoDoViceDaCopa = 3
+            campeaoDaCopa = De(1),
+            viceDaCopa = De(3)
         )
         // O 1º fica com a vaga de grupo do campeão e o 3º com a de PRÉ do vice —
         // o destino é da vaga, não da colocação. A liga completa os grupos com
@@ -136,6 +180,8 @@ class VagasDoBrasileiraoTest {
         // É o exemplo do enunciado: o campeão da Libertadores terminou 3º, entra
         // pela vaga estrutural, e a vaga que ele teria pela liga desce.
         val z = VagasDoBrasileirao.distribuir(
+            campeaoDaCopa = SemDetentor,
+            viceDaCopa = SemDetentor,
             posicoesDosCampeoesContinentais = listOf(3)
         )
         assertEquals(listOf(1, 2, 3, 4, 5, 6), posicoes(G, z))
@@ -148,6 +194,8 @@ class VagasDoBrasileiraoTest {
     @Test
     fun `os dois campeoes continentais esticam ainda mais`() {
         val z = VagasDoBrasileirao.distribuir(
+            campeaoDaCopa = SemDetentor,
+            viceDaCopa = SemDetentor,
             posicoesDosCampeoesContinentais = listOf(2, 5)
         )
         assertEquals(listOf(1, 2, 3, 4, 5, 6, 7), posicoes(G, z))
@@ -160,8 +208,8 @@ class VagasDoBrasileiraoTest {
         // Dois campeões continentais e os dois finalistas da Copa, todos no topo:
         // nove clubes com vaga de Libertadores, do 1º ao 9º.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 4,
-            posicaoDoViceDaCopa = 6,
+            campeaoDaCopa = De(4),
+            viceDaCopa = De(6),
             posicoesDosCampeoesContinentais = listOf(1, 2)
         )
         val comVaga = (1..9).filter { z.zona(it) == G || z.zona(it) == P }
@@ -177,8 +225,8 @@ class VagasDoBrasileiraoTest {
         // Campeão vigente de outro país, ou brasileiro já rebaixado: a lista de
         // posições chega com -1 ou com uma posição de rebaixado.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 10,
-            posicaoDoViceDaCopa = 12,
+            campeaoDaCopa = De(10),
+            viceDaCopa = De(12),
             posicoesDosCampeoesContinentais = listOf(-1, 18)
         )
         assertEquals(listOf(1, 2, 3, 4, 10), posicoes(G, z))
@@ -192,8 +240,8 @@ class VagasDoBrasileiraoTest {
         // Primeira temporada: nenhum campeão continental existe, as duas vagas
         // estruturais ficam órfãs e o Brasil, primeiro na ordem da cota, leva uma.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 10,
-            posicaoDoViceDaCopa = 12,
+            campeaoDaCopa = De(10),
+            viceDaCopa = De(12),
             vagasRemanejadas = 1
         )
         assertEquals(listOf(1, 2, 3, 4, 5, 10), posicoes(G, z))
@@ -207,7 +255,8 @@ class VagasDoBrasileiraoTest {
     fun `nenhuma vaga invade o rebaixamento`() {
         for (campeao in listOf(-1, 3, 17, 20)) {
             val z = VagasDoBrasileirao.distribuir(
-                posicaoDoCampeaoDaCopa = campeao,
+                campeaoDaCopa = vagaDe(campeao),
+                viceDaCopa = SemDetentor,
                 posicoesDosCampeoesContinentais = listOf(19)
             )
             assertTrue("campeão $campeao", (17..20).all { z.zona(it) == Z })
@@ -217,8 +266,8 @@ class VagasDoBrasileiraoTest {
     @Test
     fun `a tabela tem 20 posicoes e cada uma em uma zona so`() {
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 7,
-            posicaoDoViceDaCopa = 9,
+            campeaoDaCopa = De(7),
+            viceDaCopa = De(9),
             posicoesDosCampeoesContinentais = listOf(2)
         )
         assertEquals(VagasDoBrasileirao.CLUBES, z.contagem.values.sum())
@@ -229,7 +278,7 @@ class VagasDoBrasileiraoTest {
 
     @Test
     fun `posicao fora da tabela nao tem zona`() {
-        val z = VagasDoBrasileirao.distribuir()
+        val z = VagasDoBrasileirao.distribuir(SemDetentor, SemDetentor)
         assertEquals(NADA, z.zona(0))
         assertEquals(NADA, z.zona(-1))
         assertEquals(NADA, z.zona(VagasDoBrasileirao.CLUBES + 1))
@@ -240,7 +289,8 @@ class VagasDoBrasileiraoTest {
         // Campeão da Copa que também é campeão da Libertadores: entra uma vez, e a
         // vaga que sobra desce para a liga.
         val z = VagasDoBrasileirao.distribuir(
-            posicaoDoCampeaoDaCopa = 3,
+            campeaoDaCopa = De(3),
+            viceDaCopa = SemDetentor,
             posicoesDosCampeoesContinentais = listOf(3)
         )
         assertEquals(G, z.zona(3))

@@ -2529,7 +2529,8 @@ class TabelaViewModel @Inject constructor(
         sulAmericanaId = campSulAmericanaId
         copaId = copaIdBrasil
         _vagasBrasil.value = try {
-            gameRepository.buscarVagasContinentaisDoBrasil(gameDataStore.saveState.first().anoAtual)
+            val save = gameDataStore.saveState.first()
+            gameRepository.buscarVagasContinentaisDoBrasil(save.anoAtual, save.temporadaId)
         } catch (_: Exception) {
             GameRepository.VagasContinentaisDoBrasil()
         }

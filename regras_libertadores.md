@@ -81,9 +81,18 @@ máximo, G-9:
   para a Série B perde a vaga, que volta para o Brasileirão. No jogo isso sai de
   graça: o rollover atualiza as divisões **antes** de criar a Libertadores, então o
   clube deixa de ser candidato e a regra de queda age sozinha.
-- **Detentor que não existe.** Primeira temporada, ou um campeão da Copa que não
-  está na Série A: a vaga desce para a liga, e o Brasileirão volta a entregar o
-  G-5 mais o 6º na Pré.
+- **Detentor que não existe.** Um campeão da Copa que não está na Série A — da
+  Série B, por exemplo: a vaga desce para a liga, e o Brasileirão volta a entregar
+  o G-5 mais o 6º na Pré.
+- **Copa em andamento não libera vaga.** Enquanto a Copa do Brasil está sendo
+  disputada as duas vagas dela ficam RESERVADAS, e a tabela mostra só o que a liga
+  garante: **G-4 nos grupos e o 5º na Pré**, com a Sul-Americana do 6º ao 11º.
+  Vaga sem dono *conhecido* não é vaga sem dono — cascateá-la prometeria ao 5º e
+  ao 6º um lugar que a copa vai levar. Quando a final acontece, os dois finalistas
+  recebem as suas e a cascata reacomoda o resto.
+
+> E os campeões que contam são os **desta** temporada, não os da anterior: a
+> tabela em exibição concede as vagas da Libertadores do ano seguinte.
 
 Na tela de Classificação essa distribuição é aplicada por
 `VagasDoBrasileirao.distribuir`, que recebe as posições dos detentores e devolve a

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.domain.engine.VagasDoBrasileirao
+import br.com.managerfoot.domain.engine.VagaDeTitulo
 import br.com.managerfoot.domain.engine.ZonaBrasileirao
 import br.com.managerfoot.domain.engine.ZonasDoBrasileirao
 import br.com.managerfoot.presentation.ui.components.ScreenTopBar
@@ -80,11 +81,17 @@ fun TabelaScreen(
         if (divisaoSelecionada != 1) null
         else {
             fun posicaoDe(timeId: Int) =
-                if (timeId <= 0) -1
-                else tabela.indexOfFirst { it.timeId == timeId }.let { if (it >= 0) it + 1 else -1 }
+                tabela.indexOfFirst { it.timeId == timeId }.let { if (it >= 0) it + 1 else -1 }
+            // O detentor pode estar fora desta tabela — campeão da Série B, ou um
+            // clube que já caiu. Aí a vaga dele desce para a liga.
+            fun vagaNaTabela(vaga: VagaDeTitulo): VagaDeTitulo = when (vaga) {
+                is VagaDeTitulo.De -> posicaoDe(vaga.posicao)
+                    .let { if (it > 0) VagaDeTitulo.De(it) else VagaDeTitulo.SemDetentor }
+                else -> vaga
+            }
             VagasDoBrasileirao.distribuir(
-                posicaoDoCampeaoDaCopa = posicaoDe(vagasBrasil.campeaoDaCopaTimeId),
-                posicaoDoViceDaCopa    = posicaoDe(vagasBrasil.viceDaCopaTimeId),
+                campeaoDaCopa = vagaNaTabela(vagasBrasil.campeaoDaCopa),
+                viceDaCopa    = vagaNaTabela(vagasBrasil.viceDaCopa),
                 posicoesDosCampeoesContinentais =
                     vagasBrasil.campeoesContinentaisTimeIds.map { posicaoDe(it) },
                 vagasRemanejadas = vagasBrasil.vagasRemanejadas,
@@ -388,7 +395,10 @@ fun TabelaScreen(
         }
 
         if (!aindaNaoSorteada) {
-            LegendaZonas(divisaoSelecionada, zonasSerieA)
+            LegendaZonas(
+                divisaoSelecionada, zonasSerieA,
+                copaEmAndamento = vagasBrasil.campeaoDaCopa is VagaDeTitulo.Indefinida
+            )
         }
     }
 }
@@ -536,7 +546,11 @@ private fun zonaParaDivisao(
 }
 
 @Composable
-private fun LegendaZonas(divisao: Int, zonasSerieA: ZonasDoBrasileirao? = null) {
+private fun LegendaZonas(
+    divisao: Int,
+    zonasSerieA: ZonasDoBrasileirao? = null,
+    copaEmAndamento: Boolean = false
+) {
     val itens = when (divisao) {
         1 -> buildList {
             // As contagens saem da MESMA distribuição que pinta as linhas, então
@@ -545,9 +559,16 @@ private fun LegendaZonas(divisao: Int, zonasSerieA: ZonasDoBrasileirao? = null) 
             val grupos = zonasSerieA?.quantas(ZonaBrasileirao.LIBERTADORES_GRUPOS) ?: 0
             val pre = zonasSerieA?.quantas(ZonaBrasileirao.LIBERTADORES_PRE) ?: 0
             val sulAmericana = zonasSerieA?.quantas(ZonaBrasileirao.SUL_AMERICANA) ?: 0
-            if (grupos > 0) add(LibertadoresBlue to "$grupos vagas Libertadores (grupos)")
-            if (pre > 0) add(PlayoffOrange to "$pre vagas Pré-Libertadores")
-            if (sulAmericana > 0) add(SulAmericanaTeal to "$sulAmericana vagas Sul-Americana")
+            fun vagas(n: Int) = if (n == 1) "1 vaga" else "$n vagas"
+            if (grupos > 0) add(LibertadoresBlue to "${vagas(grupos)} Libertadores (grupos)")
+            if (pre > 0) add(PlayoffOrange to "${vagas(pre)} Pré-Libertadores")
+            if (sulAmericana > 0) add(SulAmericanaTeal to "${vagas(sulAmericana)} Sul-Americana")
+            // As duas vagas da Copa do Brasil ainda não têm dono, e por isso não
+            // estão pintadas em ninguém. Dizer isso evita a leitura de que o
+            // Brasil só tem as vagas que a tabela mostra.
+            if (copaEmAndamento) {
+                add(LibertadoresBlue to "+2 pela Copa do Brasil (campeão e vice)")
+            }
             add(RelegationRed to "Z${VagasDoBrasileirao.REBAIXADOS} Rebaixamento")
         }
         2 -> listOf(

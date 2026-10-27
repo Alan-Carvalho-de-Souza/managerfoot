@@ -2380,53 +2380,75 @@ class GameRepository @Inject constructor(
      * O que a tabela da Série A precisa saber para pintar as zonas continentais
      * sem mentir. Ver [VagasDoBrasileirao], que aplica a distribuição e o efeito
      * cascata.
+     *
+     * **O ano é o da temporada CORRENTE, e não o anterior.** A tabela em exibição
+     * é a que vai conceder as vagas da Libertadores da PRÓXIMA temporada, e quem
+     * as ocupa são os campeões DESTA — a Copa do Brasil que está sendo disputada
+     * agora, não a do ano passado.
      */
     data class VagasContinentaisDoBrasil(
+        /** Vaga do campeão da Copa do Brasil, de GRUPO. */
+        val campeaoDaCopa: VagaDeTitulo = VagaDeTitulo.Indefinida,
+        /** Vaga do vice-campeão da Copa do Brasil, de PRÉ. */
+        val viceDaCopa: VagaDeTitulo = VagaDeTitulo.Indefinida,
         /**
-         * Campeão vigente da **Copa do Brasil**: vaga de título na FASE DE GRUPOS.
-         * -1 quando não existe ou não está entre os elegíveis — um campeão da
-         * Série B, por exemplo —, e aí a vaga desce para o Brasileirão.
-         */
-        val campeaoDaCopaTimeId: Int = -1,
-        /** **Vice-campeão** da Copa do Brasil: vaga de título na PRÉ. */
-        val viceDaCopaTimeId: Int = -1,
-        /**
-         * Campeões vigentes da Libertadores e da Sul-Americana, quando
+         * Campeões desta temporada da Libertadores e da Sul-Americana, quando
          * brasileiros. Entram pela vaga ESTRUTURAL, por fora da cota do país: se
-         * também se classificariam pela liga, a vaga da liga cascateia para o
-         * próximo colocado, e é isso que estica o G-5 para G-6 ou mais.
+         * também se classificariam pela liga, a vaga da liga cascateia, e é isso
+         * que estica o G-5. Vazia enquanto as duas não terminarem.
          */
         val campeoesContinentaisTimeIds: List<Int> = emptyList(),
         /**
-         * Vagas estruturais de campeão vigente que ficaram sem titular e desceram
-         * para o Brasil, 0 ou 1. O Brasil é o primeiro da fila na ordem da cota;
-         * a segunda, quando existe, vai para a Argentina.
+         * Vagas estruturais que não terão titular nenhum porque a competição não
+         * existe nesta temporada — num save antigo sem Copa Sul-Americana, por
+         * exemplo. Elas descem para a próxima associação na ordem da cota, e o
+         * Brasil é o primeiro da fila; no máximo 1, porque a segunda vai para a
+         * Argentina. Competição EM ANDAMENTO não conta: ela vai ter campeão.
          */
         val vagasRemanejadas: Int = 0
     )
 
     /**
-     * Monta [VagasContinentaisDoBrasil] para o ano corrente, a partir do Hall da
-     * Fama da temporada que encerrou.
+     * Monta [VagasContinentaisDoBrasil] para a temporada corrente.
+     *
+     * Uma competição que ainda não terminou devolve [VagaDeTitulo.Indefinida]: a
+     * vaga fica reservada, e não é oferecida à liga. É a diferença entre "não se
+     * sabe quem" e "não tem dono".
      */
-    suspend fun buscarVagasContinentaisDoBrasil(anoAtual: Int): VagasContinentaisDoBrasil {
-        suspend fun brasileiro(timeId: Int?): Int =
-            timeId?.takeIf { it > 0 }
-                ?.takeIf { id ->
-                    timeRepository.buscarEntityPorId(id)?.pais?.let { Continentes.ehBrasil(it) } == true
-                } ?: -1
+    suspend fun buscarVagasContinentaisDoBrasil(
+        anoAtual: Int,
+        temporadaId: Int
+    ): VagasContinentaisDoBrasil {
+        suspend fun ehBrasileiro(timeId: Int) =
+            timeRepository.buscarEntityPorId(timeId)?.pais?.let { Continentes.ehBrasil(it) } == true
 
-        val copa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoAtual - 1, DIVISAO_HALL_COPA_BRASIL)
-        val campeaoLib = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_LIBERTADORES)
-        val campeaoSul = campeaoVigenteNoHall(anoAtual, DIVISAO_HALL_SULAMERICANA)
+        suspend fun vagaDe(timeId: Int?): VagaDeTitulo =
+            if (timeId == null || timeId <= 0 || !ehBrasileiro(timeId)) VagaDeTitulo.SemDetentor
+            else VagaDeTitulo.De(timeId)
 
-        val orfas = (if (campeaoLib == null) 1 else 0) + (if (campeaoSul == null) 1 else 0)
+        /** Se a competição existe nesta temporada, decidida ou não. */
+        suspend fun existeNaTemporada(nome: String) =
+            campeonatoDao.buscarPorTemporadaId(temporadaId)
+                .any { it.nome.contains(nome, ignoreCase = true) }
+
+        // A Copa do Brasil DESTA temporada: sem entrada no Hall, ela ainda corre.
+        val copa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoAtual, DIVISAO_HALL_COPA_BRASIL)
+
+        // E os campeões continentais DESTA temporada, pelo mesmo critério.
+        val campeaoLib = hallDaFamaDao
+            .buscarCampeaoPorAnoEDivisao(anoAtual, DIVISAO_HALL_LIBERTADORES)?.campeaoTimeId
+        val campeaoSul = hallDaFamaDao
+            .buscarCampeaoPorAnoEDivisao(anoAtual, DIVISAO_HALL_SULAMERICANA)?.campeaoTimeId
+
+        val orfas =
+            (if (campeaoLib == null && !existeNaTemporada("Libertadores")) 1 else 0) +
+                (if (campeaoSul == null && !existeNaTemporada("Sul-Americana")) 1 else 0)
 
         return VagasContinentaisDoBrasil(
-            campeaoDaCopaTimeId = brasileiro(copa?.campeaoTimeId),
-            viceDaCopaTimeId    = brasileiro(copa?.viceTimeId),
+            campeaoDaCopa = if (copa == null) VagaDeTitulo.Indefinida else vagaDe(copa.campeaoTimeId),
+            viceDaCopa    = if (copa == null) VagaDeTitulo.Indefinida else vagaDe(copa.viceTimeId),
             campeoesContinentaisTimeIds =
-                listOfNotNull(campeaoLib, campeaoSul).map { brasileiro(it) }.filter { it > 0 },
+                listOfNotNull(campeaoLib, campeaoSul).filter { ehBrasileiro(it) },
             vagasRemanejadas = orfas.coerceAtMost(1)
         )
     }
