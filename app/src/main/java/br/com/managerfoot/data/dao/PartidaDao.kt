@@ -107,11 +107,21 @@ interface PartidaDao {
     """)
     suspend fun buscarUltimosResultadosMultiCamp(timeId: Int, campeonatoIds: List<Int>, limite: Int = 5): List<PartidaEntity>
 
-    /** Últimas partidas jogadas por um time em qualquer competição (para cálculo de moral). */
+    /**
+     * Últimas partidas jogadas por um time em qualquer competição (cálculo de moral).
+     *
+     * A ordenação precisa da TEMPORADA na frente, e esta é a razão: `ordemGlobal`
+     * é o relógio de UMA temporada e zera na virada. Ordenando só por ele, as 5
+     * partidas de maior `ordemGlobal` de um clube não são as 5 mais recentes —
+     * são as rodadas finais das temporadas PASSADAS, que têm os números altos. As
+     * partidas antigas não são apagadas do banco, então a moral de um elenco
+     * ficava presa no fim da temporada anterior por quase toda a temporada nova.
+     */
     @Query("""
-        SELECT * FROM partidas
-        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
-        ORDER BY ordemGlobal DESC
+        SELECT p.* FROM partidas p
+        INNER JOIN campeonatos c ON c.id = p.campeonatoId
+        WHERE (p.timeCasaId = :timeId OR p.timeForaId = :timeId) AND p.jogada = 1
+        ORDER BY c.temporadaId DESC, p.ordemGlobal DESC
         LIMIT :limite
     """)
     suspend fun buscarUltimasPartidasDoTime(timeId: Int, limite: Int = 5): List<PartidaEntity>
@@ -552,7 +562,9 @@ interface PartidaDao {
         INNER JOIN times tc ON p.timeCasaId = tc.id
         INNER JOIN times tf ON p.timeForaId = tf.id
         WHERE p.timeCasaId = :timeId AND p.jogada = 1 AND p.receitaPartida IS NOT NULL
-        ORDER BY p.ordemGlobal DESC
+        -- Temporada na frente: ordenar só por ordemGlobal intercala as temporadas,
+        -- porque o relógio zera na virada. Ver buscarUltimasPartidasDoTime.
+        ORDER BY c.temporadaId DESC, p.ordemGlobal DESC
     """)
     fun observeReceitasPartidas(timeId: Int): Flow<List<CalendarioPartidaDto>>
 
