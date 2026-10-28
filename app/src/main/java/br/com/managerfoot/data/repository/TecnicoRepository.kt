@@ -6,6 +6,8 @@ import br.com.managerfoot.data.dao.TimeDao
 import br.com.managerfoot.data.database.entities.HallDaFamaEntity
 import br.com.managerfoot.data.database.entities.PassagemTecnicoEntity
 import br.com.managerfoot.data.database.entities.TecnicoEntity
+import br.com.managerfoot.domain.engine.MercadoDeTecnicos
+import br.com.managerfoot.domain.engine.NomesDeTecnicos
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -168,6 +170,15 @@ class TecnicoRepository @Inject constructor(
             liberarDoTime(atual.id, anoAtual)
         }
 
+        // O contratado pode estar vindo de OUTRO clube (assédio). A passagem dele
+        // lá precisa ser encerrada aqui, senão ele fica com duas passagens ativas
+        // ao mesmo tempo e buscarPassagemAtiva() passa a devolver qualquer uma
+        // das duas — os resultados iriam parar na passagem errada.
+        val passagemAnterior = tecnicoDao.buscarPassagemAtiva(tecnicoId)
+        if (passagemAnterior != null && passagemAnterior.timeId != timeId) {
+            tecnicoDao.encerrarPassagem(passagemAnterior.id, anoAtual)
+        }
+
         tecnicoDao.contratar(tecnicoId, timeId, salario, anos)
 
         // Cria passagem ativa
@@ -264,10 +275,10 @@ class TecnicoRepository @Inject constructor(
      * @param anoFim Ano que está encerrando (para gravar fim da passagem)
      */
     suspend fun demitirPorDesempenho(timesRebaixados: Set<Int>, anoFim: Int) {
-        val todos = tecnicoDao.buscarTodos()
+        val todos = tecnicoDao.buscarEmAtividade()
         for (tecnico in todos) {
-            if (tecnico.timeId == null) continue           // já está livre
             if (tecnico.controladoPorJogador) continue     // usuário decide
+            if (tecnico.timeId == null) continue           // já está livre
 
             val foiRebaixado = tecnico.timeId in timesRebaixados
             val aproveitamentoTemp = if (tecnico.jogosTemporada > 0)
@@ -280,11 +291,70 @@ class TecnicoRepository @Inject constructor(
                 aproveitamentoTemp < 0.30f    -> 0.40f
                 else                          -> 0.0f
             }
-            if (prob == 0.0f) continue
-            if (kotlin.random.Random.nextFloat() > prob) continue
+            val demitido = prob > 0f && kotlin.random.Random.nextFloat() <= prob
 
-            liberarDoTime(tecnico.id, anoFim)
+            // A reputação do técnico da IA só subia: os únicos ajustes eram o
+            // bônus de título e o delta de meta, e esse delta só alcançava o
+            // técnico do jogador. Agora a temporada também cobra.
+            if (tecnico.jogosTemporada > 0) {
+                val delta = MercadoDeTecnicos.deltaDeReputacao(
+                    aproveitamento = aproveitamentoTemp,
+                    foiDemitido = demitido,
+                    foiRebaixado = foiRebaixado
+                )
+                if (delta != 0f) {
+                    tecnicoDao.atualizarReputacao(
+                        tecnico.id,
+                        (tecnico.reputacao + delta).coerceIn(0f, 100f)
+                    )
+                }
+            }
+
+            if (demitido) liberarDoTime(tecnico.id, anoFim)
         }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  Fim de carreira e renovação do mercado
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * Envelhece todos os técnicos em um ano e encerra as carreiras que chegaram
+     * ao fim, gerando um substituto para cada aposentado.
+     *
+     * A reposição é 1 para 1 de propósito: nada nunca criava um técnico depois
+     * do seed, então sem ela cada aposentadoria seria um clube a menos com
+     * comando até o mundo ficar vazio. O técnico do jogador envelhece como
+     * todos, mas nunca é aposentado — quem decide isso é ele.
+     */
+    suspend fun envelhecerEAposentarTecnicos(anoFim: Int) {
+        tecnicoDao.envelhecerUmAno()
+        for (tecnico in tecnicoDao.buscarEmAtividade()) {
+            if (tecnico.controladoPorJogador) continue
+            if (!MercadoDeTecnicos.deveAposentar(tecnico.idade) { kotlin.random.Random.nextFloat() }) continue
+
+            liberarDoTime(tecnico.id, anoFim)   // encerra a passagem ativa, se houver
+            tecnicoDao.aposentar(tecnico.id)
+            inserirTecnicoNovato(tecnico.nacionalidade)
+        }
+    }
+
+    /** Um técnico jovem e desconhecido entra no mercado, livre. */
+    private suspend fun inserirTecnicoNovato(nacionalidade: String) {
+        val rng = kotlin.random.Random
+        val (nome, abreviado) = NomesDeTecnicos.gerar(nacionalidade) { n -> rng.nextInt(n) }
+        tecnicoDao.inserir(
+            TecnicoEntity(
+                nome = nome,
+                nomeAbreviado = abreviado,
+                idade = rng.nextInt(36, 49),
+                nacionalidade = nacionalidade,
+                timeId = null,
+                salario = SALARIO_BASE,
+                contratoAnos = 0,
+                reputacao = 30f + rng.nextFloat() * 12f
+            )
+        )
     }
 
     // ─────────────────────────────────────────────────────────
@@ -306,7 +376,7 @@ class TecnicoRepository @Inject constructor(
         val nac = if (time.pais in listOf("Uruguay", "Uruguai")) "Uruguai" else time.pais
 
         // Livres, excluindo o técnico atual (que ainda tem timeId até a troca)
-        val livres = tecnicoDao.buscarTodos().filter { it.timeId == null && it.id != atual?.id }
+        val livres = tecnicoDao.buscarEmAtividade().filter { it.timeId == null && it.id != atual?.id }
         if (livres.isEmpty()) return false
 
         val compat = livres.filter { it.reputacao <= time.reputacao + 15f }
@@ -314,46 +384,48 @@ class TecnicoRepository @Inject constructor(
             ?: compat.maxByOrNull { it.reputacao }
             ?: return false
 
-        val rep = time.reputacao.toLong()
-        val salario = (150_000L + (rep - 30L) * 50_000L).coerceAtLeast(150_000L)
         // contratar() já demite o atual (vira livre) e cria a nova passagem.
-        contratar(substituto.id, timeId, salario, 2, anoAtual)
+        contratar(substituto.id, timeId, salarioPara(time.reputacao), 2, anoAtual)
         return true
     }
 
     /**
-     * Movimento natural do mercado de técnicos ao FINAL da temporada: clubes de
-     * maior reputação, iterados dos melhores para os piores, podem contratar um
-     * técnico livre de destaque quando o atual é claramente inferior ao patamar
-     * do clube. O técnico substituído volta ao mercado e pode "descer" para um
-     * clube menor mais adiante no laço — gerando um efeito cascata realista.
+     * A JANELA DE FIM DE TEMPORADA: os clubes se servem, do mais forte para o
+     * mais fraco, e podem tirar técnico de clubes claramente menores.
      *
-     * Deve rodar APÓS [demitirPorDesempenho] e [preencherVagasComTecnicosLivres],
-     * quando os recém-demitidos já estão no pool de livres.
+     * Antes daqui só se contratava quem estivesse LIVRE, e o mundo tem um único
+     * agente livre (o técnico que o jogador desalojou). Esta função rodava
+     * depois de [preencherVagasComTecnicosLivres], que já tinha esvaziado o
+     * pool, e por isso saía no primeiro `break` quase todo ano. Agora ela roda
+     * ANTES, e a decisão fica em [MercadoDeTecnicos], que é pura e testável —
+     * aqui sobra só aplicar os movimentos que ela devolve, na ordem.
      */
     suspend fun movimentarMercadoTecnicosFimTemporada(anoAtual: Int) {
-        val times = timeDao.buscarTodos().sortedByDescending { it.reputacao }
-        for (time in times) {
-            val atual = tecnicoDao.buscarPorTime(time.id)
-            if (atual?.controladoPorJogador == true) continue
+        val times = timeDao.buscarTodos()
+        val emAtividade = tecnicoDao.buscarEmAtividade()
+        if (times.isEmpty() || emAtividade.isEmpty()) return
 
-            val livres = tecnicoDao.buscarTodos().filter { it.timeId == null }
-            if (livres.isEmpty()) break
+        val movimentos = MercadoDeTecnicos.janelaDeFimDeTemporada(
+            clubes = times.map {
+                MercadoDeTecnicos.ClubeNoMercado(it.id, it.reputacao, nacionalidadeDoPais(it.pais))
+            },
+            tecnicos = emAtividade.map {
+                MercadoDeTecnicos.TecnicoNoMercado(
+                    tecnicoId = it.id,
+                    reputacao = it.reputacao,
+                    nacionalidade = it.nacionalidade,
+                    timeId = it.timeId,
+                    controladoPorJogador = it.controladoPorJogador
+                )
+            }
+        )
 
-            val nac = if (time.pais in listOf("Uruguay", "Uruguai")) "Uruguai" else time.pais
-            val repAtual = atual?.reputacao ?: 0f
-            val compat = livres.filter { it.reputacao <= time.reputacao + 10f }
-                .filter { it.reputacao > repAtual + 8f }   // só troca se for upgrade claro
-            val alvo = compat.filter { it.nacionalidade == nac }.maxByOrNull { it.reputacao }
-                ?: compat.maxByOrNull { it.reputacao }
-                ?: continue
-
-            // Probabilidade moderada de o clube se mexer (nem todo ano há troca).
-            if (kotlin.random.Random.nextFloat() > 0.35f) continue
-
-            val rep = time.reputacao.toLong()
-            val salario = (150_000L + (rep - 30L) * 50_000L).coerceAtLeast(150_000L)
-            contratar(alvo.id, time.id, salario, 2, anoAtual)  // libera o atual → volta ao pool
+        val reputacaoPorTime = times.associate { it.id to it.reputacao }
+        for (movimento in movimentos) {
+            val reputacao = reputacaoPorTime[movimento.paraTimeId] ?: continue
+            // contratar() libera o técnico que estava no clube de destino e
+            // encerra a passagem do contratado no clube de origem.
+            contratar(movimento.tecnicoId, movimento.paraTimeId, salarioPara(reputacao), 2, anoAtual)
         }
     }
 
@@ -365,13 +437,13 @@ class TecnicoRepository @Inject constructor(
      */
     suspend fun preencherVagasComTecnicosLivres(anoAtual: Int) {
         val todosTimes = timeDao.buscarTodos()
-        val livres = tecnicoDao.buscarTodos().filter { it.timeId == null }
+        val livres = tecnicoDao.buscarEmAtividade().filter { it.timeId == null }
             .toMutableList()
         for (time in todosTimes) {
             val ja = tecnicoDao.buscarPorTime(time.id)
             if (ja != null) continue
             // Filtra técnicos compatíveis
-            val nac = if (time.pais in listOf("Uruguay", "Uruguai")) "Uruguai" else time.pais
+            val nac = nacionalidadeDoPais(time.pais)
             val candidato = livres
                 .filter { it.nacionalidade == nac || livres.none { c -> c.nacionalidade == nac } }
                 .filter { it.reputacao <= time.reputacao + 15f }
@@ -379,10 +451,31 @@ class TecnicoRepository @Inject constructor(
                 ?: livres.maxByOrNull { it.reputacao }
                 ?: continue
             // Salário proporcional à reputação do time (R$ 1.500-30.000/mês em centavos)
-            val rep = time.reputacao.toLong()
-            val salario = (150_000L + (rep - 30L) * 50_000L).coerceAtLeast(150_000L)
-            contratar(candidato.id, time.id, salario, 2, anoAtual)
+            contratar(candidato.id, time.id, salarioPara(time.reputacao), 2, anoAtual)
             livres.remove(candidato)
         }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  Helpers
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * Salário do técnico, em centavos, a partir da reputação do clube.
+     *
+     * Note que ela NÃO olha a reputação do técnico: dois técnicos muito
+     * diferentes ganham igual no mesmo clube. É o que impede uma disputa
+     * salarial de verdade entre clubes — está registrado como pendência em
+     * docs/mercado-de-tecnicos.md.
+     */
+    private fun salarioPara(reputacaoDoClube: Float): Long =
+        (SALARIO_BASE + (reputacaoDoClube.toLong() - 30L) * 50_000L).coerceAtLeast(SALARIO_BASE)
+
+    /** O país do clube na mesma grafia que a nacionalidade do técnico usa. */
+    private fun nacionalidadeDoPais(pais: String): String =
+        if (pais in listOf("Uruguay", "Uruguai")) "Uruguai" else pais
+
+    private companion object {
+        const val SALARIO_BASE = 150_000L
     }
 }

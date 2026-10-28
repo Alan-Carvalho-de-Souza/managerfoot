@@ -9363,24 +9363,34 @@ class GameRepository @Inject constructor(
             tecnicoRepository.demitirPorDesempenho(rebaixadosTotais, ano)
         } catch (_: Exception) { }
 
+        // ── Fim de carreira: envelhecer e aposentar ──
+        // Roda DEPOIS da avaliação da temporada (para que quem se aposenta ainda
+        // seja avaliado pelo que fez) e ANTES do mercado, para que as vagas que
+        // ela abre entrem na mesma janela. Cada aposentado gera um substituto.
+        try {
+            tecnicoRepository.envelhecerEAposentarTecnicos(ano)
+        } catch (_: Exception) { }
+
         // ── Resetar stats da temporada dos técnicos ──
         try {
             tecnicoRepository.resetarStatsTemporada()
         } catch (_: Exception) { }
 
-        // ── IA: preencher times sem técnico (vagos) com técnicos livres ──
-        // Garante que após o usuário ter "sequestrado" o cargo do técnico
-        // anterior do seu time, e qualquer outro time que tenha ficado sem
-        // comando, recebe um técnico livre baseado em reputação.
-        try {
-            tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
-        } catch (_: Exception) { }
-
-        // ── Mercado de técnicos de fim de temporada ──
-        // Depois de demitir os fracos e preencher as vagas, os clubes maiores
-        // podem contratar técnicos livres de destaque (efeito cascata realista).
+        // ── Mercado de técnicos: a janela de assédio ──
+        // Esta ordem é o ponto todo: antes o preenchimento de vagas vinha
+        // primeiro e esvaziava o pool, e a janela de mercado saía no primeiro
+        // `break` por não achar ninguém livre. Agora os clubes se servem uns dos
+        // outros primeiro, a vaga cascateia do maior para o menor, e só depois
+        // o preenchimento entra como rede de segurança para o que sobrou.
         try {
             tecnicoRepository.movimentarMercadoTecnicosFimTemporada(novoAno)
+        } catch (_: Exception) { }
+
+        // ── IA: preencher times que ainda estejam sem técnico ──
+        // Cobre o clube cujo cargo o usuário "sequestrou" e as pontas da cascata
+        // que não acharam candidato compatível.
+        try {
+            tecnicoRepository.preencherVagasComTecnicosLivres(novoAno)
         } catch (_: Exception) { }
     }
 

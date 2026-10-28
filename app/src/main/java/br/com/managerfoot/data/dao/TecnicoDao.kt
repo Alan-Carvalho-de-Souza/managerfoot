@@ -12,7 +12,7 @@ interface TecnicoDao {
     @Query("SELECT * FROM tecnicos ORDER BY (vitorias * 5 + empates) DESC, vitorias DESC, nome")
     fun observeTodos(): Flow<List<TecnicoEntity>>
 
-    @Query("SELECT * FROM tecnicos WHERE timeId IS NULL ORDER BY reputacao DESC, nome")
+    @Query("SELECT * FROM tecnicos WHERE timeId IS NULL AND aposentado = 0 ORDER BY reputacao DESC, nome")
     fun observeLivres(): Flow<List<TecnicoEntity>>
 
     @Query("SELECT * FROM tecnicos WHERE timeId = :timeId LIMIT 1")
@@ -86,6 +86,18 @@ interface TecnicoDao {
         SET vitoriasTemporada = 0, empatesTemporada = 0, derrotasTemporada = 0
     """)
     suspend fun resetarStatsTemporada()
+
+    /** Em atividade: a lista de onde o mercado tira candidatos. */
+    @Query("SELECT * FROM tecnicos WHERE aposentado = 0")
+    suspend fun buscarEmAtividade(): List<TecnicoEntity>
+
+    /** Envelhece todo mundo em uma temporada. O aposentado para de contar idade. */
+    @Query("UPDATE tecnicos SET idade = idade + 1 WHERE aposentado = 0")
+    suspend fun envelhecerUmAno()
+
+    /** Encerra a carreira: sai do clube e nunca mais aparece numa contratação. */
+    @Query("UPDATE tecnicos SET aposentado = 1, timeId = NULL, contratoAnos = 0 WHERE id = :tecnicoId")
+    suspend fun aposentar(tecnicoId: Int)
 
     @Query("DELETE FROM tecnicos")
     suspend fun deleteAll()

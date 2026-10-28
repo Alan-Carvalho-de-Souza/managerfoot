@@ -11,7 +11,8 @@ import androidx.room.PrimaryKey
  * pontuação no ranking = vitorias * 5 + empates * 1 + derrotas * 0.
  *
  * O técnico controlado pelo jogador tem `controladoPorJogador = true`.
- * Idade é fixa nesta versão (sem aposentadoria).
+ * Técnicos envelhecem na virada de temporada e encerram a carreira
+ * (`aposentado = true`) — ver MercadoDeTecnicos.
  *
  * Sem FK para TimeEntity (timeId é nullable e SET_NULL no padrão dos outros
  * relacionamentos do app).
@@ -40,6 +41,14 @@ data class TecnicoEntity(
     val contratoAnos: Int = 0,
     val reputacao: Float = 50f,             // 0..100
     val controladoPorJogador: Boolean = false,
+
+    /**
+     * Carreira encerrada. A linha NÃO é apagada: o Hall da Fama e as passagens
+     * apontam para este id, e apagá-la levaria os títulos do técnico junto.
+     * Aposentado fica fora de qualquer contratação, mas segue no ranking e no
+     * histórico dos clubes por onde passou.
+     */
+    val aposentado: Boolean = false,
 
     // ── Stats acumulados de carreira (todos os jogos) ────────
     val vitorias: Int = 0,
