@@ -178,7 +178,16 @@ abstratos por dias reais nas faixas que já existem**, e validar o resultado.
 
 ## 5. Plano de ação
 
-### Etapa 0 — unificar os conversores de mês *(independente, barato)*
+### Etapa 0 — o relógio que zera a cada temporada *(independente, barato, urgente)*
+
+Duas coisas, nenhuma dependendo do resto do plano, e as duas consertam bug de hoje:
+
+**0a. Ordenar por `(temporadaId, ordemGlobal)` onde a consulta cruza temporadas.**
+`buscarUltimasPartidasDoTime` (moral) e `observeReceitasPartidas` (receitas)
+ordenam por um número que zera todo ano, sem filtro de temporada — ver §7.3.
+Duas linhas cada.
+
+**0b. Unificar os conversores de mês.**
 
 Um conversor só, o de `CalendarioDoJogo`, usado por `ViewModels` e por
 `Repositories`. Elimina a divergência `/370` × `/380` × `/410` do §2.1.
@@ -281,7 +290,7 @@ Trocar "o jogador joga uma rodada → todo mundo joga a próxima rodada dele"
 
 | Etapa | Quebra save? | Por quê |
 |---|---|---|
-| 0 — conversores | não | só corrige o mês derivado |
+| 0 — relógio e conversores | não | só corrige ordenação e mês derivado |
 | 1 — calendário como dado | não | tabela nova |
 | 2 — `ordemGlobal` = dia | **não, com migração** | a data atual é função pura de dados já gravados; há precedente |
 | 3 — restrições | não | muda só partidas futuras |
@@ -290,26 +299,92 @@ Trocar "o jogador joga uma rodada → todo mundo joga a próxima rodada dele"
 
 ---
 
-## 7. O que um aparelho conectado ainda mudaria
+## 7. Validação num save real *(aparelho conectado, Real Madrid, mar/2027)*
+
+### 7.1 O modelo de datas confere — 7 de 7
+
+Comparando o que a tela do Calendário desenha com a fórmula recalculada fora do
+app:
+
+| Partida | `ordemGlobal` | Modelo | Tela |
+|---|---|---|---|
+| Champions R2 | 67 | 25 mar | 25 mar ✅ |
+| La Liga R7 | 70 | 27 mar | 27 mar ✅ |
+| La Liga R8 | 80 | 4 abr | 4 abr ✅ |
+| La Liga R9 | 90 | 12 abr | 12 abr ✅ |
+| La Liga R10 | 100 | 20 abr | 20 abr ✅ |
+| Champions R3 | 107 | 26 abr | 26 abr ✅ |
+| La Liga R11 | 110 | 28 abr | 28 abr ✅ |
+
+**A lista de colisões do §2.2 fica de pé**, e com ela a lista de aceitação da
+etapa 3.
+
+### 7.2 O ritmo real: o descanso mínimo de hoje é 2 dias
+
+Intervalos observados entre jogos consecutivos do clube: **2, 8, 8, 8, 6, 2**.
+
+As rodadas de liga vêm de 8 em 8 dias e a partida continental cai 2 dias antes
+da rodada seguinte. **Isso muda a etapa 3:** a restrição não pode ser um
+descanso agressivo (3+ dias), que obrigaria a reconstruir o calendário inteiro.
+O alvo realista é **"nunca no mesmo dia" e "nunca em dias consecutivos"**, que o
+calendário atual já quase cumpre — e aí a etapa 3 vira correção pontual das 8
+colisões conhecidas, não um redesenho.
+
+### 7.3 Um bug que o save real expôs: a moral usa a temporada passada
+
+A tela mostrou **"Realizados (60)"** para um clube que jogou ~7 partidas nesta
+temporada. As partidas das temporadas anteriores **permanecem no banco** — o que
+já se sabia do código, mas agora está confirmado.
+
+E `buscarUltimasPartidasDoTime`, que alimenta a moral do elenco depois de cada
+partida (`atualizarMoraleTime`), é assim:
+
+```sql
+SELECT * FROM partidas
+WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 1
+ORDER BY ordemGlobal DESC
+LIMIT :limite
+```
+
+**Sem filtro de temporada, ordenando por um número que zera a cada temporada.**
+As 5 partidas de maior `ordemGlobal` de um clube não são as 5 mais recentes: são
+as rodadas finais das temporadas PASSADAS, que têm `ordemGlobal` alto. Para o
+Real Madrid em 2027/28, a moral está sendo calculada sobre o fim de 2026/27, e
+seguirá assim até a liga chegar perto da última rodada.
+
+**A etapa 2 não conserta isto sozinha** — o dia da temporada também zera todo
+ano. O conserto é ordenar por `(temporadaId, ordemGlobal)`, duas linhas, e deve
+vir **antes** de tudo, junto com a etapa 0.
+
+`observeReceitasPartidas` (receitas em Finanças) tem a mesma forma e o mesmo
+problema. O Calendário escapa porque a tela reordena em Kotlin por
+`(ano, data derivada)`.
+
+### 7.4 Segundo achado de tela: o "R" do cabeçalho é de outra competição
+
+O cabeçalho mostrou **"La Liga · 2º · R2 · 25 Mar 2027"** enquanto a próxima
+partida da La Liga é a **R7** — o R2 é a rodada da *Champions*, porque
+`rodadaAtual = proximaPartida?.rodada` pega a rodada da próxima partida seja de
+que competição for, e a exibe sob o nome da liga do clube.
+
+## 8. O que um aparelho conectado ainda mudaria
 
 A análise acima saiu do código e de cálculo sobre as fórmulas. Três perguntas só
 um save real responde, e duas delas mexem no plano:
 
-1. **O modelo de datas confere com o que o app desenha?** Toda a lista de
-   colisões do §2.2 — e portanto a lista de aceitação da etapa 3 — vem de uma
-   reimplementação da curva fora do app. Uma tela do Calendário com as datas de
-   um clube valida ou derruba essa lista. **É a checagem de maior valor.**
-2. **Qual é o ritmo real?** Os intervalos entre jogos num save de verdade dizem
-   que "descanso mínimo" a etapa 3 pode exigir sem tornar o calendário
-   impossível. Hoje esse número seria um palpite.
+1. ~~O modelo de datas confere?~~ **Respondido no §7.1: confere, 7 de 7.**
+2. ~~Qual é o ritmo real?~~ **Respondido no §7.2: 2, 8, 8, 8, 6, 2 dias.**
 3. **Qual o tamanho real deste save?** As ~6.300 partidas/temporada assumem
    todas as ligas ativas. Se o save tiver menos, a migração da etapa 2 é menor.
+   Continua sem resposta: exige o banco.
+4. **O descompasso financeiro em clube argentino (§2.1)** exige um save na
+   Argentina; o deste aparelho é da La Liga, que usa a curva genérica.
 
 O que um aparelho **não** dá: o banco. O APK instalado é de release, então
 `run-as` não abre o diretório do app, e instalar um debug exigiria desinstalar —
 o que apagaria o save. As checagens acima são todas por tela e por logcat.
 
-## 8. O que NÃO foi verificado
+## 9. O que NÃO foi verificado
 
 - Nada disto foi executado no app nem num save real. As colisões e as
   divergências de mês foram calculadas sobre as fórmulas e as tabelas do código.
