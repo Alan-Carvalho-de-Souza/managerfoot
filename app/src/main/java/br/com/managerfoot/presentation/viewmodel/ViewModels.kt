@@ -2487,8 +2487,15 @@ class ClubesViewModel @Inject constructor(
                 resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
             )
         }
-        _historicoCompeticoes.value = (ligas + copas)
-            .sortedWith(compareByDescending<HistoricoTemporada> { it.temporadaId }.thenBy { it.nomeCampeonato })
+        // Mesma deduplicação do histórico das estatísticas: uma continental com
+        // fase de grupos aparece nas classificações e na campanha de mata-mata, e
+        // a de mata-mata prevalece. Aqui a lista não usa key, então o sintoma era
+        // a competição listada duas vezes em vez de um crash.
+        val idsComCampanhaDeMataMata = copas.map { it.campeonatoId }.toSet()
+        _historicoCompeticoes.value =
+            (ligas.filterNot { it.campeonatoId in idsComCampanhaDeMataMata } + copas)
+                .distinctBy { it.campeonatoId }
+                .sortedWith(compareByDescending<HistoricoTemporada> { it.temporadaId }.thenBy { it.nomeCampeonato })
     }
 
     fun limparTimeSelecionado() {
@@ -3750,7 +3757,24 @@ class EstatisticasTimeViewModel @Inject constructor(
                 )
             }
 
-        _historicoStats.value = (ligaEntries + copaEntries + argLigaEntries).sortedByDescending { it.temporadaId }
+        // Uma continental com fase de grupos tem classificação E campanha de
+        // mata-mata, então entrava duas vezes: uma por `ligaEntries` (que lê
+        // classificacoes sem filtrar tipo) e outra por `copaEntries`. Com key =
+        // campeonatoId, a LazyColumn do histórico estourava
+        // ("Key N was already used") e o app fechava.
+        //
+        // A entrada de mata-mata prevalece: ela cobre TODAS as partidas do clube
+        // naquele campeonato (grupos inclusive) e ainda diz a fase alcançada e o
+        // desfecho da decisão, enquanto a classificação só tem a fase de grupos e
+        // uma posição global que não quer dizer nada num torneio de grupos.
+        val idsComCampanhaDeMataMata = copaEntries.map { it.campeonatoId }.toSet()
+        _historicoStats.value =
+            (ligaEntries.filterNot { it.campeonatoId in idsComCampanhaDeMataMata } +
+                copaEntries + argLigaEntries)
+                // Invariante da tela: um campeonato, uma linha. Mantém a key da
+                // LazyColumn válida por construção.
+                .distinctBy { it.campeonatoId }
+                .sortedByDescending { it.temporadaId }
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
 

@@ -28,6 +28,7 @@ import br.com.managerfoot.presentation.ui.components.ScreenTopBar
 import br.com.managerfoot.presentation.ui.components.SectionTitle
 import br.com.managerfoot.presentation.ui.components.TabRowPill
 import br.com.managerfoot.presentation.ui.theme.*
+import br.com.managerfoot.presentation.ui.util.Trofeus
 import br.com.managerfoot.presentation.viewmodel.EstatisticasTimeViewModel
 import br.com.managerfoot.presentation.viewmodel.HistoricoTemporada
 import br.com.managerfoot.presentation.viewmodel.TemporadaCompeticao
@@ -268,9 +269,12 @@ private fun AbaHistorico(
 @Composable
 private fun HistoricoCard(h: HistoricoTemporada) {
     val tipoLabel = when {
-        h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Supercopa", ignoreCase = true) -> "Supercopa Rei"
-        h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Argentina", ignoreCase = true) -> "Copa da Argentina"
-        h.tipo == "COPA_NACIONAL" -> "Copa do Brasil"
+        // Mata-mata: o nome curto sai do Trofeus, que já sabe distinguir cada
+        // copa, supercopa e continental pelo nome do campeonato. Os três ramos
+        // que existiam aqui farejavam o nome por conta própria e só conheciam
+        // Copa do Brasil, Copa da Argentina e Supercopa Rei — as continentais
+        // caíam no `else` e apareciam com o nome cru, repetindo o ano.
+        h.tipo in TIPOS_MATA_MATA -> Trofeus.resolver(h.nomeCampeonato).nomeCurto
         h.tipo == "LIGA_ARGENTINA" -> "Liga Argentina"
         h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Apertura", ignoreCase = true) -> "Apertura"
         h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Clausura", ignoreCase = true) -> "Clausura"
