@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.data.dao.EstatisticaJogadorDto
+import br.com.managerfoot.domain.engine.ResultadoFinal
 import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.presentation.ui.components.EmptyState
 import br.com.managerfoot.presentation.ui.components.PosicaoBadge
@@ -130,17 +131,24 @@ private fun CompeticaoCard(comp: TemporadaCompeticao) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (comp.ehCopa && comp.faseAtingida != null) {
+                // Chip da campanha: campeão/vice para quem decidiu o título, ou a
+                // fase alcançada para quem foi eliminado antes.
+                val (chipTexto, chipCor) = when (comp.resultadoFinal) {
+                    ResultadoFinal.CAMPEAO -> "Campeão" to GoldChampion
+                    ResultadoFinal.VICE    -> "Vice"    to SilverRunnerUp
+                    null                   -> comp.faseAtingida?.faseLabel() to LibertadoresBlue
+                }
+                if (comp.ehCopa && chipTexto != null) {
                     Surface(
                         shape = RoundedCornerShape(Radius.sm),
-                        color = LibertadoresBlue.copy(alpha = 0.18f),
-                        border = BorderStroke(0.5.dp, LibertadoresBlue.copy(alpha = 0.5f))
+                        color = chipCor.copy(alpha = 0.18f),
+                        border = BorderStroke(0.5.dp, chipCor.copy(alpha = 0.5f))
                     ) {
                         Text(
-                            comp.faseAtingida.faseLabel(),
+                            chipTexto,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = LibertadoresBlue,
+                            color = chipCor,
                             modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 4.dp)
                         )
                     }
@@ -278,14 +286,15 @@ private fun HistoricoCard(h: HistoricoTemporada) {
 
     // Resultado/posição com cor
     val (resultadoTexto, resultadoCor) = when {
-        h.tipo == "COPA_NACIONAL" && h.nomeCampeonato.contains("Supercopa", ignoreCase = true) -> {
-            when {
-                h.vitorias > 0 -> "Campeão" to GoldChampion
-                h.derrotas > 0 -> "Vice"    to SilverRunnerUp
-                else           -> "—"        to MaterialTheme.colorScheme.onSurfaceVariant
-            }
+        // Mata-mata: quem chegou à decisão aparece como campeão ou vice; os
+        // demais, pela fase em que caíram. O caso antigo da Supercopa decidia por
+        // `vitorias > 0`, que não serve para final de ida e volta nem para
+        // decisão por pênaltis — agora é o mesmo cálculo de todas as copas.
+        h.tipo in TIPOS_MATA_MATA -> when (h.resultadoFinal) {
+            ResultadoFinal.CAMPEAO -> "Campeão" to GoldChampion
+            ResultadoFinal.VICE    -> "Vice"    to SilverRunnerUp
+            null                   -> (h.faseAtingida?.faseLabel() ?: "—") to LibertadoresBlue
         }
-        h.tipo == "COPA_NACIONAL" -> (h.faseAtingida?.faseLabel() ?: "—") to LibertadoresBlue
         h.tipo == "LIGA_ARGENTINA" -> "—" to MaterialTheme.colorScheme.onSurfaceVariant
         else -> {
             val pos = "${h.posicao}º"
@@ -611,6 +620,12 @@ private fun JogadorEstatRow(j: EstatisticaJogadorDto) {
         )
     }
 }
+
+// Tipos de campeonato com fase eliminatória, como o enum TipoCampeonato os
+// grava. Copas nacionais, supercopas de jogo único e as continentais
+// (Libertadores, Sul-Americana, Recopa, Champions, Europa League e
+// Intercontinental, todas CONTINENTAL).
+private val TIPOS_MATA_MATA = setOf("COPA_NACIONAL", "CONTINENTAL", "SUPERCOPA")
 
 private fun String.faseLabel() = when (this) {
     "Primeira Fase" -> "1ª Fase"

@@ -8,9 +8,10 @@ import org.junit.Test
  * Resolução de troféu por nome de campeonato.
  *
  * A resolução casa por substring do nome, então a ORDEM dos ramos é a regra de
- * verdade. Estes testes travam as duas confusões que ela já causou ou causaria:
- * a EFL Championship virar Champions League, e as supercopas continentais e
- * europeias virarem "Supercopa Rei".
+ * verdade. Estes testes travam as confusões que ela já causou ou causaria:
+ * a EFL Championship virar Champions League, as supercopas continentais e
+ * europeias virarem "Supercopa Rei", e a Recopa Sul-Americana virar "Copa
+ * Sul-Americana".
  */
 class TrofeusTest {
 
@@ -44,6 +45,14 @@ class TrofeusTest {
     fun `a pre-libertadores usa o trofeu da libertadores`() {
         // E a mesma competicao, so uma fase anterior.
         assertEquals(Trofeus.LIBERTADORES, resolver("Pré-Libertadores 2027").drawable)
+    }
+
+    @Test
+    fun `a recopa nao e confundida com a copa sul-americana`() {
+        // "Recopa Sul-Americana" contém "sul-americana": sem um ramo próprio antes,
+        // ela era rotulada como "Copa Sul-Americana", que é outra competição.
+        assertEquals("Recopa Sul-Americana", resolver("Recopa Sul-Americana 2027").nomeCurto)
+        assertEquals("Copa Sul-Americana", resolver("Copa Sul-Americana 2027").nomeCurto)
     }
 
     @Test

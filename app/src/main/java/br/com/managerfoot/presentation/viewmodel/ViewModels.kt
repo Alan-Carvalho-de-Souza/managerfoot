@@ -2468,21 +2468,23 @@ class ClubesViewModel @Inject constructor(
             gameRepository.buscarHistoricoSupercopaDoTime(timeId)
         val copas = copaPartidas.groupBy { it.campeonatoId }.map { (campId, lista) ->
             var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-            var faseAtingida: String? = null
-            for (p in lista) {
-                val ehCasa = p.timeCasaId == timeId
-                val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                gp += gf; gc += ga
-                when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                if (p.fase != null) faseAtingida = p.fase
+            val campanha = lista.campanhaDoHistorico(timeId)
+            for (j in campanha) {
+                gp += j.golsPro; gc += j.golsContra
+                when {
+                    j.golsPro > j.golsContra -> v++
+                    j.golsPro < j.golsContra -> d++
+                    else                     -> e++
+                }
             }
             val first = lista.first()
             HistoricoTemporada(
                 campeonatoId = campId, nomeCampeonato = first.nomeCampeonato,
-                temporadaId = first.temporadaId, tipo = "COPA_NACIONAL", posicao = 0,
+                temporadaId = first.temporadaId, tipo = first.tipo, posicao = 0,
                 vitorias = v, empates = e, derrotas = d, golsPro = gp, golsContra = gc,
-                pontos = 0, jogos = lista.size, faseAtingida = faseAtingida
+                pontos = 0, jogos = lista.size,
+                faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
+                resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
             )
         }
         _historicoCompeticoes.value = (ligas + copas)
@@ -3475,11 +3477,13 @@ class RankingGeralViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // Ranking Mundial de Clubes (IFFHS), usado no recorte Mundo. Não vem de tabela:
-    // é derivado das partidas da janela de 12 meses na leitura.
+    // é derivado das partidas da janela de 12 meses na leitura. A janela é indexada
+    // pela TEMPORADA do save, não pelo ano — a tabela `temporadas` nunca é
+    // populada, e resolver o ano por ela deixava o ranking sempre vazio.
     val rankingMundial: StateFlow<List<RankingMundialLinha>> =
         flow {
-            val ano = gameDataStore.saveState.first().anoAtual
-            emitAll(gameRepository.observarRankingMundial(ano))
+            val temporada = gameDataStore.saveState.first().temporadaId
+            emitAll(gameRepository.observarRankingMundial(temporada))
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
@@ -3498,8 +3502,42 @@ data class TemporadaCompeticao(
     val jogos: Int,
     val jogadores: List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>,
     val ehCopa: Boolean = false,
-    val faseAtingida: String? = null
+    val faseAtingida: String? = null,
+    // Preenchido só para quem disputou a decisão: a tela mostra "Campeão"/"Vice"
+    // em vez de "Final". Ver CampanhaMataMata.resultadoDaFinal.
+    val resultadoFinal: ResultadoFinal? = null
 )
+
+// ── Campanha de mata-mata: fase alcançada e desfecho da decisão ──────────
+// Dois adaptadores para o mesmo cálculo, porque a temporada corrente lê
+// PartidaEntity e o histórico lê PartidaCopaHistoricoDto. Ambos põem a campanha
+// do ponto de vista do clube (golsPro = os dele) e delegam a regra ao
+// CampanhaMataMata, que é testado à parte.
+
+private fun List<br.com.managerfoot.data.dao.PartidaCopaHistoricoDto>.campanhaDoHistorico(
+    timeId: Int
+): List<CampanhaMataMata.Jogo> = map { p ->
+    val ehCasa = p.timeCasaId == timeId
+    CampanhaMataMata.Jogo(
+        fase           = p.fase,
+        golsPro        = (if (ehCasa) p.golsCasa else p.golsFora) ?: 0,
+        golsContra     = (if (ehCasa) p.golsFora else p.golsCasa) ?: 0,
+        penaltisPro    = if (ehCasa) p.penaltisCasa else p.penaltisForaId,
+        penaltisContra = if (ehCasa) p.penaltisForaId else p.penaltisCasa
+    )
+}
+
+private fun List<PartidaEntity>.campanhaDasPartidas(timeId: Int): List<CampanhaMataMata.Jogo> =
+    map { p ->
+        val ehCasa = p.timeCasaId == timeId
+        CampanhaMataMata.Jogo(
+            fase           = p.fase,
+            golsPro        = (if (ehCasa) p.golsCasa else p.golsFora) ?: 0,
+            golsContra     = (if (ehCasa) p.golsFora else p.golsCasa) ?: 0,
+            penaltisPro    = if (ehCasa) p.penaltisCasa else p.penaltisForaId,
+            penaltisContra = if (ehCasa) p.penaltisForaId else p.penaltisCasa
+        )
+    }
 
 data class HistoricoTemporada(
     val campeonatoId: Int,
@@ -3514,7 +3552,8 @@ data class HistoricoTemporada(
     val golsContra: Int,
     val pontos: Int,
     val jogos: Int,
-    val faseAtingida: String? = null
+    val faseAtingida: String? = null,
+    val resultadoFinal: ResultadoFinal? = null
 )
 
 @HiltViewModel
@@ -3573,104 +3612,61 @@ class EstatisticasTimeViewModel @Inject constructor(
             }
         }
 
-        // Copa do Brasil da temporada corrente (sem clasificaçao — mata-mata)
-        if (save.copaId > 0) {
-            val partidas = gameRepository.buscarPartidasDaEquipe(save.copaId, timeId)
-            if (partidas.isNotEmpty()) {
-                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.copaId, timeId)
-                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-                var faseAtingida: String? = null
-                for (p in partidas) {
-                    val ehCasa = p.timeCasaId == timeId
-                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                    gp += gf; gc += ga
-                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                    if (p.fase != null) faseAtingida = p.fase
+        // Competições de mata-mata da temporada corrente (sem classificação).
+        // Antes só a Copa do Brasil, a Supercopa Rei e a Copa Argentina apareciam,
+        // cada uma com o mesmo laço copiado; as continentais e as copas/supercopas
+        // europeias ficavam de fora. Agora é uma lista só, e todas mostram a fase
+        // alcançada e o desfecho da decisão pelo mesmo cálculo.
+        val mataMataDaTemporada = listOf(
+            save.copaId                to "Copa do Brasil",
+            save.copaArgId             to "Copa da Argentina",
+            save.copaInglaterraId      to "Copa da Inglaterra",
+            save.copaEspanholaId       to "Copa do Rei",
+            save.copaItalianaId        to "Coppa Italia",
+            save.libertadoresId        to "Libertadores",
+            save.sulAmericanaId        to "Copa Sul-Americana",
+            save.recopaId              to "Recopa Sul-Americana",
+            save.championsId           to "Champions League",
+            save.europaLeagueId        to "Europa League",
+            save.intercontinentalId    to "Copa Intercontinental",
+            save.supercopaId           to "Supercopa Rei",
+            save.supercopaInglaterraId to "Supercopa da Inglaterra",
+            save.supercopaEspanholaId  to "Supercopa da Espanha",
+            save.supercopaItalianaId   to "Supercopa da Itália",
+            save.supercopaUefaId       to "Supercopa da UEFA"
+        )
+        for ((campId, nome) in mataMataDaTemporada) {
+            if (campId <= 0) continue
+            val partidas = gameRepository.buscarPartidasDaEquipe(campId, timeId)
+            if (partidas.isEmpty()) continue
+            val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(campId, timeId)
+            val campanha = partidas.campanhaDasPartidas(timeId)
+            var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
+            for (j in campanha) {
+                gp += j.golsPro; gc += j.golsContra
+                when {
+                    j.golsPro > j.golsContra -> v++
+                    j.golsPro < j.golsContra -> d++
+                    else                     -> e++
                 }
-                temporadaList.add(
-                    TemporadaCompeticao(
-                        campeonatoId = save.copaId,
-                        nome         = "Copa do Brasil",
-                        vitorias     = v,
-                        empates      = e,
-                        derrotas     = d,
-                        golsPro      = gp,
-                        golsContra   = gc,
-                        pontos       = 0,
-                        jogos        = partidas.size,
-                        jogadores    = jogadores,
-                        ehCopa       = true,
-                        faseAtingida = faseAtingida
-                    )
-                )
             }
-        }
-
-        // Supercopa Rei da temporada corrente
-        if (save.supercopaId > 0) {
-            val partidas = gameRepository.buscarPartidasDaEquipe(save.supercopaId, timeId)
-            if (partidas.isNotEmpty()) {
-                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.supercopaId, timeId)
-                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-                for (p in partidas) {
-                    val ehCasa = p.timeCasaId == timeId
-                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                    gp += gf; gc += ga
-                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                }
-                temporadaList.add(
-                    TemporadaCompeticao(
-                        campeonatoId = save.supercopaId,
-                        nome         = "Supercopa Rei",
-                        vitorias     = v,
-                        empates      = e,
-                        derrotas     = d,
-                        golsPro      = gp,
-                        golsContra   = gc,
-                        pontos       = 0,
-                        jogos        = partidas.size,
-                        jogadores    = jogadores,
-                        ehCopa       = true,
-                        faseAtingida = null
-                    )
+            temporadaList.add(
+                TemporadaCompeticao(
+                    campeonatoId   = campId,
+                    nome           = nome,
+                    vitorias       = v,
+                    empates        = e,
+                    derrotas       = d,
+                    golsPro        = gp,
+                    golsContra     = gc,
+                    pontos         = 0,
+                    jogos          = partidas.size,
+                    jogadores      = jogadores,
+                    ehCopa         = true,
+                    faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
+                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
                 )
-            }
-        }
-
-        // Copa Argentina da temporada corrente
-        if (save.copaArgId > 0) {
-            val partidas = gameRepository.buscarPartidasDaEquipe(save.copaArgId, timeId)
-            if (partidas.isNotEmpty()) {
-                val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(save.copaArgId, timeId)
-                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-                var faseAtingida: String? = null
-                for (p in partidas) {
-                    val ehCasa = p.timeCasaId == timeId
-                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                    gp += gf; gc += ga
-                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                    if (p.fase != null) faseAtingida = p.fase
-                }
-                temporadaList.add(
-                    TemporadaCompeticao(
-                        campeonatoId = save.copaArgId,
-                        nome         = "Copa da Argentina",
-                        vitorias     = v,
-                        empates      = e,
-                        derrotas     = d,
-                        golsPro      = gp,
-                        golsContra   = gc,
-                        pontos       = 0,
-                        jogos        = partidas.size,
-                        jogadores    = jogadores,
-                        ehCopa       = true,
-                        faseAtingida = faseAtingida
-                    )
-                )
-            }
+            )
         }
 
         _temporadaStats.value = temporadaList
@@ -3696,25 +3692,29 @@ class EstatisticasTimeViewModel @Inject constructor(
 
         // Histórico de Copas (grupo por campeonatoId, calcula W/D/L da sequência)
         val copaHistoricoPartidas = gameRepository.buscarHistoricoCopaDoTime(timeId)
-        val copaEntries = copaHistoricoPartidas
+        // Copas nacionais e continentais + supercopas: todas de mata-mata, todas
+        // resumidas pelo mesmo cálculo de fase alcançada e desfecho da decisão.
+        // O `tipo` vem do campeonato, e não fixo em "COPA_NACIONAL", para a tela
+        // poder distinguir continental de copa nacional.
+        val copaEntries = (copaHistoricoPartidas + gameRepository.buscarHistoricoSupercopaDoTime(timeId))
             .groupBy { it.campeonatoId }
             .map { (campId, lista) ->
+                val campanha = lista.campanhaDoHistorico(timeId)
                 var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-                var faseAtingida: String? = null
-                for (p in lista) {
-                    val ehCasa = p.timeCasaId == timeId
-                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                    gp += gf; gc += ga
-                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                    if (p.fase != null) faseAtingida = p.fase
+                for (j in campanha) {
+                    gp += j.golsPro; gc += j.golsContra
+                    when {
+                        j.golsPro > j.golsContra -> v++
+                        j.golsPro < j.golsContra -> d++
+                        else                     -> e++
+                    }
                 }
                 val first = lista.first()
                 HistoricoTemporada(
                     campeonatoId   = campId,
                     nomeCampeonato = first.nomeCampeonato,
                     temporadaId    = first.temporadaId,
-                    tipo           = "COPA_NACIONAL",
+                    tipo           = first.tipo,
                     posicao        = 0,
                     vitorias       = v,
                     empates        = e,
@@ -3723,38 +3723,8 @@ class EstatisticasTimeViewModel @Inject constructor(
                     golsContra     = gc,
                     pontos         = 0,
                     jogos          = lista.size,
-                    faseAtingida   = faseAtingida
-                )
-            }
-
-        // Histórico da Supercopa Rei
-        val supercopaHistoricoPartidas = gameRepository.buscarHistoricoSupercopaDoTime(timeId)
-        val supercopaEntries = supercopaHistoricoPartidas
-            .groupBy { it.campeonatoId }
-            .map { (campId, lista) ->
-                var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
-                for (p in lista) {
-                    val ehCasa = p.timeCasaId == timeId
-                    val gf = if (ehCasa) p.golsCasa ?: 0 else p.golsFora ?: 0
-                    val ga = if (ehCasa) p.golsFora ?: 0 else p.golsCasa ?: 0
-                    gp += gf; gc += ga
-                    when { gf > ga -> v++; gf < ga -> d++; else -> e++ }
-                }
-                val first = lista.first()
-                HistoricoTemporada(
-                    campeonatoId   = campId,
-                    nomeCampeonato = first.nomeCampeonato,
-                    temporadaId    = first.temporadaId,
-                    tipo           = "COPA_NACIONAL",
-                    posicao        = 0,
-                    vitorias       = v,
-                    empates        = e,
-                    derrotas       = d,
-                    golsPro        = gp,
-                    golsContra     = gc,
-                    pontos         = 0,
-                    jogos          = lista.size,
-                    faseAtingida   = null
+                    faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
+                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
                 )
             }
 
@@ -3780,7 +3750,7 @@ class EstatisticasTimeViewModel @Inject constructor(
                 )
             }
 
-        _historicoStats.value = (ligaEntries + copaEntries + supercopaEntries + argLigaEntries).sortedByDescending { it.temporadaId }
+        _historicoStats.value = (ligaEntries + copaEntries + argLigaEntries).sortedByDescending { it.temporadaId }
 
         _jogadoresHistorico.value = gameRepository.buscarEstatisticasJogadoresAllTime(timeId)
 

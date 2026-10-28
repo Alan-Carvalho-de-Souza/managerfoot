@@ -121,6 +121,13 @@ object Trofeus {
             if (nome.contains("libertadores")) {
                 return@run TrofeuInfo(LIBERTADORES, LibertadoresBlue, "Libertadores", Pais.INTERNACIONAL)
             }
+            // A Recopa Sul-Americana vem ANTES da Copa Sul-Americana: o nome dela
+            // contém "sul-americana" e, sem este ramo, ela era rotulada como "Copa
+            // Sul-Americana" — que é outra competição. Mesma colisão de nome que
+            // "championship"/"champions" e a das supercopas, logo abaixo.
+            if (nome.contains("recopa")) {
+                return@run TrofeuInfo(GENERICO, SulAmericanaTeal, "Recopa Sul-Americana", Pais.INTERNACIONAL)
+            }
             // Antes do ramo genérico de "copa", que capturaria "Copa
             // Sul-Americana". Ainda sem imagem própria: quando houver, basta
             // trocar GENERICO por ela, como nas supercopas.

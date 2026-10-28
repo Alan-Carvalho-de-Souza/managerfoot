@@ -158,7 +158,14 @@ interface PartidaDao {
      * Campanha de um clube numa competição, dentro da janela do Ranking Mundial:
      * vitórias e empates agrupados por competição e fase. O peso de cada linha é
      * aplicado em Kotlin (ver RankingMundial), então o SQL não precisa conhecer
-     * níveis de liga nem o corte das oitavas de final.
+     * níveis de liga.
+     *
+     * A janela é identificada por `campeonatos.temporadaId`, e NÃO pela tabela
+     * `temporadas`: essa tabela nunca é populada — nada no app insere um
+     * TemporadaEntity — e o `INNER JOIN temporadas` que existia aqui não casava
+     * nenhuma linha, o que deixava o ranking mundial permanentemente vazio.
+     * `temporadaId` é um inteiro que cresce de 1 em 1 por temporada, então
+     * `:temporadaAtual - 1` é a temporada anterior, exatamente como `ano - 1` era.
      */
     @Query("""
         SELECT x.timeId        AS timeId,
@@ -178,10 +185,9 @@ interface PartidaDao {
                    CASE WHEN p.golsCasa =  p.golsFora THEN 1 ELSE 0 END AS empatou
             FROM partidas p
             INNER JOIN campeonatos c ON c.id = p.campeonatoId
-            INNER JOIN temporadas  t ON t.id = c.temporadaId
             WHERE p.jogada = 1 AND p.golsCasa IS NOT NULL AND p.golsFora IS NOT NULL
-              AND (  (t.ano = :anoAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
-                  OR (t.ano = :anoAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
+              AND (  (c.temporadaId = :temporadaAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
+                  OR (c.temporadaId = :temporadaAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
             UNION ALL
             SELECT p.timeForaId AS timeId, c.tipo AS tipo, c.pais AS paisCampeonato,
                    c.nome AS nomeCampeonato, p.fase AS fase,
@@ -189,15 +195,14 @@ interface PartidaDao {
                    CASE WHEN p.golsFora =  p.golsCasa THEN 1 ELSE 0 END AS empatou
             FROM partidas p
             INNER JOIN campeonatos c ON c.id = p.campeonatoId
-            INNER JOIN temporadas  t ON t.id = c.temporadaId
             WHERE p.jogada = 1 AND p.golsCasa IS NOT NULL AND p.golsFora IS NOT NULL
-              AND (  (t.ano = :anoAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
-                  OR (t.ano = :anoAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
+              AND (  (c.temporadaId = :temporadaAtual     AND p.ordemGlobal <= :ordemGlobalAtual)
+                  OR (c.temporadaId = :temporadaAtual - 1 AND p.ordemGlobal >  :ordemGlobalAtual) )
         ) x
         INNER JOIN times tm ON tm.id = x.timeId
         GROUP BY x.timeId, x.tipo, x.paisCampeonato, x.nomeCampeonato, x.fase
     """)
-    fun observeCampanhasMundial(anoAtual: Int, ordemGlobalAtual: Int): Flow<List<CampanhaMundialDto>>
+    fun observeCampanhasMundial(temporadaAtual: Int, ordemGlobalAtual: Int): Flow<List<CampanhaMundialDto>>
 
     /**
      * Relógio da janela: o maior ordemGlobal já jogado na temporada corrente. Como
@@ -208,10 +213,9 @@ interface PartidaDao {
         SELECT COALESCE(MAX(p.ordemGlobal), 0)
         FROM partidas p
         INNER JOIN campeonatos c ON c.id = p.campeonatoId
-        INNER JOIN temporadas  t ON t.id = c.temporadaId
-        WHERE p.jogada = 1 AND t.ano = :anoAtual
+        WHERE p.jogada = 1 AND c.temporadaId = :temporadaAtual
     """)
-    fun observeOrdemGlobalAtual(anoAtual: Int): Flow<Int>
+    fun observeOrdemGlobalAtual(temporadaAtual: Int): Flow<Int>
 
     @Query("DELETE FROM partidas")
     suspend fun deleteAll()
@@ -686,18 +690,28 @@ interface PartidaDao {
     """)
     suspend fun buscarPartidasDaEquipe(campeonatoId: Int, timeId: Int): List<PartidaEntity>
 
+    /**
+     * Histórico de mata-mata do clube: copas nacionais E competições continentais
+     * (Libertadores, Sul-Americana, Champions, Europa League, Intercontinental e
+     * Recopa, todas gravadas como CONTINENTAL). As continentais ficavam de fora
+     * quando o filtro era só `COPA_NACIONAL`, então nenhuma delas aparecia no
+     * histórico de desempenho — justamente as que têm fase eliminatória.
+     */
     @Query("""
-        SELECT p.campeonatoId AS campeonatoId,
-               c.nome        AS nomeCampeonato,
-               c.temporadaId AS temporadaId,
-               p.timeCasaId  AS timeCasaId,
-               p.timeForaId  AS timeForaId,
-               p.golsCasa    AS golsCasa,
-               p.golsFora    AS golsFora,
-               p.fase        AS fase
+        SELECT p.campeonatoId   AS campeonatoId,
+               c.nome           AS nomeCampeonato,
+               c.temporadaId    AS temporadaId,
+               c.tipo           AS tipo,
+               p.timeCasaId     AS timeCasaId,
+               p.timeForaId     AS timeForaId,
+               p.golsCasa       AS golsCasa,
+               p.golsFora       AS golsFora,
+               p.penaltisCasa   AS penaltisCasa,
+               p.penaltisForaId AS penaltisForaId,
+               p.fase           AS fase
         FROM partidas p
         INNER JOIN campeonatos c ON p.campeonatoId = c.id
-        WHERE c.tipo = 'COPA_NACIONAL'
+        WHERE c.tipo IN ('COPA_NACIONAL', 'CONTINENTAL')
         AND (p.timeCasaId = :timeId OR p.timeForaId = :timeId)
         AND p.jogada = 1
         ORDER BY c.temporadaId ASC, p.rodada ASC
@@ -705,14 +719,17 @@ interface PartidaDao {
     suspend fun buscarHistoricoCopaDoTime(timeId: Int): List<PartidaCopaHistoricoDto>
 
     @Query("""
-        SELECT p.campeonatoId AS campeonatoId,
-               c.nome        AS nomeCampeonato,
-               c.temporadaId AS temporadaId,
-               p.timeCasaId  AS timeCasaId,
-               p.timeForaId  AS timeForaId,
-               p.golsCasa    AS golsCasa,
-               p.golsFora    AS golsFora,
-               p.fase        AS fase
+        SELECT p.campeonatoId   AS campeonatoId,
+               c.nome           AS nomeCampeonato,
+               c.temporadaId    AS temporadaId,
+               c.tipo           AS tipo,
+               p.timeCasaId     AS timeCasaId,
+               p.timeForaId     AS timeForaId,
+               p.golsCasa       AS golsCasa,
+               p.golsFora       AS golsFora,
+               p.penaltisCasa   AS penaltisCasa,
+               p.penaltisForaId AS penaltisForaId,
+               p.fase           AS fase
         FROM partidas p
         INNER JOIN campeonatos c ON p.campeonatoId = c.id
         WHERE c.tipo = 'SUPERCOPA'
@@ -866,9 +883,16 @@ data class PartidaCopaHistoricoDto(
     val campeonatoId: Int,
     val nomeCampeonato: String,
     val temporadaId: Int,
+    // Nome do enum TipoCampeonato, para a UI distinguir copa nacional de
+    // continental sem adivinhar pelo nome do campeonato.
+    val tipo: String,
     val timeCasaId: Int,
     val timeForaId: Int,
     val golsCasa: Int?,
     val golsFora: Int?,
+    // Necessários para saber quem levantou a taça numa final decidida nos
+    // pênaltis — sem eles o agregado empatado não diz campeão nem vice.
+    val penaltisCasa: Int?,
+    val penaltisForaId: Int?,
     val fase: String?
 )

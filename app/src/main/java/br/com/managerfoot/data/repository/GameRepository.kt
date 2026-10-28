@@ -5554,11 +5554,16 @@ class GameRepository @Inject constructor(
      * Ranking mundial consolidado. Combina o relógio da janela (maior ordemGlobal
      * jogado na temporada) com as campanhas agregadas, aplica o peso de cada
      * competição em Kotlin e soma por clube.
+     *
+     * A janela é indexada pela TEMPORADA, não pelo ano: a tabela `temporadas`
+     * nunca é populada, então as consultas que resolviam o ano por ela não
+     * casavam linha nenhuma e o ranking vinha sempre vazio. `temporadaId` cresce
+     * de 1 em 1 por temporada, então a janela de 12 meses é a mesma.
      */
-    fun observarRankingMundial(anoAtual: Int): Flow<List<RankingMundialLinha>> =
-        partidaDao.observeOrdemGlobalAtual(anoAtual)
+    fun observarRankingMundial(temporadaAtual: Int): Flow<List<RankingMundialLinha>> =
+        partidaDao.observeOrdemGlobalAtual(temporadaAtual)
             .flatMapLatest { ordemGlobalAtual ->
-                partidaDao.observeCampanhasMundial(anoAtual, ordemGlobalAtual)
+                partidaDao.observeCampanhasMundial(temporadaAtual, ordemGlobalAtual)
             }
             .map { campanhas -> consolidarRankingMundial(campanhas) }
 
