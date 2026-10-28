@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import br.com.managerfoot.presentation.ui.components.FilterChipPill
 import br.com.managerfoot.domain.engine.VagasDoBrasileirao
+import br.com.managerfoot.domain.engine.VagasEuropeias
+import br.com.managerfoot.domain.engine.ZonaEuropeia
+import br.com.managerfoot.domain.engine.ZonasEuropeias
 import br.com.managerfoot.domain.engine.VagaDeTitulo
 import br.com.managerfoot.domain.engine.ZonaBrasileirao
 import br.com.managerfoot.domain.engine.ZonasDoBrasileirao
@@ -72,6 +75,7 @@ fun TabelaScreen(
     val times by vm.times.collectAsState()
     val divisaoSelecionada by vm.divisaoSelecionada.collectAsState()
     val vagasBrasil by vm.vagasBrasil.collectAsState()
+    val vagasEuropa by vm.vagasEuropa.collectAsState()
 
     // A distribuição das vagas continentais sobre a tabela da Série A, com o
     // efeito cascata já resolvido: o campeão da Copa do Brasil na vaga de grupo,
@@ -96,6 +100,30 @@ fun TabelaScreen(
                     vagasBrasil.campeoesContinentaisTimeIds.map { posicaoDe(it) },
                 vagasRemanejadas = vagasBrasil.vagasRemanejadas,
                 clubes = tabela.size.coerceAtLeast(VagasDoBrasileirao.CLUBES)
+            )
+        }
+    }
+
+    // As zonas da Champions e da Europa League na liga europeia em exibicao. As
+    // cotas saem das listas de acesso (ING 5, ESP 5, ITA 4 na Champions; 2 na
+    // Europa League para os tres), e a vaga do campeao da copa nacional cascateia
+    // como no Brasil. Ver VagasEuropeias.
+    val zonasEuropa = remember(tabela, vagasEuropa, divisaoSelecionada) {
+        val pais = paisDaDivisaoEuropeia(divisaoSelecionada)
+        if (pais == null) null
+        else {
+            // O campeao da copa pode estar fora desta tabela — de outra divisao,
+            // por exemplo. Ai a vaga dele desce para a liga.
+            val vaga = when (val v = vagasEuropa.campeaoDaCopa(pais)) {
+                is VagaDeTitulo.De ->
+                    tabela.indexOfFirst { it.timeId == v.posicao }
+                        .let { if (it >= 0) VagaDeTitulo.De(it + 1) else VagaDeTitulo.SemDetentor }
+                else -> v
+            }
+            VagasEuropeias.distribuir(
+                pais = pais,
+                clubes = tabela.size,
+                campeaoDaCopa = vaga
             )
         }
     }
@@ -372,7 +400,7 @@ fun TabelaScreen(
                     val nomeTime = time?.nome ?: "Time ${item.timeId}"
                     val escudoRes = time?.escudoRes ?: ""
                     val ehJogador = item.timeId == timeJogadorId
-                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada, zonasSerieA)
+                    val zona = zonaParaDivisao(index + 1, divisaoSelecionada, zonasSerieA, zonasEuropa)
 
                     StandingsRow(
                         posicao = index + 1,
@@ -396,8 +424,10 @@ fun TabelaScreen(
 
         if (!aindaNaoSorteada) {
             LegendaZonas(
-                divisaoSelecionada, zonasSerieA,
-                copaEmAndamento = vagasBrasil.campeaoDaCopa is VagaDeTitulo.Indefinida
+                divisaoSelecionada, zonasSerieA, zonasEuropa,
+                copaEmAndamento = vagasBrasil.campeaoDaCopa is VagaDeTitulo.Indefinida,
+                copaEuropeiaEmAndamento = paisDaDivisaoEuropeia(divisaoSelecionada)
+                    ?.let { vagasEuropa.campeaoDaCopa(it) is VagaDeTitulo.Indefinida } == true
             )
         }
     }
@@ -475,10 +505,19 @@ private fun GrupoHeader(nome: String) {
 }
 
 /** Cor da zona pela posição na tabela. Cobre todas as competições. */
+/** País da liga europeia de um código de aba, ou null se não for uma delas. */
+private fun paisDaDivisaoEuropeia(divisao: Int): String? = when (divisao) {
+    20   -> "Inglaterra"   // Premier League
+    22   -> "Espanha"      // La Liga
+    23   -> "Italia"       // Serie A
+    else -> null
+}
+
 private fun zonaParaDivisao(
     posicao: Int,
     divisao: Int,
-    zonasSerieA: ZonasDoBrasileirao? = null
+    zonasSerieA: ZonasDoBrasileirao? = null,
+    zonasEuropa: ZonasEuropeias? = null
 ): Color? = when (divisao) {
     // A Série A é a única divisão cujas zonas vêm das COTAS das competições
     // continentais, e não de um número escrito aqui: 7 vagas na Libertadores (5
@@ -533,11 +572,15 @@ private fun zonaParaDivisao(
         posicao == 2 -> PlayoffOrange       // 2º vai aos playoffs
         else -> null                        // 3º e 4º: eliminados
     }
-    20 -> when {                            // Premier League
-        posicao <= 4 -> LibertadoresBlue   // Champions League
-        posicao <= 6 -> SulAmericanaTeal   // Europa/Conference
-        posicao >= 18 -> RelegationRed     // Rebaixamento (3 últimos)
-        else -> null
+    // Premier League, La Liga e Serie A: as vagas continentais vem das COTAS das
+    // listas de acesso, nao de um numero escrito aqui — Champions 5/5/4 e Europa
+    // League 2 para os tres, com a vaga da copa nacional cascateando. A unica das
+    // tres com rebaixamento e a Premier, que tem a Championship abaixo; La Liga e
+    // Serie A nao tem segunda divisao no jogo.
+    20, 22, 23 -> when (zonasEuropa?.zona(posicao) ?: ZonaEuropeia.NENHUMA) {
+        ZonaEuropeia.CHAMPIONS     -> LibertadoresBlue
+        ZonaEuropeia.EUROPA_LEAGUE -> SulAmericanaTeal
+        ZonaEuropeia.NENHUMA       -> if (divisao == 20 && posicao >= 18) RelegationRed else null
     }
     else -> when {
         posicao <= 4 -> LibertadoresBlue
@@ -549,7 +592,9 @@ private fun zonaParaDivisao(
 private fun LegendaZonas(
     divisao: Int,
     zonasSerieA: ZonasDoBrasileirao? = null,
-    copaEmAndamento: Boolean = false
+    zonasEuropa: ZonasEuropeias? = null,
+    copaEmAndamento: Boolean = false,
+    copaEuropeiaEmAndamento: Boolean = false
 ) {
     val itens = when (divisao) {
         1 -> buildList {
@@ -603,11 +648,23 @@ private fun LegendaZonas(
             LibertadoresBlue to "1º Oitavas",
             PlayoffOrange to "2º Playoffs"
         )
-        20 -> listOf(
-            LibertadoresBlue to "G4 Champions League",
-            SulAmericanaTeal to "G6 Europa/Conference",
-            RelegationRed to "Z3 Rebaixamento"
-        )
+        20, 22, 23 -> buildList {
+            // As contagens saem da MESMA distribuição que pinta as linhas, para a
+            // legenda nunca dizer um número e a tabela mostrar outro.
+            val champions = zonasEuropa?.quantas(ZonaEuropeia.CHAMPIONS) ?: 0
+            val europa = zonasEuropa?.quantas(ZonaEuropeia.EUROPA_LEAGUE) ?: 0
+            fun vagas(n: Int) = if (n == 1) "1 vaga" else "$n vagas"
+            if (champions > 0) add(LibertadoresBlue to "${vagas(champions)} Champions League")
+            if (europa > 0) add(SulAmericanaTeal to "${vagas(europa)} Europa League")
+            // A vaga da copa nacional ainda não tem dono, e por isso não está
+            // pintada em ninguém. Dizer isso evita a leitura de que o país só tem
+            // as vagas que a tabela mostra.
+            if (copaEuropeiaEmAndamento) {
+                add(SulAmericanaTeal to "+1 pela copa nacional (campeão)")
+            }
+            // Das três, só a Premier tem divisão abaixo no jogo.
+            if (divisao == 20) add(RelegationRed to "Z3 Rebaixamento")
+        }
         14 -> listOf(
             LibertadoresBlue to "1º Classifica para a Final"
         )

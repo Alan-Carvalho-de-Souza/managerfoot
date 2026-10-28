@@ -2603,6 +2603,12 @@ class TabelaViewModel @Inject constructor(
     private val _vagasBrasil = MutableStateFlow(GameRepository.VagasContinentaisDoBrasil())
     val vagasBrasil: StateFlow<GameRepository.VagasContinentaisDoBrasil> = _vagasBrasil.asStateFlow()
 
+    // O mesmo para as ligas europeias: o estado da vaga do campeao de cada copa
+    // nacional, que decide se o pais entra com um ou dois classificados pela liga
+    // na Europa League. Ver VagasEuropeias.
+    private val _vagasEuropa = MutableStateFlow(GameRepository.VagasContinentaisEuropeias())
+    val vagasEuropa: StateFlow<GameRepository.VagasContinentaisEuropeias> = _vagasEuropa.asStateFlow()
+
     // Divisão selecionada em exibição (1=Série A, 2=B, 3=C, 4=D, 5=Apertura, 6=Segunda Arg, 7=Clausura, 8=Geral Arg, 9=Apertura Uru, 10=Segunda Uru, 11=Intermédio Uru, 12=Clausura Uru, 13=Geral Uru)
     private val _divisaoSelecionada = MutableStateFlow(1)
     val divisaoSelecionada: StateFlow<Int> = _divisaoSelecionada.asStateFlow()
@@ -2637,6 +2643,11 @@ class TabelaViewModel @Inject constructor(
             gameRepository.buscarVagasContinentaisDoBrasil(save.anoAtual, save.temporadaId)
         } catch (_: Exception) {
             GameRepository.VagasContinentaisDoBrasil()
+        }
+        _vagasEuropa.value = try {
+            gameRepository.buscarVagasContinentaisEuropeias(gameDataStore.saveState.first().anoAtual)
+        } catch (_: Exception) {
+            GameRepository.VagasContinentaisEuropeias()
         }
         launch { timeRepository.observeTodos().collect { _times.value = it } }
         // Recalcula todas as classificações do zero a partir das partidas reais

@@ -2425,6 +2425,53 @@ class GameRepository @Inject constructor(
     )
 
     /**
+     * O que as tabelas da Premier League, da La Liga e da Serie A precisam saber
+     * para pintar as zonas da Champions e da Europa League. Uma entrada por país,
+     * com o estado da vaga do campeão da copa nacional. Ver [VagasEuropeias].
+     *
+     * Como no Brasil, **o ano é o da temporada CORRENTE**: a tabela em exibição é
+     * a que vai conceder as vagas da PRÓXIMA edição, e quem as ocupa são os
+     * campeões DESTA temporada.
+     */
+    data class VagasContinentaisEuropeias(
+        /** timeId do campeão da copa nacional por país, quando a copa já terminou. */
+        val campeaoDaCopaPorPais: Map<String, VagaDeTitulo> = emptyMap()
+    ) {
+        fun campeaoDaCopa(pais: String): VagaDeTitulo =
+            campeaoDaCopaPorPais[pais] ?: VagaDeTitulo.Indefinida
+    }
+
+    // Divisões do Hall da Fama das copas nacionais europeias.
+    private val DIVISAO_HALL_COPA_INGLATERRA = 23
+    private val DIVISAO_HALL_COPA_ESPANHA    = 25
+    private val DIVISAO_HALL_COPA_ITALIA     = 26
+
+    /**
+     * Monta [VagasContinentaisEuropeias] para a temporada corrente.
+     *
+     * Copa sem entrada no Hall ainda está correndo, e devolve
+     * [VagaDeTitulo.Indefinida]: a vaga fica reservada e não desce para a liga.
+     *
+     * A [VagaDeTitulo.De] guarda o **timeId**; é a tela que o converte na posição
+     * da tabela que está exibindo, como já faz com a Copa do Brasil.
+     */
+    suspend fun buscarVagasContinentaisEuropeias(anoAtual: Int): VagasContinentaisEuropeias {
+        val porPais = mapOf(
+            "Inglaterra" to DIVISAO_HALL_COPA_INGLATERRA,
+            "Espanha"    to DIVISAO_HALL_COPA_ESPANHA,
+            "Italia"     to DIVISAO_HALL_COPA_ITALIA
+        ).mapValues { (_, divisaoHall) ->
+            val copa = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoAtual, divisaoHall)
+            when {
+                copa == null                 -> VagaDeTitulo.Indefinida
+                copa.campeaoTimeId <= 0      -> VagaDeTitulo.SemDetentor
+                else                         -> VagaDeTitulo.De(copa.campeaoTimeId)
+            }
+        }
+        return VagasContinentaisEuropeias(porPais)
+    }
+
+    /**
      * Monta [VagasContinentaisDoBrasil] para a temporada corrente.
      *
      * Uma competição que ainda não terminou devolve [VagaDeTitulo.Indefinida]: a
