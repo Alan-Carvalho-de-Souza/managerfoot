@@ -72,6 +72,7 @@ fun ArtilheirosScreen(
     val assistentesHist   by vm.assistentesHistorico.collectAsState()
     val divisaoSelecionada          by vm.divisaoSelecionada.collectAsState()
     val divisaoHistoricoSelecionada by vm.divisaoHistoricoSelecionada.collectAsState()
+    val temIntercontinental         by vm.temIntercontinental.collectAsState()
 
     val temArgentina = campeonatoArgAId > 0 || campeonatoArgBId > 0 || campeonatoArgClausuraId > 0
     val temUruguai   = campeonatoUruAperturaId > 0 || campeonatoUruBId > 0
@@ -173,6 +174,10 @@ fun ArtilheirosScreen(
         if (campeonatoLibertadoresId > 0) add(37 to "Libertadores")
         if (campeonatoSulAmericanaId > 0) add(38 to "Copa Sul-Americana")
     }
+    // Jogo único entre campeões da Champions e da Libertadores — sem país.
+    val opcoesIntercontinental = buildList<Pair<Int, String>> {
+        if (temIntercontinental) add(39 to "Copa Intercontinental")
+    }
 
     val paisDaDivisao = remember(divisaoSelecionada) {
         when (divisaoSelecionada) {
@@ -183,6 +188,7 @@ fun ArtilheirosScreen(
             34 -> "Italia"
             35, 36 -> "Europa"
             37, 38 -> "América do Sul"
+            39 -> "Intercontinental"
             else -> "Brasil"
         }
     }
@@ -196,6 +202,7 @@ fun ArtilheirosScreen(
         "Italia"     -> opcoesItalia
         "Europa"     -> opcoesEuropa
         "América do Sul" -> opcoesAmericaDoSul
+        "Intercontinental" -> opcoesIntercontinental
         else        -> opcoesBrasil
     }
 
@@ -205,6 +212,7 @@ fun ArtilheirosScreen(
         // não existir num save em que só a Europa League (36) foi montada.
         "Europa" -> opcoesEuropa.firstOrNull()?.first ?: 35
         "América do Sul" -> 37
+        "Intercontinental" -> 39
         else -> 100
     }
 
@@ -248,6 +256,7 @@ fun ArtilheirosScreen(
             if (temItalia) add("Italia")
             if (temEuropa) add("Europa")
             if (temAmericaDoSul) add("América do Sul")
+            if (temIntercontinental) add("Intercontinental")
         }
         if (paises.size > 1) {
             Row(

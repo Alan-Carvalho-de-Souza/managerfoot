@@ -31,8 +31,17 @@ object CalculadoraForca {
         //   DEFENSIVO  → defesa e fisico +10% nos setores de goleiro/defesa (menos gols sofridos)
         //   CONTRA_ATAQUE → bônus apenas via fatorEstilo quando enfrenta time OFENSIVO
         val estilo = escalacao.time.estiloJogo
-        val boostAtq = if (estilo == EstiloJogo.OFENSIVO)   1.10 else 1.0
-        val boostDef = if (estilo == EstiloJogo.DEFENSIVO)  1.10 else 1.0
+        // Viés da VARIAÇÃO de formação (ex.: 2 volantes → defensivo; 2 meias
+        // ofensivos → ofensivo). -1..+1. Atua em DOIS canais que se compõem:
+        //   (1) boost nos atributos do setor (como o estilo), coef. 0,12;
+        //   (2) multiplicador direto na contribuição final do setor, coef. 0,18.
+        // Nos extremos (±0,30 a ±0,45) isso vale ~2–4% de força de time, bem
+        // mais perceptível que antes, mas ainda abaixo do estilo (±10% + confronto).
+        val vies = FormacoesTaticas.viesOfensivo(escalacao.time.taticaFormacao)
+        val boostVarAtq = 1.0 + maxOf(0f, vies) * 0.12
+        val boostVarDef = 1.0 + maxOf(0f, -vies) * 0.12
+        val boostAtq = (if (estilo == EstiloJogo.OFENSIVO)  1.10 else 1.0) * boostVarAtq
+        val boostDef = (if (estilo == EstiloJogo.DEFENSIVO) 1.10 else 1.0) * boostVarDef
 
         // Valor de cada jogador leva em conta forca efetiva + atributos específicos do setor
         // fisico contribui como resistência/imposição física em todos os setores
@@ -62,10 +71,14 @@ object CalculadoraForca {
         val fMeio    = mediaSetor(Setor.MEIO)
         val fAtaque  = mediaSetor(Setor.ATAQUE)
 
+        // Canal (2) do viés: escala direta da contribuição do setor atacado/defendido.
+        val setorAtq = 1.0 + maxOf(0f, vies) * 0.18
+        val setorDef = 1.0 + maxOf(0f, -vies) * 0.18
+
         return fGoleiro * PESO_GOLEIRO +
-                fDefesa  * PESO_DEFESA  +
+                fDefesa  * PESO_DEFESA  * setorDef +
                 fMeio    * PESO_MEIO    +
-                fAtaque  * PESO_ATAQUE
+                fAtaque  * PESO_ATAQUE  * setorAtq
     }
 
     // Fatores modificadores externos
@@ -121,6 +134,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         /** Minutos totais da prorrogação: os dois tempos somados. */
         const val MINUTOS_DE_PRORROGACAO = MINUTOS_POR_TEMPO_EXTRA * 2                          // 30
         private const val PROB_CARTAO_AMARELO = 0.12
+        // Chance (no modo full-match) de um jogador já amarelado cometer novo cartão
+        // mais tarde → segundo amarelo = expulsão. No modo por período, o 2º amarelo
+        // surge naturalmente quando um jogador amarelado no 1º tempo é booká­vel no 2º.
+        private const val PROB_SEGUNDO_AMARELO = 0.12
         // Probabilidade base de lesão (fisico=50 ≈ risco neutro).
         // fisico=99 → ~1.25% | fisico=50 → ~2.5% | fisico=1 → ~3.75%
         // Calibrada em conjunto com multiplicadorFadiga para que o ciclo típico
@@ -741,17 +758,22 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         return titulares.flatMap { jne ->
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
-                val minuto = rng.nextInt(1, 90)
+                val minuto = rng.nextInt(1, 89)
+                val nome = jne.jogador.nomeAbreviado
                 // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
                 // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
                 val vermelho = rng.nextDouble() < 0.04
-                lista.add(EventoSimulado(
-                    minuto = minuto,
-                    tipo = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
-                    jogadorId = jne.jogador.id,
-                    timeId = timeId,
-                    descricao = jne.jogador.nomeAbreviado
-                ))
+                if (vermelho) {
+                    lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_VERMELHO, jne.jogador.id, timeId, nome))
+                } else {
+                    lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_AMARELO, jne.jogador.id, timeId, nome))
+                    // Segundo amarelo mais tarde na partida → expulsão.
+                    if (rng.nextDouble() < PROB_SEGUNDO_AMARELO) {
+                        val minuto2 = rng.nextInt(minuto, 90)
+                        lista.add(EventoSimulado(minuto2, TipoEvento.CARTAO_AMARELO, jne.jogador.id, timeId, "$nome (2º amarelo)"))
+                        lista.add(EventoSimulado(minuto2, TipoEvento.CARTAO_VERMELHO, jne.jogador.id, timeId, "$nome expulso (2º amarelo)"))
+                    }
+                }
             }
             // Risco base por físico; multiplicado pela fadiga do jogador:
             //   fadiga ≥ 80%: risco normal | 75–80%: +30% | 60–74%: +2× | <60%: +3×
@@ -762,7 +784,7 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 jne.jogador.fadiga >= 0.60f -> 2.0
                 else                        -> 3.0
             }
-            val probLesao = probLesaoBase * multiplicadorFadiga
+            val probLesao = probLesaoBase * multiplicadorFadiga * fatorIdadeLesao(jne.jogador.idade)
             if (rng.nextDouble() < probLesao) {
                 lista.add(EventoSimulado(
                     minuto = rng.nextInt(10, 85),
@@ -801,6 +823,20 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 else     -> 3
             }
         }
+    }
+
+    // ── Fator de lesão por idade ──────────────────────────────────────────
+    // Corpos jovens resistem melhor a lesões musculares/por sobrecarga. Multiplica
+    // a probabilidade (em cima do físico e da fadiga), reduzindo a chance dos mais
+    // novos. Veteranos ficam neutros aqui — eles já se lesionam mais por perderem
+    // fadiga mais rápido (caindo na faixa ×2/×3) e têm lesões mais graves.
+    //
+    // Calibração (0,45 p/ ≤23): um jovem titular típico (físico ~60, descansado,
+    // ~38 jogos/ano) → ~0,93% de lesão por jogo → ~30% de chance de ≥1 lesão no ano.
+    //   1 − (1 − 0,0093)^38 ≈ 0,30.
+    private fun fatorIdadeLesao(idade: Int): Double = when {
+        idade <= 23 -> 0.45
+        else        -> 1.00
     }
 
     // Bônus (ou penalidade) de chutes por partida devido ao estilo tático do time.
@@ -1059,10 +1095,11 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
 
         val eventos = mutableListOf<EventoSimulado>()
 
-        // Incidentes (cartões + lesões) dentro do período
+        // Incidentes (cartões + lesões) dentro do período.
+        // Passa os já amarelados (tempos anteriores) para que um 2º amarelo vire expulsão.
         val incidentes = (
-            gerarIncidentesPeriodo(titsCasa.toList(), escalacaoCasa.time.id, minInicio, minFim) +
-            gerarIncidentesPeriodo(titsFora.toList(), escalacaoFora.time.id, minInicio, minFim)
+            gerarIncidentesPeriodo(titsCasa.toList(), escalacaoCasa.time.id, minInicio, minFim, estado.amarelados) +
+            gerarIncidentesPeriodo(titsFora.toList(), escalacaoFora.time.id, minInicio, minFim, estado.amarelados)
         ).sortedBy { it.minuto }
 
         for (inc in incidentes) {
@@ -1195,6 +1232,10 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                     gkForaP.jogador.id, escalacaoFora.time.id, gkForaP.jogador.nomeAbreviado))
         }
 
+        // Acumula os amarelados: os de tempos anteriores + os que levaram amarelo agora.
+        val amareladosFinal = estado.amarelados +
+            eventos.filter { it.tipo == TipoEvento.CARTAO_AMARELO }.map { it.jogadorId }
+
         val estadoFinal = EstadoMetade(
             titsCasa     = titsCasa.toList(),
             titsFora     = titsFora.toList(),
@@ -1203,7 +1244,8 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             penalCasa    = penalCasa,
             penalFora    = penalFora,
             entryMinutes = entryMinutes.toMap(),
-            exitMinutes  = exitMinutes.toMap()
+            exitMinutes  = exitMinutes.toMap(),
+            amarelados   = amareladosFinal
         )
 
         return Pair(estadoFinal, eventos.sortedBy { it.minuto })
@@ -1214,7 +1256,9 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
         titulares: List<JogadorNaEscalacao>,
         timeId: Int,
         minInicio: Int,
-        minFim: Int
+        minFim: Int,
+        // Jogadores que já têm amarelo na partida (de tempos anteriores): novo cartão = expulsão.
+        jaAmarelados: Set<Int> = emptySet()
     ): List<EventoSimulado> {
         val efetMin = minInicio.coerceAtLeast(1)
         val efetMax = minFim.coerceAtLeast(efetMin + 1)
@@ -1222,16 +1266,21 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
             val lista = mutableListOf<EventoSimulado>()
             if (rng.nextDouble() < PROB_CARTAO_AMARELO) {
                 val minuto = rng.nextInt(efetMin, efetMax)
-                // Dado que houve amarelo (12% por titular), 4% de chance de virar vermelho
-                // → ~5-6% de chance de ≥1 vermelho por partida (faixa realista).
-                val vermelho = rng.nextDouble() < 0.04
-                lista.add(EventoSimulado(
-                    minuto    = minuto,
-                    tipo      = if (vermelho) TipoEvento.CARTAO_VERMELHO else TipoEvento.CARTAO_AMARELO,
-                    jogadorId = jne.jogador.id,
-                    timeId    = timeId,
-                    descricao = jne.jogador.nomeAbreviado
-                ))
+                val nome = jne.jogador.nomeAbreviado
+                val jaTinhaAmarelo = jne.jogador.id in jaAmarelados
+                when {
+                    // SEGUNDO amarelo (tomou amarelo em tempo anterior) → amarelo + vermelho (expulso).
+                    jaTinhaAmarelo -> {
+                        lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_AMARELO, jne.jogador.id, timeId, "$nome (2º amarelo)"))
+                        lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_VERMELHO, jne.jogador.id, timeId, "$nome expulso (2º amarelo)"))
+                    }
+                    // Cartão vermelho direto (~4% dos amarelos).
+                    rng.nextDouble() < 0.04 ->
+                        lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_VERMELHO, jne.jogador.id, timeId, nome))
+                    // Amarelo simples.
+                    else ->
+                        lista.add(EventoSimulado(minuto, TipoEvento.CARTAO_AMARELO, jne.jogador.id, timeId, nome))
+                }
             }
             // Risco base por físico; multiplicado pela fadiga (igual a gerarIncidentes)
             val probLesaoBase = PROB_LESAO_BASE * (1.5 - jne.jogador.fisico / 99.0)
@@ -1241,7 +1290,7 @@ class SimuladorPartida(private val rng: Random = Random.Default) {
                 jne.jogador.fadiga >= 0.60f -> 2.0
                 else                        -> 3.0
             }
-            val probLesao = probLesaoBase * multiplicadorFadiga
+            val probLesao = probLesaoBase * multiplicadorFadiga * fatorIdadeLesao(jne.jogador.idade)
             if (rng.nextDouble() < probLesao) {
                 val lesaoMin = efetMin.coerceAtLeast(10)
                 val lesaoMax = efetMax.coerceAtMost(85).coerceAtLeast(lesaoMin + 1)

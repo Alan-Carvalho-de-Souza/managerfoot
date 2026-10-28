@@ -90,7 +90,8 @@ fun HallDaFamaScreen(
     val opcoesAmericaDoSul = listOf(
         800 to "Todas",
         34 to "Libertadores",
-        35 to "Copa Sul-Americana"
+        35 to "Copa Sul-Americana",
+        38 to "Recopa Sul-Americana"
     )
 
     // Intercontinental: não pertence a continente nenhum. A 37 fica reservada ao
@@ -108,7 +109,7 @@ fun HallDaFamaScreen(
             22, 25, 28, 500 -> "Espanha"
             24, 26, 29, 600 -> "Italia"
             30, 31, 32, 33, 700 -> "Europa"
-            34, 35, 800 -> "América do Sul"
+            34, 35, 38, 800 -> "América do Sul"
             36, 37, 900 -> "Intercontinental"
             0 -> "Todos"
             else -> "Brasil"
@@ -124,6 +125,7 @@ fun HallDaFamaScreen(
         "Italia" -> opcoesItalia
         "Europa" -> opcoesEuropa
         "América do Sul" -> opcoesAmericaDoSul
+        "Intercontinental" -> opcoesIntercontinental
         "Brasil" -> opcoesBrasil
         else -> emptyList()
     }
@@ -141,7 +143,7 @@ fun HallDaFamaScreen(
         )
 
         // Filtro de país (chips horizontais)
-        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia", "Europa", "América do Sul")
+        val paises = listOf("Todos", "Brasil", "Argentina", "Uruguai", "Inglaterra", "Espanha", "Italia", "Europa", "América do Sul", "Intercontinental")
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -526,5 +528,6 @@ private fun bandeiraPais(pais: String): String = when (pais) {
     "Italia" -> "🇮🇹"
     "Europa" -> "🇪🇺"
     "América do Sul" -> "🌎"
+    "Intercontinental" -> "🌍"
     else -> ""
 }

@@ -159,7 +159,7 @@ fun ManagerFootNavGraph() {
                     navController.navigate(Rota.Escalacao.preJogo(timeId, campId, rod, advId))
                 },
                 onIrParaMercado     = { navController.navigate(Rota.Mercado.comTimeId(timeId)) },
-                onIrParaPropostas   = { navController.navigate(Rota.Mercado.comTimeIdEAba(timeId, 3)) },
+                onIrParaPropostas   = { navController.navigate(Rota.Mercado.comTimeIdEAba(timeId, 4)) },
                 onIrParaTabela      = { navController.navigate(Rota.Tabela.com(
                     campAId            = saveState?.campeonatoAId ?: -1,
                     campBId            = saveState?.campeonatoBId ?: -1,

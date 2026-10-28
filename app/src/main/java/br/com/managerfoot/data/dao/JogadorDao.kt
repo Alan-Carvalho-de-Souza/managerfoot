@@ -74,8 +74,8 @@ interface JogadorDao {
     suspend fun atualizarLesao(jogadorId: Int, lesionado: Boolean)
 
     /** Aplica lesão programada: marca lesionado e define quantas partidas o jogador ficará de fora. */
-    @Query("UPDATE jogadores SET lesionado = 1, partidasSemJogar = :partidas WHERE id = :jogadorId")
-    suspend fun aplicarLesao(jogadorId: Int, partidas: Int)
+    @Query("UPDATE jogadores SET lesionado = 1, partidasSemJogar = :partidas, grauLesao = :grau WHERE id = :jogadorId")
+    suspend fun aplicarLesao(jogadorId: Int, partidas: Int, grau: Int)
 
     @Query("UPDATE jogadores SET contratoAnos = contratoAnos - 1 WHERE timeId IS NOT NULL AND categoriaBase = 0 AND contratoAnos > 0")
     suspend fun decrementarContratos()

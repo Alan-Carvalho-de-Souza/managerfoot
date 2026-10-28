@@ -35,7 +35,7 @@ import br.com.managerfoot.data.database.entities.*
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 33,
+    version = 34,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -177,6 +177,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // 33 → 34: coluna grauLesao em jogadores (1 leve/2 moderada/3 grave; 0 = sem lesão).
+        // Não-destrutiva. Lesionados de saves antigos ficam com grau 0 (desconhecido) até a
+        // próxima lesão; os jogos restantes continuam em partidasSemJogar.
+        private val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jogadores ADD COLUMN grauLesao INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -188,7 +197,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
                         MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
-                        MIGRATION_32_33
+                        MIGRATION_32_33, MIGRATION_33_34
                     )
                     .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()

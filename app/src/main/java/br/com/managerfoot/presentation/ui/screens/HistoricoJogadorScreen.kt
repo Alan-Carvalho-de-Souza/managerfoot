@@ -180,6 +180,43 @@ private fun JogadorHeaderCard(
                 ForcaBadge(jogador.forca)
             }
 
+            // Lesão (grau + período de afastamento)
+            if (jogador.lesionado && jogador.partidasSemJogar > 0) {
+                val (grauLabel, grauCor) = when (jogador.grauLesao) {
+                    3    -> "Lesão grave"    to RelegationRed
+                    2    -> "Lesão moderada" to AmberAccent
+                    1    -> "Lesão leve"     to AmberAccent
+                    else -> "Lesionado"      to AmberAccent
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(Radius.sm),
+                    color = grauCor.copy(alpha = 0.12f),
+                    border = BorderStroke(0.5.dp, grauCor.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Text("🩹", fontSize = 18.sp)
+                        Column {
+                            Text(
+                                grauLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = grauCor
+                            )
+                            Text(
+                                "Fora por mais ${jogador.partidasSemJogar} jogo${if (jogador.partidasSemJogar > 1) "s" else ""}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
             // Valor de mercado

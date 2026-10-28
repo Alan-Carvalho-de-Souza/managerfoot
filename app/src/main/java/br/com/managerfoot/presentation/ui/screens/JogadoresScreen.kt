@@ -57,9 +57,9 @@ import androidx.compose.foundation.verticalScroll
 import kotlin.math.roundToInt
 
 // ═══════════════════════════════════════════════════════════
-//  JogadoresScreen
-//  Tab 0 — Elenco com barra de progressão por jogador
-//  Tab 1 — Pesquisa global com filtros de posição/força/idade
+//  JogadoresScreen — Meu elenco (progressão por jogador).
+//  A pesquisa/contratação global (PesquisaTab + OfertaDialog, aqui definidos
+//  como `internal`) foi movida para a tela Mercado (aba "Pesquisa").
 // ═══════════════════════════════════════════════════════════
 @Composable
 fun JogadoresScreen(
@@ -69,11 +69,8 @@ fun JogadoresScreen(
     vm: JogadoresViewModel = hiltViewModel()
 ) {
     val elenco            by vm.elenco.collectAsState()
-    val resultadoPesquisa by vm.resultadoPesquisa.collectAsState()
-    val filtros           by vm.filtros.collectAsState()
     val saldo             by vm.saldo.collectAsState()
     val mensagem          by vm.mensagem.collectAsState()
-    val nomesPorTime      by vm.nomesPorTime.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -84,7 +81,6 @@ fun JogadoresScreen(
         }
     }
 
-    var jogadorParaOfertar   by remember { mutableStateOf<Jogador?>(null) }
     var jogadorParaVender    by remember { mutableStateOf<Jogador?>(null) }
     var jogadorParaRenovar   by remember { mutableStateOf<Jogador?>(null) }
     var jogadorParaAposentar by remember { mutableStateOf<Jogador?>(null) }
@@ -120,20 +116,6 @@ fun JogadoresScreen(
         )
     }
 
-    // Dialog: Fazer oferta (aba Pesquisa)
-    jogadorParaOfertar?.let { jogador ->
-        OfertaDialog(
-            jogador = jogador,
-            saldo = saldo,
-            jaNoElenco = elenco.any { it.id == jogador.id },
-            onContratar = { vm.fazerOferta(jogador); jogadorParaOfertar = null },
-            onDismiss = { jogadorParaOfertar = null },
-            onIrParaHistorico = onIrParaHistorico?.let { cb ->
-                { id -> jogadorParaOfertar = null; cb(id) }
-            }
-        )
-    }
-
     // Dialog: Vender jogador (aba Meu Elenco)
     jogadorParaVender?.let { jogador ->
         VenderDialog(
@@ -149,47 +131,26 @@ fun JogadoresScreen(
         )
     }
 
-    var abaAtiva by remember { mutableIntStateOf(0) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .fundoApp()
     ) {
         ScreenTopBar(
-            titulo = "Jogadores",
-            subtitulo = "Saldo ${formatarSaldo(saldo)}",
+            titulo = "Meu elenco",
+            subtitulo = "${elenco.size} jogadores · Saldo ${formatarSaldo(saldo)}",
             onVoltar = onVoltar
         )
 
-        TabRowPill(
-            abas = listOf("Meu elenco (${elenco.size})", "Pesquisa"),
-            selecionada = abaAtiva,
-            onSelecionar = { abaAtiva = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.lg)
-                .padding(vertical = Spacing.md)
-        )
-
+        // A pesquisa/contratação de jogadores foi movida para a tela Mercado (aba Pesquisa).
         Box(modifier = Modifier.weight(1f)) {
-            when (abaAtiva) {
-                0 -> ElencoProgressaoTab(
-                    elenco          = elenco,
-                    onClicarJogador = { jogador ->
-                        if (jogador.contratoAnos == 0) jogadorParaRenovar = jogador
-                        else jogadorParaVender = jogador
-                    }
-                )
-                1 -> PesquisaTab(
-                    jogadores = resultadoPesquisa,
-                    filtros = filtros,
-                    saldo = saldo,
-                    nomesPorTime = nomesPorTime,
-                    onAplicarFiltros = vm::aplicarFiltros,
-                    onClicarJogador = { jogadorParaOfertar = it }
-                )
-            }
+            ElencoProgressaoTab(
+                elenco          = elenco,
+                onClicarJogador = { jogador ->
+                    if (jogador.contratoAnos == 0) jogadorParaRenovar = jogador
+                    else jogadorParaVender = jogador
+                }
+            )
         }
 
         // Snackbar como surface ancorada no rodapé (substitui Scaffold.snackbarHost)
@@ -593,6 +554,7 @@ private fun ProgressoEvolucaoBar(progresso: Float) {
 
 private fun contarFiltrosAtivos(f: FiltrosPesquisaJogador): Int {
     var n = 0
+    if (f.nome.isNotBlank()) n++
     if (f.posicao != null) n++
     if (f.forcaMin > 0 || f.forcaMax < 99) n++
     if (f.idadeMin > JogadoresViewModel.IDADE_MIN_PADRAO || f.idadeMax < JogadoresViewModel.IDADE_MAX_PADRAO) n++
@@ -602,7 +564,7 @@ private fun contarFiltrosAtivos(f: FiltrosPesquisaJogador): Int {
 }
 
 @Composable
-private fun PesquisaTab(
+internal fun PesquisaTab(
     jogadores: List<Jogador>,
     filtros: FiltrosPesquisaJogador,
     saldo: Long,
@@ -686,6 +648,7 @@ private fun FiltrosBottomSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var nome       by remember { mutableStateOf(filtrosIniciais.nome) }
     var posicao    by remember { mutableStateOf(filtrosIniciais.posicao) }
     var forcaMin   by remember { mutableIntStateOf(filtrosIniciais.forcaMin) }
     var forcaMax   by remember { mutableIntStateOf(filtrosIniciais.forcaMax) }
@@ -697,7 +660,12 @@ private fun FiltrosBottomSheet(
     var salarioMax by remember { mutableStateOf(filtrosIniciais.salarioMax) }
 
     fun montar() = FiltrosPesquisaJogador(
-        posicao, forcaMin, forcaMax, idadeMin, idadeMax, valorMin, valorMax, salarioMin, salarioMax
+        nome = nome,
+        posicao = posicao,
+        forcaMin = forcaMin, forcaMax = forcaMax,
+        idadeMin = idadeMin, idadeMax = idadeMax,
+        valorMin = valorMin, valorMax = valorMax,
+        salarioMin = salarioMin, salarioMax = salarioMax
     )
     val qtd = contarFiltrosAtivos(montar())
 
@@ -715,6 +683,24 @@ private fun FiltrosBottomSheet(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // Nome do jogador — busca por texto (nome completo ou abreviado)
+            OutlinedTextField(
+                value = nome,
+                onValueChange = { nome = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Nome do jogador") },
+                placeholder = { Text("Digite para buscar…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (nome.isNotEmpty()) {
+                        IconButton(onClick = { nome = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Limpar nome")
+                        }
+                    }
+                }
             )
 
             // Posição — lista suspensa
@@ -910,7 +896,7 @@ private fun JogadorPesquisaCard(
 // ─────────────────────────────────────────────────────────
 
 @Composable
-private fun OfertaDialog(
+internal fun OfertaDialog(
     jogador: Jogador,
     saldo: Long,
     jaNoElenco: Boolean,

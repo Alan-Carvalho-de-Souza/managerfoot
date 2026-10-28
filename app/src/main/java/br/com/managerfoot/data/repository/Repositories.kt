@@ -963,7 +963,8 @@ class JogadorRepository @Inject constructor(
                     fadiga = (j.fadiga + delta).coerceIn(0f, 1f),
                     treinouNestaCiclo = false,  // libera novo treinamento para o próximo ciclo
                     partidasSemJogar = novoPartidas,
-                    lesionado = novoLesionado
+                    lesionado = novoLesionado,
+                    grauLesao = if (novoLesionado) j.grauLesao else 0  // zera o grau ao recuperar
                 )
             }
             jogadorDao.atualizarTodos(atualizados)
@@ -976,9 +977,9 @@ class JogadorRepository @Inject constructor(
         }
     }
 
-    /** Aplica lesão programada ao jogador: marca como lesionado por [partidas] jogos. */
-    suspend fun aplicarLesao(jogadorId: Int, partidas: Int) {
-        jogadorDao.aplicarLesao(jogadorId, partidas)
+    /** Aplica lesão ao jogador: marca como lesionado por [partidas] jogos, com [grau] (1/2/3). */
+    suspend fun aplicarLesao(jogadorId: Int, partidas: Int, grau: Int) {
+        jogadorDao.aplicarLesao(jogadorId, partidas, grau)
     }
 
     /**
@@ -1502,6 +1503,7 @@ class JogadorRepository @Inject constructor(
         fadiga = fadiga,
         treinouNestaCiclo = treinouNestaCiclo,
         partidasSemJogar = partidasSemJogar,
+        grauLesao = grauLesao,
         disponívelParaVenda = disponívelParaVenda,
         disponívelParaEmprestimo = disponívelParaEmprestimo,
         timeOrigemEmprestimo = timeOrigemEmprestimo,

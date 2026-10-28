@@ -61,6 +61,7 @@ data class Jogador(
     val fadiga: Float = 1.0f,           // 0.0–1.0: energia física disponível
     val treinouNestaCiclo: Boolean = false, // true = já treinou entre os dois últimos jogos
     val partidasSemJogar: Int = 0,       // jogos restantes de afastamento por lesão
+    val grauLesao: Int = 0,              // 0=sem lesão | 1=leve | 2=moderada | 3=grave
     val disponívelParaVenda: Boolean = false,      // listado para venda pelo usuário
     val disponívelParaEmprestimo: Boolean = false, // listado para empréstimo pelo usuário
     val timeOrigemEmprestimo: Int? = null,         // ID do clube de origem quando emprestado
@@ -236,7 +237,10 @@ data class EstadoMetade(
     val penalCasa: Double = 1.0,        // multiplicador de penalização acumulada (expulsões/lesões)
     val penalFora: Double = 1.0,
     val entryMinutes: Map<Int, Int> = emptyMap(),   // jogadorId → minuto de entrada em campo
-    val exitMinutes: Map<Int, Int> = emptyMap()     // jogadorId → minuto de saída do campo
+    val exitMinutes: Map<Int, Int> = emptyMap(),    // jogadorId → minuto de saída do campo
+    // Jogadores que já receberam amarelo nesta partida (acumula entre 1º/2º tempo e prorrogação).
+    // O segundo amarelo vira vermelho (expulsão) — ver SimuladorPartida.gerarIncidentesPeriodo.
+    val amarelados: Set<Int> = emptySet()
 )
 
 /** Contexto que o ViewModel mantém entre o fim do 1º tempo e o início do 2º. */

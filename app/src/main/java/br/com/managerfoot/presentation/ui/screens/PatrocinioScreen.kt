@@ -38,6 +38,7 @@ fun PatrocinioScreen(
     val tipoAtual       by vm.patrocinadorAtualTipo.collectAsState()
     val valorAnualAtual by vm.patrocinadorAtualValorAnual.collectAsState()
     val mensagem        by vm.mensagem.collectAsState()
+    val primeiraVez     by vm.primeiraVez.collectAsState()
 
     LaunchedEffect(Unit) { vm.carregar() }
 
@@ -69,7 +70,9 @@ fun PatrocinioScreen(
                     vertical = Spacing.sm
                 ),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
                 // Patrocinador ativo OU aviso
                 if (temAtivo) {
@@ -119,6 +122,34 @@ fun PatrocinioScreen(
                 }
 
                 item { Spacer(Modifier.height(Spacing.lg)) }
+            }
+
+            // Rodapé: após ter um patrocinador ativo, botão de conclusão.
+            //  - Primeira vez (save novo): "Continuar" → volta ao Dashboard, que abre o tutorial.
+            //  - Durante o jogo: "OK" → volta ao menu.
+            if (temAtivo) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = Elev.floating
+                ) {
+                    Button(
+                        onClick = onVoltar,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                        shape = RoundedCornerShape(Radius.md),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            if (primeiraVez) "Continuar" else "OK",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
 

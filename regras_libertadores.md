@@ -74,9 +74,19 @@ máximo, G-9:
   também se classificaria pela liga, a vaga da liga cascateia e um colocado a mais
   entra — e isso vale inclusive quando ele é brasileiro, porque a vaga de título
   do Brasil é da Copa do Brasil.
-- **Finalista da Copa já classificado.** Campeão ou vice que termina dentro do
-  G-4/G-5 ocupa a vaga de título, e a que ele teria pela colocação desce. A conta
-  por destino não muda: 5 nos grupos e 2 na Pré, sempre.
+- **Finalista da Copa já classificado — a vaga mais benéfica (Art. 5).** Um
+  detentor de vaga de título que também se classifica pela colocação fica com o
+  **melhor destino** entre os dois, e a vaga de título cascateia mantendo o seu:
+  - O **campeão** da Copa (vaga de grupo) no G-4 já está no melhor destino; a sua
+    vaga de grupo pela colocação é a mesma coisa, então o efeito é um colocado a
+    mais entrando (o G-4 "corre para baixo").
+  - O **vice** da Copa detém uma vaga de **Pré**, mas se termina na zona de grupos
+    ele **sobe aos grupos** pela colocação — é melhor para o seu calendário — e a
+    sua vaga de Pré **desce** para o próximo colocado sem vaga internacional. Ex.:
+    vice em 2º joga os grupos; a Pré que seria dele vai para o 6º/7º.
+
+  A conta por destino nunca muda: 5 nos grupos e 2 na Pré, sempre — o que muda é
+  **quem** joga os grupos e quem joga a Pré.
 - **Rebaixado não joga.** É regulamento da CONMEBOL. Um finalista de copa que cai
   para a Série B perde a vaga, que volta para o Brasileirão. No jogo isso sai de
   graça: o rollover atualiza as divisões **antes** de criar a Libertadores, então o

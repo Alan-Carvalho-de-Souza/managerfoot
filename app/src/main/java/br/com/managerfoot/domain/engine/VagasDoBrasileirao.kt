@@ -22,9 +22,13 @@ package br.com.managerfoot.domain.engine
 //  - **Campeão continental brasileiro** — campeão da Libertadores ou da
 //    Sul-Americana — entra pela vaga ESTRUTURAL, por fora da cota do país. Se ele
 //    também se classificaria pela liga, a vaga da liga cascateia.
-//  - **Finalista da Copa do Brasil já classificado** pelo G-4/G-5 ocupa a vaga
-//    de título e a dele na liga cascateia — o efeito é o mesmo, visto do outro
-//    lado: a conta do país não muda, e um colocado a mais entra.
+//  - **Finalista da Copa do Brasil já classificado** pela colocação fica com a
+//    VAGA MAIS BENÉFICA (Art. 5 do regulamento): o campeão da Copa (vaga de
+//    grupo) e o vice (vaga de Pré) terminando na zona de grupos vão direto aos
+//    grupos pela colocação, e a vaga de título cascateia para baixo mantendo o
+//    seu destino. É por isso que o vice no G-4/G-5 sobe aos grupos e a sua vaga
+//    de Pré desce para o próximo colocado — a conta do país não muda, mas quem
+//    joga grupos e quem joga a Pré, sim.
 //  - **Copa em andamento não libera vaga.** Durante a temporada as duas vagas da
 //    Copa do Brasil ficam RESERVADAS: a liga distribui o G4 e o 5º, e nada mais.
 //    Cascatear uma vaga só porque o dono dela ainda não é conhecido prometeria ao
@@ -161,55 +165,65 @@ object VagasDoBrasileirao {
             jaDentro += posicao
         }
 
-        // ── 3. As vagas de título da Copa do Brasil ────────────────────
-        // Cada uma sai da cota do seu destino. Sem detentor elegível, a vaga
-        // volta para a liga — e é só isso que a cascata precisa fazer, porque a
-        // conta por destino é fixa.
-        var deGrupoNaLiga = VAGAS_DE_GRUPO_DA_LIGA + vagasRemanejadas
-        var naPreNaLiga = VAGAS_DE_PRE_DA_LIGA
+        // ── 3. Pools de vaga por destino, com as vagas de título dobradas ──
+        // Uma vaga de título entra na CONTA do pool do seu destino (a do campeão é
+        // de GRUPO, a do vice é de PRÉ) assim que a copa termina — tenha detentor
+        // elegível (que então ganha um PISO), tenha ido para um rebaixado ou um
+        // clube de fora (SemDetentor: volta para a liga). Uma copa EM ANDAMENTO
+        // (Indefinida) fica reservada e NÃO entra no pool, senão a liga prometeria
+        // ao 5º/6º uma vaga que a copa ainda vai levar.
+        fun emJogo(v: VagaDeTitulo) = v !is VagaDeTitulo.Indefinida
+        fun pisoDe(v: VagaDeTitulo): Int? = (v as? VagaDeTitulo.De)?.posicao?.takeIf { elegivel(it) }
 
-        /**
-         * Resolve uma vaga de título. Devolve true quando ela volta para a liga —
-         * e só volta quando a copa JÁ TERMINOU sem detentor que possa usá-la.
-         * Copa em andamento mantém a vaga reservada: ninguém é pintado, e a liga
-         * não ganha nada.
-         */
-        fun resolver(vaga: VagaDeTitulo, zona: ZonaBrasileirao): Boolean = when (vaga) {
-            is VagaDeTitulo.Indefinida -> false
-            is VagaDeTitulo.SemDetentor -> true
-            is VagaDeTitulo.De -> {
-                if (elegivel(vaga.posicao)) {
-                    zonas[vaga.posicao - 1] = zona
-                    jaDentro += vaga.posicao
-                    false
-                } else {
-                    // Decidida, mas o detentor foi rebaixado: a vaga volta.
-                    true
-                }
-            }
-        }
+        var grupoBerths = VAGAS_DE_GRUPO_DA_LIGA + vagasRemanejadas + if (emJogo(campeaoDaCopa)) 1 else 0
+        var preBerths = VAGAS_DE_PRE_DA_LIGA + if (emJogo(viceDaCopa)) 1 else 0
 
-        if (resolver(campeaoDaCopa, ZonaBrasileirao.LIBERTADORES_GRUPOS)) deGrupoNaLiga++
-        if (resolver(viceDaCopa, ZonaBrasileirao.LIBERTADORES_PRE)) naPreNaLiga++
+        // Posições com PISO de destino garantido (o detentor do título), ainda que
+        // a colocação não desse. O campeão tem piso de GRUPO; o vice, de PRÉ.
+        val pisoGrupo = pisoDe(campeaoDaCopa)
+        val pisoPre = pisoDe(viceDaCopa)
 
-        // ── 4. A liga preenche o resto, de cima para baixo ─────────────
-        var restamGrupo = deGrupoNaLiga
-        var restamPre = naPreNaLiga
+        // ── 4. A liga preenche de cima para baixo, respeitando os pisos ────
+        // Regra da "vaga mais benéfica" (Art. 5): quem tem vaga de título mas cai
+        // numa colocação que já garante destino MELHOR fica com o melhor, e a vaga
+        // de título cascateia mantendo o seu destino. Na prática, o vice (vaga de
+        // Pré) que termina na zona de grupos vai aos grupos e a Pré desce.
+        var reservaGrupo = if (pisoGrupo != null) 1 else 0  // o campeão precisa de 1 grupo
+        var reservaPre = if (pisoPre != null) 1 else 0      // o vice precisa de 1 (Pré ou melhor)
         var restamSulAmericana = VAGAS_SUL_AMERICANA
         for (posicao in 1 until primeiraRebaixada) {
             if (posicao in jaDentro) continue
-            when {
-                restamGrupo > 0 -> {
+            when (posicao) {
+                pisoGrupo -> {
                     zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_GRUPOS
-                    restamGrupo--
+                    jaDentro += posicao
+                    grupoBerths--; reservaGrupo = 0
                 }
-                restamPre > 0 -> {
-                    zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_PRE
-                    restamPre--
+                pisoPre -> {
+                    // Sobe aos grupos se há vaga de grupo livre além da do campeão.
+                    if (grupoBerths - reservaGrupo > 0) {
+                        zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_GRUPOS
+                        grupoBerths--
+                    } else {
+                        zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_PRE
+                        preBerths--
+                    }
+                    jaDentro += posicao
+                    reservaPre = 0
                 }
-                restamSulAmericana > 0 -> {
-                    zonas[posicao - 1] = ZonaBrasileirao.SUL_AMERICANA
-                    restamSulAmericana--
+                else -> when {
+                    grupoBerths - reservaGrupo > 0 -> {
+                        zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_GRUPOS
+                        grupoBerths--
+                    }
+                    preBerths - reservaPre > 0 -> {
+                        zonas[posicao - 1] = ZonaBrasileirao.LIBERTADORES_PRE
+                        preBerths--
+                    }
+                    restamSulAmericana > 0 -> {
+                        zonas[posicao - 1] = ZonaBrasileirao.SUL_AMERICANA
+                        restamSulAmericana--
+                    }
                 }
             }
         }

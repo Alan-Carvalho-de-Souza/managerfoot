@@ -49,6 +49,7 @@ data class SaveState(
     val supercopaItalianaId: Int,    // ID da Supercopa da Itália ativa (-1 se não houver)
     val supercopaUefaId: Int,        // ID da Supercopa da UEFA ativa (-1 se não houver)
     val intercontinentalId: Int,     // ID da Copa Intercontinental ativa (-1 se não houver)
+    val recopaId: Int = -1,          // ID da Recopa Sul-Americana ativa (-1 se não houver)
     val anoAtual: Int,
     val mesAtual: Int,               // 1–12
     val jogoInicializado: Boolean,
@@ -102,6 +103,7 @@ class GameDataStore @Inject constructor(
         val KEY_SUPERCOPA_ITA_ID = intPreferencesKey("supercopa_italiana_id")
         val KEY_SUPERCOPA_UEFA_ID = intPreferencesKey("supercopa_uefa_id")
         val KEY_INTERCONTINENTAL_ID = intPreferencesKey("intercontinental_id")
+        val KEY_RECOPA_ID = intPreferencesKey("recopa_id")
         val KEY_ANO            = intPreferencesKey("ano_atual")
         val KEY_MES            = intPreferencesKey("mes_atual")
         val KEY_INICIALIZADO   = booleanPreferencesKey("jogo_inicializado")
@@ -153,6 +155,7 @@ class GameDataStore @Inject constructor(
                 supercopaItalianaId   = prefs[KEY_SUPERCOPA_ITA_ID] ?: -1,
                 supercopaUefaId       = prefs[KEY_SUPERCOPA_UEFA_ID] ?: -1,
                 intercontinentalId    = prefs[KEY_INTERCONTINENTAL_ID] ?: -1,
+                recopaId              = prefs[KEY_RECOPA_ID] ?: -1,
                 anoAtual          = prefs[KEY_ANO]             ?: 2026,
                 mesAtual          = prefs[KEY_MES]             ?: 1,
                 jogoInicializado  = prefs[KEY_INICIALIZADO]    ?: false,
@@ -188,6 +191,7 @@ class GameDataStore @Inject constructor(
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
         supercopaUefaId: Int = -1,
         intercontinentalId: Int = -1,
+        recopaId: Int = -1,
         ano: Int
     ) {
         context.dataStore.edit { prefs ->
@@ -225,6 +229,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_SUPERCOPA_ITA_ID] = supercopaItalianaId
             prefs[KEY_SUPERCOPA_UEFA_ID] = supercopaUefaId
             prefs[KEY_INTERCONTINENTAL_ID] = intercontinentalId
+            prefs[KEY_RECOPA_ID] = recopaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
             prefs[KEY_INICIALIZADO]    = true
@@ -272,6 +277,7 @@ class GameDataStore @Inject constructor(
         supercopaInglaterraId: Int = -1, supercopaEspanholaId: Int = -1, supercopaItalianaId: Int = -1,
         supercopaUefaId: Int = -1,
         intercontinentalId: Int = -1,
+        recopaId: Int = -1,
         temporadaId: Int, ano: Int
     ) {
         context.dataStore.edit { prefs ->
@@ -307,6 +313,7 @@ class GameDataStore @Inject constructor(
             prefs[KEY_SUPERCOPA_ITA_ID] = supercopaItalianaId
             prefs[KEY_SUPERCOPA_UEFA_ID] = supercopaUefaId
             prefs[KEY_INTERCONTINENTAL_ID] = intercontinentalId
+            prefs[KEY_RECOPA_ID] = recopaId
             prefs[KEY_TEMPORADA_ID]    = temporadaId
             prefs[KEY_ANO]             = ano
             prefs[KEY_MES]             = 1
@@ -331,6 +338,10 @@ class GameDataStore @Inject constructor(
      */
     suspend fun salvarIntercontinentalId(id: Int) {
         context.dataStore.edit { prefs -> prefs[KEY_INTERCONTINENTAL_ID] = id }
+    }
+
+    suspend fun salvarRecopaId(id: Int) {
+        context.dataStore.edit { prefs -> prefs[KEY_RECOPA_ID] = id }
     }
 
     suspend fun salvarAmistosoCampId(id: Int) {
@@ -363,6 +374,61 @@ class GameDataStore @Inject constructor(
             prefs[KEY_TIME_ID]       = novoTimeId
             prefs[KEY_CAMPEONATO_ID] = novoCampeonatoId
         }
+    }
+
+    // ── Posições customizadas no campo tático (arraste livre) ──────────────
+    // Uma chave por time: "pos_campo_<timeId>" = "<formacao>|id:x,y;id:x,y".
+    // As coordenadas (x,y são frações 0..1) ficam ATRELADAS à formação: se a
+    // formação salva difere da atual, são ignoradas — a troca de formação
+    // limpa os ajustes manuais. Guardado fora do SaveState (schemaless).
+    private fun keyPosicoes(timeId: Int) = stringPreferencesKey("pos_campo_$timeId")
+
+    /** Fluxo (formacaoSalva, mapa jogadorId→(x,y)) das posições customizadas do time. */
+    fun fluxoPosicoesCampo(timeId: Int): Flow<Pair<String, Map<Int, Pair<Float, Float>>>> =
+        context.dataStore.data
+            .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+            .map { prefs -> decodePosicoes(prefs[keyPosicoes(timeId)]) }
+
+    /** Salva/atualiza a posição de um jogador; reinicia o mapa se a formação mudou. */
+    suspend fun salvarPosicaoCampo(timeId: Int, formacao: String, jogadorId: Int, x: Float, y: Float) {
+        context.dataStore.edit { prefs ->
+            val (fSalva, mapa) = decodePosicoes(prefs[keyPosicoes(timeId)])
+            val base = if (fSalva == formacao) mapa.toMutableMap() else mutableMapOf()
+            base[jogadorId] = x to y
+            prefs[keyPosicoes(timeId)] = encodePosicoes(formacao, base)
+        }
+    }
+
+    /** Remove todos os ajustes manuais do time (ao trocar de formação ou redefinir). */
+    suspend fun limparPosicoesCampo(timeId: Int) {
+        context.dataStore.edit { it.remove(keyPosicoes(timeId)) }
+    }
+
+    private fun encodePosicoes(formacao: String, mapa: Map<Int, Pair<Float, Float>>): String {
+        val corpo = mapa.entries.joinToString(";") { (id, p) ->
+            "$id:${"%.3f".format(java.util.Locale.US, p.first)},${"%.3f".format(java.util.Locale.US, p.second)}"
+        }
+        return "$formacao|$corpo"
+    }
+
+    private fun decodePosicoes(raw: String?): Pair<String, Map<Int, Pair<Float, Float>>> {
+        if (raw.isNullOrBlank()) return "" to emptyMap()
+        val sep = raw.indexOf('|')
+        if (sep < 0) return "" to emptyMap()
+        val formacao = raw.substring(0, sep)
+        val corpo = raw.substring(sep + 1)
+        if (corpo.isBlank()) return formacao to emptyMap()
+        val mapa = corpo.split(";").mapNotNull { tok ->
+            val par = tok.split(":")
+            if (par.size != 2) return@mapNotNull null
+            val id = par[0].toIntOrNull() ?: return@mapNotNull null
+            val xy = par[1].split(",")
+            if (xy.size != 2) return@mapNotNull null
+            val x = xy[0].toFloatOrNull() ?: return@mapNotNull null
+            val y = xy[1].toFloatOrNull() ?: return@mapNotNull null
+            id to (x to y)
+        }.toMap()
+        return formacao to mapa
     }
 
     suspend fun resetar() {

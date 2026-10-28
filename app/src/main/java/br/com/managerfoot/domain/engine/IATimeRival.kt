@@ -22,44 +22,65 @@ object IATimeRival {
         val disponiveis = elenco.filter { !it.lesionado && !it.suspenso && !it.categoriaBase }
             .sortedByDescending { it.forcaEfetiva() }
 
-        val formacao = time.taticaFormacao   // ex: "4-4-2"
-        val slots = parseFormacao(formacao)  // [1(GL), 4, 4, 2] por setor
+        val formacao = time.taticaFormacao   // ex: "4-4-2" ou "4-3-3/DM"
 
         val titulares = mutableListOf<JogadorNaEscalacao>()
         val usados = mutableSetOf<Int>()
 
-        // Escolher titulares por setor
-        listOf(
-            Setor.GOLEIRO to slots[0],
-            Setor.DEFESA  to slots[1],
-            Setor.MEIO    to slots[2],
-            Setor.ATAQUE  to slots[3]
-        ).forEach { (setor, qtd) ->
-            val candidatos = disponiveis
-                .filter { it.id !in usados }
-                .filter { it.posicao.setor == setor || it.posicaoSecundaria?.setor == setor }
-                .take(qtd)
-
-            candidatos.forEach { j ->
-                val posicaoUsada = if (j.posicao.setor == setor) j.posicao
-                                   else j.posicaoSecundaria ?: j.posicao
-                titulares.add(JogadorNaEscalacao(j, posicaoUsada))
-                usados.add(j.id)
+        val template = FormacoesTaticas.slots(formacao)
+        if (template != null) {
+            // Preenche cada SLOT específico (ex.: VOL, VOL, MEC) com o melhor
+            // jogador disponível, em passes de prioridade decrescente. `disponiveis`
+            // já vem ordenado por forcaEfetiva desc, então firstOrNull pega o mais
+            // forte de cada faixa. posicaoUsada = slot → o campo e o improviso
+            // refletem a variante escolhida.
+            val atribuicao = arrayOfNulls<Jogador>(template.size)
+            fun preencher(apto: (Jogador, Posicao) -> Boolean) {
+                template.forEachIndexed { i, pos ->
+                    if (atribuicao[i] != null) return@forEachIndexed
+                    val escolhido = disponiveis.firstOrNull { it.id !in usados && apto(it, pos) }
+                        ?: return@forEachIndexed
+                    atribuicao[i] = escolhido
+                    usados.add(escolhido.id)
+                }
             }
-        }
+            preencher { j, pos -> j.posicao == pos }                       // encaixe exato
+            preencher { j, pos -> j.posicaoSecundaria == pos }             // posição secundária
+            preencher { j, pos -> j.posicao.setor == pos.setor }           // mesmo setor
+            preencher { j, pos -> j.posicaoSecundaria?.setor == pos.setor } // setor secundário
+            preencher { _, _ -> true }                                     // último recurso
+            template.forEachIndexed { i, pos ->
+                atribuicao[i]?.let { titulares.add(JogadorNaEscalacao(it, pos)) }
+            }
+        } else {
+            // Fallback (código desconhecido): seleção por contagem de setor,
+            // escalando cada jogador na sua posição natural.
+            val slots = parseFormacao(formacao)  // [1(GL), nDef, nMeio, nAtk]
+            listOf(
+                Setor.GOLEIRO to slots[0],
+                Setor.DEFESA  to slots[1],
+                Setor.MEIO    to slots[2],
+                Setor.ATAQUE  to slots[3]
+            ).forEach { (setor, qtd) ->
+                val candidatos = disponiveis
+                    .filter { it.id !in usados }
+                    .filter { it.posicao.setor == setor || it.posicaoSecundaria?.setor == setor }
+                    .take(qtd)
 
-        // Se ainda faltar titular (elenco pequeno / desbalanceado / muitas ausências),
-        // completar com qualquer jogador disponível ainda restante, escalando-o na
-        // posição natural. Isso gera penalidade de improviso naturalmente na força
-        // efetiva, mas evita que o time entre em campo com menos de 11 jogadores.
-        if (titulares.size < 11) {
-            val faltam = 11 - titulares.size
-            val complemento = disponiveis
-                .filter { it.id !in usados }
-                .take(faltam)
-            complemento.forEach { j ->
-                titulares.add(JogadorNaEscalacao(j, j.posicao))
-                usados.add(j.id)
+                candidatos.forEach { j ->
+                    val posicaoUsada = if (j.posicao.setor == setor) j.posicao
+                                       else j.posicaoSecundaria ?: j.posicao
+                    titulares.add(JogadorNaEscalacao(j, posicaoUsada))
+                    usados.add(j.id)
+                }
+            }
+            // Completa se faltar titular (elenco pequeno/desbalanceado).
+            if (titulares.size < 11) {
+                val faltam = 11 - titulares.size
+                disponiveis.filter { it.id !in usados }.take(faltam).forEach { j ->
+                    titulares.add(JogadorNaEscalacao(j, j.posicao))
+                    usados.add(j.id)
+                }
             }
         }
 
@@ -133,7 +154,8 @@ object IATimeRival {
     // todos os grupos intermediários somados como MEIO.
     private fun parseFormacao(formacao: String): List<Int> {
         return try {
-            val partes = formacao.split("-").map { it.toInt() }
+            // Tolera sufixo de variante ("4-3-3/DM" → "4-3-3").
+            val partes = FormacoesTaticas.base(formacao).split("-").map { it.toInt() }
             val nDef  = partes.first()
             val nAtk  = partes.last()
             val nMeio = when {

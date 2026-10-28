@@ -43,6 +43,7 @@ import br.com.managerfoot.data.database.entities.EstiloJogo
 import br.com.managerfoot.data.database.entities.Setor
 import br.com.managerfoot.data.database.entities.TipoEvento
 import br.com.managerfoot.domain.engine.CalculadoraForca
+import br.com.managerfoot.domain.engine.FormacoesTaticas
 import br.com.managerfoot.domain.model.Escalacao
 import br.com.managerfoot.domain.model.EventoSimulado
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
@@ -2508,7 +2509,7 @@ private fun EscalacaoAdversarioTab(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        "${escalacao.time.taticaFormacao} · $estiloLabel · Força $forcaAtual",
+                        "${FormacoesTaticas.rotulo(escalacao.time.taticaFormacao)} · $estiloLabel · Força $forcaAtual",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2697,7 +2698,7 @@ private fun TrocarPosicoesTab(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun TaticaIntervaloPainel(
     formacaoAtual: String,
@@ -2706,14 +2707,8 @@ private fun TaticaIntervaloPainel(
     onFormacaoChange: (String) -> Unit,
     onEstiloChange: (EstiloJogo) -> Unit
 ) {
-    // Apenas formações realistas e efetivamente distinguíveis pela engine
-    // (que normaliza para [DEF/MEIO/ATA] — variantes como 4-2-3-1 vs 4-5-1
-    // produziriam o mesmo resultado).
-    val formacoes = listOf(
-        "4-4-2", "4-3-3", "4-5-1",
-        "3-5-2", "3-4-3",
-        "5-3-2", "5-4-1"
-    )
+    // Catálogo central (esquemas + variações com viés tático real).
+    val formacoes = FormacoesTaticas.codigos
 
     Column(
         Modifier
@@ -2736,25 +2731,11 @@ private fun TaticaIntervaloPainel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                formacoes.forEach { f ->
-                    FilterChip(
-                        selected = f == formacaoAtual,
-                        onClick = { onFormacaoChange(f) },
-                        label = {
-                            Text(
-                                f,
-                                fontWeight = if (f == formacaoAtual) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        shape = RoundedCornerShape(Radius.sm)
-                    )
-                }
-            }
+            DropdownFormacao(
+                formacaoAtual = formacaoAtual,
+                formacoes = formacoes,
+                onSelecionar = onFormacaoChange
+            )
         }
 
         // ── Gramado tático ────────────────────────────────────────

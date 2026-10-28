@@ -5947,8 +5947,8 @@
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 59,
-      "escudo_res": ""
+      "reputacao": 65,
+      "escudo_res": "escudo_nacionalpotosi"
     },
     {
       "id": 697,
@@ -5965,7 +5965,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 57,
-      "escudo_res": ""
+      "escudo_res": "escudo_aurora"
     },
     {
       "id": 698,
@@ -5981,8 +5981,8 @@
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 59,
-      "escudo_res": ""
+      "reputacao": 66,
+      "escudo_res": "escudo_unionespanola"
     },
     {
       "id": 699,
@@ -5998,8 +5998,8 @@
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 57,
-      "escudo_res": ""
+      "reputacao": 67,
+      "escudo_res": "escudo_audaxitaliano"
     },
     {
       "id": 700,
@@ -6008,15 +6008,15 @@
       "estado": "CAL",
       "divisao": 90,
       "pais": "Colombia",
-      "nivel": 4,
+      "nivel": 7,
       "saldo": 350000000,
       "estadio_nome": "Estadio Palogrande",
       "estadio_capacidade": 42600,
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
-      "reputacao": 59,
-      "escudo_res": ""
+      "reputacao": 72,
+      "escudo_res": "escudo_oncecaldas"
     },
     {
       "id": 701,
@@ -6032,8 +6032,8 @@
       "preco_ingresso": 2000,
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
-      "reputacao": 57,
-      "escudo_res": ""
+      "reputacao": 62,
+      "escudo_res": "escudo_deportivopasto"
     },
     {
       "id": 702,
@@ -6050,7 +6050,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 59,
-      "escudo_res": ""
+      "escudo_res": "escudo_macara"
     },
     {
       "id": 703,
@@ -6067,7 +6067,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 57,
-      "escudo_res": ""
+      "escudo_res": "escudo_orenseequador"
     },
     {
       "id": 704,
@@ -6084,7 +6084,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 59,
-      "escudo_res": ""
+      "escudo_res": "escudo_generalcaballero"
     },
     {
       "id": 705,
@@ -6118,7 +6118,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 59,
-      "escudo_res": ""
+      "escudo_res": "escudo_cuscofcperu"
     },
     {
       "id": 707,
@@ -6135,7 +6135,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 57,
-      "escudo_res": ""
+      "escudo_res": "escudo_adtperu"
     },
     {
       "id": 708,
@@ -6152,7 +6152,7 @@
       "tatica": "4-4-2",
       "estilo": "EQUILIBRADO",
       "reputacao": 59,
-      "escudo_res": ""
+      "escudo_res": "escudo_metropolitanos"
     },
     {
       "id": 709,
@@ -6169,7 +6169,7 @@
       "tatica": "4-4-2",
       "estilo": "DEFENSIVO",
       "reputacao": 57,
-      "escudo_res": ""
+      "escudo_res": "escudo_portuguesavenezuela"
     }
   ],
   "jogadores": [

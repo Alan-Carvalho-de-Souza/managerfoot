@@ -8,15 +8,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -46,12 +49,16 @@ import br.com.managerfoot.domain.model.Jogador
 import br.com.managerfoot.domain.model.PropostaIATransferencia
 import br.com.managerfoot.domain.engine.CalculadoraForca
 import br.com.managerfoot.domain.engine.CalculadoraMercado
+import br.com.managerfoot.domain.engine.FormacoesTaticas
 import br.com.managerfoot.domain.model.JogadorNaEscalacao
 import br.com.managerfoot.presentation.ui.components.*
 import br.com.managerfoot.presentation.ui.theme.*
 import br.com.managerfoot.presentation.viewmodel.EscalacaoViewModel
 import br.com.managerfoot.presentation.viewmodel.MercadoViewModel
+import br.com.managerfoot.presentation.viewmodel.JogadoresViewModel
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.MaterialTheme
 
@@ -72,6 +79,7 @@ fun EscalacaoScreen(
     val selecionado by vm.jogadorSelecionado.collectAsState()
     val adversario  by vm.adversario.collectAsState()
     val escalacaoAdversario by vm.escalacaoAdversario.collectAsState()
+    val posicoesCustom by vm.posicoesCustom.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
     LaunchedEffect(adversarioId) {
@@ -112,10 +120,11 @@ fun EscalacaoScreen(
             )
         }
 
-        // Tabs em formato pill
+        // Tabs em formato pill — roláveis na horizontal (cabem 5 abas em telas estreitas, ex.: 360dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.md, vertical = Spacing.xs),
             horizontalArrangement = Arrangement.Center
         ) {
@@ -151,13 +160,26 @@ fun EscalacaoScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
-                        // ── Mini-campo (visão da formação) ─────────────
+                        // ── Mini-campo (visão + troca de posições) ─────
                         item(key = "gramado") {
                             GramadoTatico(
                                 titulares = escalacao!!.titulares,
                                 formacao  = escalacao!!.formacaoEfetiva,
+                                estilo    = escalacao!!.time.estiloJogo,
+                                selecionadoId = titularParaTroca?.jogador?.id,
+                                override = posicoesCustom,
                                 onJogadorClick = { jne ->
-                                    if (titularParaTroca == null) vm.selecionarJogador(jne.jogador)
+                                    // Toque no campo: 1º seleciona; 2º troca de posição
+                                    // com outro titular (ou cancela se tocar o mesmo).
+                                    val atual = titularParaTroca
+                                    when {
+                                        atual == null -> titularParaTroca = jne
+                                        atual.jogador.id == jne.jogador.id -> titularParaTroca = null
+                                        else -> {
+                                            vm.trocarPosicoes(atual, jne)
+                                            titularParaTroca = null
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -420,7 +442,19 @@ fun EscalacaoScreen(
     // Botão flutuante "Iniciar Partida" no modo pré-jogo
     if (modoPreJogo && onIniciarPartida != null) {
         val totalTitulares = escalacao?.titulares?.size ?: 0
-        val escalacaoCompleta = totalTitulares == 11
+        val temGoleiro = escalacao?.titulares?.any { it.posicaoUsada.setor == Setor.GOLEIRO } == true
+        // Obrigatório iniciar com EXATAMENTE 11 titulares e pelo menos 1 goleiro.
+        val escalacaoCompleta = totalTitulares == 11 && temGoleiro
+        // Mensagem de bloqueio específica conforme o problema.
+        val avisoEscalacao: String? = when {
+            totalTitulares < 11 -> {
+                val faltam = 11 - totalTitulares
+                "⚠ Adicione mais $faltam jogador${if (faltam > 1) "es" else ""} aos titulares ($totalTitulares/11)"
+            }
+            totalTitulares > 11 -> "⚠ Remova ${totalTitulares - 11} jogador${if (totalTitulares - 11 > 1) "es" else ""} — a escalação deve ter exatamente 11 ($totalTitulares/11)"
+            !temGoleiro         -> "⚠ Escale ao menos 1 goleiro entre os titulares"
+            else                -> null
+        }
         Box(Modifier.fillMaxSize()) {
             Surface(
                 modifier = Modifier
@@ -430,10 +464,9 @@ fun EscalacaoScreen(
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Column(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm)) {
-                    if (!escalacaoCompleta) {
-                        val faltam = 11 - totalTitulares
+                    if (avisoEscalacao != null) {
                         Text(
-                            "⚠ Adicione mais $faltam jogador${if (faltam > 1) "es" else ""} aos titulares ($totalTitulares/11)",
+                            avisoEscalacao,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier
@@ -1189,6 +1222,7 @@ private fun EscalacaoAdversarioPreJogoTab(escalacao: br.com.managerfoot.domain.m
             GramadoTatico(
                 titulares = escalacao.titulares,
                 formacao = escalacao.time.taticaFormacao,
+                estilo = escalacao.time.estiloJogo,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -1222,25 +1256,79 @@ private fun EscalacaoAdversarioPreJogoTab(escalacao: br.com.managerfoot.domain.m
 // ─────────────────────────────────────────────────────────────
 //  Aba Tática
 // ─────────────────────────────────────────────────────────────
-@OptIn(ExperimentalLayoutApi::class)
+// ─────────────────────────────────────────────────────────────
+//  Dropdown (lista suspensa) com todas as formações/variações.
+//  Substitui os antigos chips — acomoda a lista maior de variantes.
+// ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DropdownFormacao(
+    formacaoAtual: String,
+    formacoes: List<String>,
+    onSelecionar: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = rotuloFormacao(formacaoAtual),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Esquema") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            formacoes.forEach { f ->
+                DropdownMenuItem(
+                    text = { Text(rotuloFormacao(f)) },
+                    onClick = { onSelecionar(f); expanded = false },
+                    trailingIcon = {
+                        if (f == formacaoAtual) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+// Rótulo amigável de uma formação/variação (ex.: "4-3-3 · 2 volantes, 1 meia").
+internal fun rotuloFormacao(formacao: String): String = FormacoesTaticas.rotulo(formacao)
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun TaticaTab(
     escalacao: br.com.managerfoot.domain.model.Escalacao?,
     vm: EscalacaoViewModel,
     modoPreJogo: Boolean = false
 ) {
-    // Apenas formações realistas e efetivamente distinguíveis pela engine
-    // (que normaliza para [DEF/MEIO/ATA] — variantes como 4-2-3-1 vs 4-5-1
-    // produziriam o mesmo resultado).
-    val formacoes = listOf(
-        "4-4-2", "4-3-3", "4-5-1",
-        "3-5-2", "3-4-3",
-        "5-3-2", "5-4-1"
-    )
+    // Catálogo central (esquemas + variações com viés tático real).
+    val formacoes = FormacoesTaticas.codigos
     val estilos = EstiloJogo.entries
 
     val formacaoAtual = escalacao?.time?.taticaFormacao ?: "4-4-2"
     val estiloAtual = escalacao?.time?.estiloJogo ?: EstiloJogo.EQUILIBRADO
+    val posicoesCustom by vm.posicoesCustom.collectAsState()
+
+    // Seleção no campo para trocar posições (1º toque seleciona, 2º troca).
+    var trocaTatica by remember { mutableStateOf<JogadorNaEscalacao?>(null) }
 
     Column(
         Modifier
@@ -1266,28 +1354,43 @@ private fun TaticaTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-                ) {
-                    formacoes.forEach { f ->
-                        FilterChipPill(
-                            label = f,
-                            selected = f == formacaoAtual,
-                            onClick = { vm.mudarFormacao(f) }
-                        )
-                    }
-                }
+                DropdownFormacao(
+                    formacaoAtual = formacaoAtual,
+                    formacoes = formacoes,
+                    onSelecionar = { vm.mudarFormacao(it) }
+                )
             }
         }
 
-        // ── Gramado tático ────────────────────────────────────────
+        // ── Gramado tático (toque p/ trocar posições) ─────────────
         if (escalacao != null) {
+            Text(
+                if (trocaTatica == null) "Toque em dois jogadores para trocá-los, ou arraste um para reposicionar no campo."
+                else "Toque em outro jogador para trocar com ${trocaTatica!!.jogador.nomeAbreviado}.",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (trocaTatica == null) MaterialTheme.colorScheme.onSurfaceVariant else GoldChampion
+            )
             GramadoTatico(
                 titulares = escalacao.titulares,
                 formacao  = formacaoAtual,
-                modifier  = Modifier.padding(vertical = Spacing.xs)
+                estilo    = estiloAtual,
+                modifier  = Modifier.padding(vertical = Spacing.xs),
+                selecionadoId = trocaTatica?.jogador?.id,
+                override = posicoesCustom,
+                onArrastar = { id, x, y, novaPos -> vm.reposicionarJogador(id, novaPos, x, y) },
+                onJogadorClick = { jne ->
+                    val atual = trocaTatica
+                    when {
+                        atual == null -> trocaTatica = jne
+                        atual.jogador.id == jne.jogador.id -> trocaTatica = null
+                        else -> { vm.trocarPosicoes(atual, jne); trocaTatica = null }
+                    }
+                }
+            )
+            LegendaGuiaCampo(
+                improvisados = escalacao.titulares.count { it.jogador.ehImproviso(it.posicaoUsada) },
+                temPosicoesCustom = posicoesCustom.isNotEmpty(),
+                onRedefinir = { vm.redefinirPosicoesCampo() }
             )
         }
 
@@ -1335,6 +1438,62 @@ private fun TaticaTab(
 }
 
 // ─────────────────────────────────────────────────────────────
+//  Zona ideal de cada posição no gramado (x: 0 esq → 1 dir;
+//  y: 1 = linha de fundo/defesa → 0 = ataque). Base para posicionar
+//  cada jogador onde realmente atua (lateral abre, volante senta na
+//  frente da defesa, ponta sobe pelo lado, etc.).
+// ─────────────────────────────────────────────────────────────
+internal fun zonaIdeal(posicao: Posicao): Pair<Float, Float> = when (posicao) {
+    Posicao.GOLEIRO          -> 0.50f to 0.93f
+    Posicao.ZAGUEIRO         -> 0.50f to 0.77f
+    Posicao.LATERAL_DIREITO  -> 0.86f to 0.73f
+    Posicao.LATERAL_ESQUERDO -> 0.14f to 0.73f
+    Posicao.VOLANTE          -> 0.50f to 0.60f
+    Posicao.MEIA_CENTRAL     -> 0.50f to 0.48f
+    Posicao.MEIA_ATACANTE    -> 0.50f to 0.37f
+    Posicao.PONTA_DIREITA    -> 0.88f to 0.25f
+    Posicao.PONTA_ESQUERDA   -> 0.12f to 0.25f
+    Posicao.SEGUNDA_ATACANTE -> 0.50f to 0.20f
+    Posicao.CENTROAVANTE     -> 0.50f to 0.11f
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Variação ofensiva/defensiva: o ESTILO desloca o bloco inteiro
+//  sobre as zonas ideais (goleiro fixo). É a mesma formação ganhando
+//  uma "cara" ofensiva ou defensiva — e o engine já premia o estilo
+//  no resultado (fatorEstilo / bônus de finalização).
+//   • Ofensivo  → bloco sobe; laterais viram alas adiantados
+//   • Defensivo → bloco recua e compacta
+//   • Contra-ataque → bloco baixo, mas ataque esticado (transição)
+//   • Equilibrado → neutro
+// ─────────────────────────────────────────────────────────────
+internal fun zonaComEstilo(posicao: Posicao, estilo: EstiloJogo): Pair<Float, Float> {
+    val (x, y0) = zonaIdeal(posicao)
+    if (posicao == Posicao.GOLEIRO) return x to y0
+    val ehLateral = posicao == Posicao.LATERAL_DIREITO || posicao == Posicao.LATERAL_ESQUERDO
+    val ehAtaque  = posicao.setor == Setor.ATAQUE
+    val dy = when (estilo) {
+        EstiloJogo.OFENSIVO      -> -0.08f - (if (ehLateral) 0.06f else 0f)
+        EstiloJogo.DEFENSIVO     -> +0.08f
+        EstiloJogo.CONTRA_ATAQUE -> if (ehAtaque) -0.04f else +0.05f
+        EstiloJogo.EQUILIBRADO   -> 0f
+    }
+    return x to (y0 + dy).coerceIn(0.06f, 0.90f)
+}
+
+// Posição (função) cuja zona ideal está mais próxima de um ponto do campo.
+// Usada no arraste: soltar o jogador numa zona diferente muda a função dele.
+// Exclui o goleiro — o gol é travado (não se cria/retira goleiro arrastando).
+internal fun posicaoPorZona(x: Float, y: Float): Posicao =
+    Posicao.entries
+        .filter { it != Posicao.GOLEIRO }
+        .minByOrNull { p ->
+            val (zx, zy) = zonaIdeal(p)
+            val dx = zx - x; val dy = zy - y
+            dx * dx + dy * dy
+        } ?: Posicao.CENTROAVANTE
+
+// ─────────────────────────────────────────────────────────────
 //  GramadoTatico — visão 2D do campo
 // ─────────────────────────────────────────────────────────────
 @Composable
@@ -1342,10 +1501,15 @@ internal fun GramadoTatico(
     titulares: List<JogadorNaEscalacao>,
     formacao: String,
     modifier: Modifier = Modifier,
-    onJogadorClick: ((JogadorNaEscalacao) -> Unit)? = null
+    onJogadorClick: ((JogadorNaEscalacao) -> Unit)? = null,
+    selecionadoId: Int? = null,
+    estilo: EstiloJogo = EstiloJogo.EQUILIBRADO,
+    override: Map<Int, Pair<Float, Float>> = emptyMap(),
+    onArrastar: ((jogadorId: Int, x: Float, y: Float, novaPosicao: Posicao) -> Unit)? = null
 ) {
     val linhas = remember(formacao) {
-        try { listOf(1) + formacao.split("-").map { it.toInt() } }
+        // Usa o esquema base (sem sufixo de variante) só para dimensionar a altura.
+        try { listOf(1) + FormacoesTaticas.base(formacao).split("-").map { it.toInt() } }
         catch (_: Exception) { listOf(1, 4, 4, 2) }
     }
 
@@ -1374,6 +1538,9 @@ internal fun GramadoTatico(
     ) {
         val w = maxWidth
         val h = maxHeight
+        val density = LocalDensity.current
+        val wPx = with(density) { w.toPx() }
+        val hPx = with(density) { h.toPx() }
 
         // Fundo do gramado (paleta Tactical Dark)
         Box(Modifier.fillMaxSize().background(PitchGreenLight))
@@ -1399,62 +1566,204 @@ internal fun GramadoTatico(
             drawRect(lineColor, Offset((sw - gW) / 2, sh - gH), Size(gW, gH), style = Stroke(lw))
         }
 
-        val placements = remember(ordered, linhas) {
+        val placements = remember(ordered, estilo) {
+            // Cada jogador vai para a zona da sua posição, deslocada pelo ESTILO
+            // (variação ofensiva/defensiva). Jogadores da MESMA posição (ex.: 3
+            // zagueiros) são espalhados simetricamente em torno do x.
             val list = mutableListOf<Triple<Float, Float, JogadorNaEscalacao>>()
-            var idx = 0
-            linhas.forEachIndexed { rowIdx, count ->
-                val yFrac = 1f - (rowIdx.toFloat() + 0.65f) / numLinhas.toFloat()
-                for (col in 0 until count) {
-                    val xFrac = (col.toFloat() + 1f) / (count.toFloat() + 1f)
-                    ordered.getOrNull(idx)?.let { list.add(Triple(xFrac, yFrac, it)) }
-                    idx++
+            ordered.groupBy { it.posicaoUsada }.forEach { (pos, membros) ->
+                val (x0, y0) = zonaComEstilo(pos, estilo)
+                val n = membros.size
+                val passo = 0.17f
+                membros.forEachIndexed { i, jne ->
+                    val offset = (i - (n - 1) / 2f) * passo
+                    val x = (x0 + offset).coerceIn(0.08f, 0.92f)
+                    list.add(Triple(x, y0, jne))
                 }
             }
             list
         }
 
         placements.forEach { (xF, yF, jne) ->
-            val xOff = (w * xF - chipW / 2).coerceIn(2.dp, w - chipW - 2.dp)
-            val yOff = (h * yF - chipH / 2).coerceIn(2.dp, h - chipH - 2.dp)
-            JogadorChipGramado(
-                jne = jne,
-                modifier = Modifier
-                    .offset(x = xOff, y = yOff)
-                    .width(chipW)
-                    .then(
-                        if (onJogadorClick != null)
-                            Modifier.clickable { onJogadorClick(jne) }
-                        else Modifier
-                    )
-            )
+            key(jne.jogador.id) {
+                // Posição base: override manual (arraste) se houver, senão a zona
+                // calculada. `remember(base)` re-sincroniza quando o override muda
+                // ou a formação/estilo recalcula o layout.
+                val baseX = override[jne.jogador.id]?.first ?: xF
+                val baseY = override[jne.jogador.id]?.second ?: yF
+                var fx by remember(baseX) { mutableStateOf(baseX) }
+                var fy by remember(baseY) { mutableStateOf(baseY) }
+
+                val xOff = (w * fx - chipW / 2).coerceIn(2.dp, w - chipW - 2.dp)
+                val yOff = (h * fy - chipH / 2).coerceIn(2.dp, h - chipH - 2.dp)
+                JogadorChipGramado(
+                    jne = jne,
+                    selecionado = selecionadoId != null && jne.jogador.id == selecionadoId,
+                    improviso = jne.jogador.ehImproviso(jne.posicaoUsada),
+                    modifier = Modifier
+                        .offset(x = xOff, y = yOff)
+                        .width(chipW)
+                        .then(
+                            // Goleiro travado: não se arrasta para fora do gol.
+                            if (onArrastar != null && jne.posicaoUsada != Posicao.GOLEIRO)
+                                Modifier.pointerInput(jne.jogador.id) {
+                                    detectDragGestures(
+                                        onDragEnd = {
+                                            // A função do jogador passa a ser a da zona
+                                            // onde ele foi solto (goleiro fica de fora).
+                                            onArrastar(jne.jogador.id, fx, fy, posicaoPorZona(fx, fy))
+                                        }
+                                    ) { change, drag ->
+                                        change.consume()
+                                        fx = (fx + drag.x / wPx).coerceIn(0.04f, 0.96f)
+                                        fy = (fy + drag.y / hPx).coerceIn(0.04f, 0.96f)
+                                    }
+                                }
+                            else Modifier
+                        )
+                        .then(
+                            if (onJogadorClick != null)
+                                Modifier.clickable { onJogadorClick(jne) }
+                            else Modifier
+                        )
+                )
+            }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Legenda/guia do gramado tático — explica o código de cores dos
+//  chips (seleção / improviso) e as zonas ideais. Fecha a Parte 3:
+//  o campo já posiciona cada jogador na sua zona; aqui o usuário
+//  entende o que cada destaque significa.
+// ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LegendaGuiaCampo(
+    improvisados: Int,
+    modifier: Modifier = Modifier,
+    temPosicoesCustom: Boolean = false,
+    onRedefinir: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.sm),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(
+            Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                LegendaItem(GoldChampion, "Selecionado")
+                LegendaItem(AmberAccent, "Improviso (fora da posição)")
+            }
+            Text(
+                "Cada jogador ocupa a sua zona ideal; o estilo de jogo desloca o bloco pelo campo.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (improvisados > 0) {
+                Text(
+                    "⚠ $improvisados jogador(es) improvisado(s) — rendem abaixo do normal.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AmberAccent
+                )
+            }
+            if (temPosicoesCustom && onRedefinir != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Posições ajustadas manualmente.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        onClick = onRedefinir,
+                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 2.dp)
+                    ) {
+                        Text("↺ Redefinir", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendaItem(cor: Color, label: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(2.dp, cor, CircleShape)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
 internal fun JogadorChipGramado(
     jne: JogadorNaEscalacao,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selecionado: Boolean = false,
+    improviso: Boolean = false
 ) {
+    val bordaCor = when {
+        selecionado -> GoldChampion
+        improviso   -> AmberAccent   // jogador fora da posição natural
+        else        -> Color.White
+    }
+    val bordaW = if (selecionado || improviso) 2.5.dp else 1.5.dp
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
+        // Marcador: posição escalada (abrev) + rating geral (força) empilhados no badge.
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(32.dp)
                 .background(corSetor(jne.posicaoUsada.setor), CircleShape)
-                .border(1.5.dp, Color.White, CircleShape),
+                .border(bordaW, bordaCor, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = jne.posicaoUsada.abreviacao,
-                fontSize = 7.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = jne.posicaoUsada.abreviacao,
+                    fontSize = 6.5.sp,
+                    lineHeight = 7.sp,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "${jne.jogador.forca}",
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
+            }
         }
         Text(
             text = jne.jogador.nomeAbreviado.take(9),
@@ -1534,6 +1843,44 @@ private fun JogadorDetalheDialog(
                         }
                     }
                     ForcaBadge(jogador.forca)
+                }
+
+                // ── Lesão (grau + período de afastamento) ───────────
+                if (jogador.lesionado && jogador.partidasSemJogar > 0) {
+                    val (grauLabel, grauCor) = when (jogador.grauLesao) {
+                        3    -> "Lesão grave"    to RelegationRed
+                        2    -> "Lesão moderada" to AmberAccent
+                        1    -> "Lesão leve"     to AmberAccent
+                        else -> "Lesionado"      to AmberAccent
+                    }
+                    Spacer(Modifier.height(Spacing.xs))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(Radius.sm),
+                        color = grauCor.copy(alpha = 0.12f),
+                        border = BorderStroke(0.5.dp, grauCor.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            Text("🩹", fontSize = 18.sp)
+                            Column {
+                                Text(
+                                    grauLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = grauCor
+                                )
+                                Text(
+                                    "Fora por mais ${jogador.partidasSemJogar} jogo${if (jogador.partidasSemJogar > 1) "s" else ""}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = Spacing.xs))
@@ -1745,7 +2092,9 @@ fun MercadoScreen(
     onVoltar: () -> Unit = {},
     onIrParaClubes: () -> Unit = {},
     onIrParaHistorico: ((Int) -> Unit)? = null,
-    vm: MercadoViewModel = hiltViewModel()
+    vm: MercadoViewModel = hiltViewModel(),
+    // ViewModel da pesquisa global (a aba Pesquisa foi trazida da tela Jogadores).
+    jogVm: JogadoresViewModel = hiltViewModel()
 ) {
     val livres    by vm.jogadoresLivres.collectAsState()
     val elenco    by vm.elencoAtual.collectAsState()
@@ -1756,13 +2105,21 @@ fun MercadoScreen(
     val emprestados    by vm.jogadoresEmprestados.collectAsState()
     val nomesTimesPorId by vm.nomesTimesPorId.collectAsState()
 
-    LaunchedEffect(timeId) { vm.carregar(timeId) }
+    // Estado da aba Pesquisa (busca global com filtros + nome)
+    val resultadoPesquisa by jogVm.resultadoPesquisa.collectAsState()
+    val filtrosPesquisa   by jogVm.filtros.collectAsState()
+    val nomesPorTime      by jogVm.nomesPorTime.collectAsState()
+    var jogadorParaOfertar by remember { mutableStateOf<Jogador?>(null) }
 
-    var abaAtiva by remember { mutableIntStateOf(abaInicial.coerceIn(0, 3)) }
+    LaunchedEffect(timeId) { vm.carregar(timeId) }
+    LaunchedEffect(timeId) { jogVm.carregar(timeId) }
+
+    var abaAtiva by remember { mutableIntStateOf(abaInicial.coerceIn(0, 4)) }
     val pendentesCount = propostas.count { it.status == StatusProposta.PENDENTE }
     val abas = remember(pendentesCount) {
         listOf(
             "Mercado",
+            "Pesquisa",
             "Elenco",
             "Histórico",
             if (pendentesCount > 0) "Propostas ($pendentesCount)" else "Propostas"
@@ -1853,10 +2210,11 @@ fun MercadoScreen(
             }
         }
 
-        // Tabs em formato pill
+        // Tabs em formato pill — roláveis na horizontal (cabem 5 abas em telas estreitas, ex.: 360dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.md, vertical = Spacing.xs),
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1910,7 +2268,17 @@ fun MercadoScreen(
                     }
                 }
             }
-            1 -> { // Meu elenco
+            1 -> { // Pesquisa global (filtros + nome), trazida da tela Jogadores
+                PesquisaTab(
+                    jogadores = resultadoPesquisa,
+                    filtros = filtrosPesquisa,
+                    saldo = saldo,
+                    nomesPorTime = nomesPorTime,
+                    onAplicarFiltros = jogVm::aplicarFiltros,
+                    onClicarJogador = { jogadorParaOfertar = it }
+                )
+            }
+            2 -> { // Meu elenco
                 LazyColumn(
                     contentPadding = PaddingValues(
                         horizontal = Spacing.md,
@@ -1989,7 +2357,7 @@ fun MercadoScreen(
                     }
                 }
             }
-            2 -> { // Transferências
+            3 -> { // Transferências
                 if (transferencias.isEmpty()) {
                     EmptyState("Nenhuma transferência registrada")
                 } else {
@@ -2007,7 +2375,7 @@ fun MercadoScreen(
                     }
                 }
             }
-            3 -> { // Propostas
+            4 -> { // Propostas
                 PropostasTab(
                     propostas = propostas,
                     onAceitar  = { vm.aceitarProposta(it) },
@@ -2022,6 +2390,20 @@ fun MercadoScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // Diálogo de contratação a partir da aba Pesquisa
+        jogadorParaOfertar?.let { jogador ->
+            OfertaDialog(
+                jogador = jogador,
+                saldo = saldo,
+                jaNoElenco = elenco.any { it.id == jogador.id },
+                onContratar = { jogVm.fazerOferta(jogador); jogadorParaOfertar = null },
+                onDismiss = { jogadorParaOfertar = null },
+                onIrParaHistorico = onIrParaHistorico?.let { cb ->
+                    { id -> jogadorParaOfertar = null; cb(id) }
+                }
+            )
+        }
     }
 }
 

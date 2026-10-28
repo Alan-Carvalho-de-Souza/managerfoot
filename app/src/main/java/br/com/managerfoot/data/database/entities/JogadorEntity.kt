@@ -86,6 +86,10 @@ data class JogadorEntity(
     // Decrementado após cada jogo; quando chega a 0, lesionado volta a false.
     val partidasSemJogar: Int = 0,
 
+    // Grau da lesão atual: 0=sem lesão | 1=leve | 2=moderada | 3=grave.
+    // Preenchido ao sofrer a lesão e zerado na recuperação (exibição no detalhe).
+    val grauLesao: Int = 0,
+
     // Flags de janela de transferência (definidas pelo usuário)
     val disponívelParaVenda: Boolean = false,
     val disponívelParaEmprestimo: Boolean = false,

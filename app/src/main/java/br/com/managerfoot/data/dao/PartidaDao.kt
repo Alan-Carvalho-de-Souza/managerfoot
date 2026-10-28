@@ -636,6 +636,29 @@ interface PartidaDao {
     """)
     fun observeCopaPartidas(copaId: Int): Flow<List<CopaPartidaDto>>
 
+    /**
+     * Partidas de uma copa de JOGO ÚNICO (ex.: Copa Intercontinental), cuja
+     * decisão não tem `confrontoId` (não é um confronto ida/volta). Reusa o
+     * [CopaPartidaDto] com COALESCE nos campos não-nulos, para que o chaveamento
+     * consiga exibir a final mesmo sem confronto — ao contrário de
+     * [observeCopaPartidas], que exige `confrontoId IS NOT NULL`.
+     */
+    @Query("""
+        SELECT p.id AS partidaId, COALESCE(p.confrontoId, 0) AS confrontoId,
+               COALESCE(p.fase, 'Final') AS fase,
+               p.rodada AS rodada, p.timeCasaId AS timeCasaId,
+               tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
+               p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
+               p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
+               p.penaltisCasa AS penaltisCasa, p.penaltisForaId AS penaltisForaId
+        FROM partidas p
+        INNER JOIN times tc ON p.timeCasaId = tc.id
+        INNER JOIN times tf ON p.timeForaId = tf.id
+        WHERE p.campeonatoId = :copaId
+        ORDER BY p.rodada, p.id
+    """)
+    fun observeCopaPartidasJogoUnico(copaId: Int): Flow<List<CopaPartidaDto>>
+
     @Query("""
         SELECT ep.jogadorId AS jogadorId, j.nome AS nomeJogador, j.nomeAbreviado AS nomeAbrev,
                COALESCE(t.nome, 'Aposentado') AS nomeTime, COALESCE(t.escudoRes, '') AS escudoRes, COUNT(*) AS total

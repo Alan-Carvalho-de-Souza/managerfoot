@@ -334,6 +334,9 @@ private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<
     nomeCampeonato.contains("Amistoso", ignoreCase = true) ->
         if (ordemGlobal >= 400) 12 to 20 else 1 to 15
     ordemGlobal == 1 -> 1 to 25   // Supercopa Rei: 25 de Janeiro
+    // Copa Intercontinental: jogo único no fim da temporada (depois das finais
+    // da Champions e da Libertadores). Vem antes do ramo genérico de "Copa".
+    nomeCampeonato.contains("Intercontinental", ignoreCase = true) -> 12 to 18
     // Troféu dos Campeões (ARG): jogo único em mid-Dezembro do mesmo ano
     ordemGlobal == 620 || (nomeCampeonato.contains("Troféu", ignoreCase = true) && nomeCampeonato.contains("Campe", ignoreCase = true)) -> 12 to 15
     nomeCampeonato.contains("Copa", ignoreCase = true) ->

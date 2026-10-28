@@ -716,7 +716,9 @@ class GameRepository @Inject constructor(
             penalCasa    = ctx.estadoMetade1.penalCasa,
             penalFora    = ctx.estadoMetade1.penalFora,
             entryMinutes = combinedEntry,
-            exitMinutes  = combinedExit
+            exitMinutes  = combinedExit,
+            // Amarelos do 1º tempo cruzam o intervalo: 2º amarelo no 2º tempo = expulsão.
+            amarelados   = ctx.estadoMetade1.amarelados
         )
 
         val fracaoGols = (minFim - minInicio + 1).toDouble() / 90.0
@@ -1134,7 +1136,8 @@ class GameRepository @Inject constructor(
         val supercopaUefaId: Int,         // Supercopa da UEFA (Champions x Europa League)
         val temporadaId: Int,
         val ano: Int,
-        val resultadoMeta: String? = null // Mensagem "Meta cumprida/falhada" para exibir em Snackbar
+        val resultadoMeta: String? = null, // Mensagem "Meta cumprida/falhada" para exibir em Snackbar
+        val recopaId: Int = -1            // Recopa Sul-Americana (fevereiro da nova temporada)
     )
 
     suspend fun encerrarTemporadaComHallDaFama(
@@ -1688,7 +1691,7 @@ class GameRepository @Inject constructor(
             )
         } else null
 
-        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoLibertadoresId, novoSulAmericanaId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta)
+        return NovaTemporadaInfo(novoCampeonatoAId, novoCampeonatoBId, novoCampeonatoCId, novoCampeonatoDId, novoAperturaId, novoArgBId, novoClausuraId, novoUruAperturaId, novoUruBId, novoUruClausuraId, novoUruIntermedId, novoUruBCompetId, novoPremierId, novoChampionshipId, novoLaLigaId, novoSerieAId, novoCopaId, novoCopaArgId, novoCopaInglaterraId, novoCopaEspanholaId, novoCopaItalianaId, novoChampionsId, novoEuropaLeagueId, novoLibertadoresId, novoSulAmericanaId, novoSupercopaId, novoSupercopaIngId, novoSupercopaEspId, novoSupercopaItaId, novoSupercopaUefaId, novoTemporadaId, novoAno, resultadoMeta, recopaId = conmebol.recopa)
     }
 
     // ── Reputação por mudança de divisão ────────────────────────
@@ -2113,12 +2116,18 @@ class GameRepository @Inject constructor(
     fun observarCopaIntercontinental(): Flow<List<CopaPartidaDto>> =
         campeonatoDao.observeMaisRecentePorTipo(TipoCampeonato.INTERCONTINENTAL)
             .flatMapLatest { camp ->
+                // Jogo único sem confrontoId → usa a query que não o exige,
+                // senão a final seria filtrada e a aba Copas ficaria vazia.
                 if (camp == null) flowOf(emptyList())
-                else partidaDao.observeCopaPartidas(camp.id)
+                else partidaDao.observeCopaPartidasJogoUnico(camp.id)
             }
 
     fun observarCopaPartidas(copaId: Int): Flow<List<CopaPartidaDto>> =
         partidaDao.observeCopaPartidas(copaId)
+
+    /** Id da edição mais recente da Copa Intercontinental (ou -1 se não houver). */
+    suspend fun idIntercontinentalAtual(): Int =
+        campeonatoDao.buscarMaisRecentePorTipo(TipoCampeonato.INTERCONTINENTAL)?.id ?: -1
 
     fun observarRankingGeral(): Flow<List<RankingGeralEntity>> =
         rankingGeralDao.observeRanking()
@@ -2750,6 +2759,121 @@ class GameRepository @Inject constructor(
     ) = avancarCopaIdaVoltaSeJogadorEliminado(copaId, timeJogadorId) {
         verificarEAvancarFaseCopaItaliana(copaId, anoAtual, timeJogadorId, temporadaId)
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Recopa Sul-Americana — final ida/volta entre o campeão da
+    //  Libertadores (Hall 34) e o campeão da Copa Sul-Americana (Hall 35)
+    //  da temporada ANTERIOR. Hall da Fama divisão 38.
+    //
+    //  É JOGÁVEL. Criada NO ROLLOVER (modelo Supercopa): consome os campeões
+    //  do ano que encerra e é disputada no INÍCIO da temporada seguinte, em
+    //  FEVEREIRO. São DOIS jogos (uma casa de cada) decididos por agregado +
+    //  pênaltis — por isso reusa a engine de copa ida/volta, e não a de jogo
+    //  único das supercopas/intercontinental.
+    // ══════════════════════════════════════════════════════════════
+    private val DIVISAO_HALL_RECOPA = 38
+    // Início da temporada: depois da Supercopa (ordemGlobal 1) e antes da 1ª
+    // rodada das ligas (~10) → cai em fevereiro, igual à Recopa real.
+    private val ORDEM_GLOBAL_RECOPA_IDA = 6
+    private val ORDEM_GLOBAL_RECOPA_VOLTA = 9
+    private val PREMIO_RECOPA_CAMPEAO = 20_000_000_00L
+    private val PREMIO_RECOPA_VICE = 8_000_000_00L
+
+    /**
+     * Cria a Recopa [novoAno] (SEM simular) a partir dos campeões continentais
+     * do ano [anoCampeoes] (o que encerrou). Agendada na temporada [temporadaId]
+     * (a nova), em fevereiro. Devolve o id, ou -1 se faltar campeão, se a edição
+     * já existe, ou se já há campeão da Recopa de [novoAno] no Hall.
+     */
+    suspend fun criarRecopaDeCampeoes(anoCampeoes: Int, novoAno: Int, temporadaId: Int): Int {
+        val champLib  = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoCampeoes, DIVISAO_HALL_LIBERTADORES) ?: return -1
+        val champSula = hallDaFamaDao.buscarCampeaoPorAnoEDivisao(anoCampeoes, DIVISAO_HALL_SULAMERICANA) ?: return -1
+        if (champLib.campeaoTimeId <= 0 || champSula.campeaoTimeId <= 0) return -1
+        // Libertadores e Sul-Americana são mutuamente exclusivas: o mesmo clube não
+        // vence as duas. A guarda abaixo é só defensiva.
+        if (champLib.campeaoTimeId == champSula.campeaoTimeId) return -1
+
+        val nomeCampeonato = "Recopa Sul-Americana $novoAno"
+        if (campeonatoDao.buscarPorTemporadaId(temporadaId).any { it.nome == nomeCampeonato }) return -1
+        if (hallDaFamaDao.buscarCampeaoPorAnoEDivisao(novoAno, DIVISAO_HALL_RECOPA) != null) return -1
+
+        val recopaId = campeonatoDao.inserir(
+            CampeonatoEntity(
+                temporadaId  = temporadaId,
+                nome         = nomeCampeonato,
+                tipo         = TipoCampeonato.CONTINENTAL,
+                formato      = FormatoCampeonato.MATA_MATA_IDA_VOLTA,
+                totalRodadas = 2,
+                pais         = "América do Sul"
+            )
+        ).toInt()
+        campeonatoDao.inserirParticipantes(listOf(
+            CampeonatoTimeEntity(recopaId, champLib.campeaoTimeId),
+            CampeonatoTimeEntity(recopaId, champSula.campeaoTimeId)
+        ))
+        // Ida na casa do campeão da Sul-Americana; volta na casa do campeão da
+        // Libertadores (mando de volta para o campeão da competição mais forte).
+        partidaDao.inserirTodas(
+            MotorCampeonato.gerarFaseIdaVolta(
+                campeonatoId      = recopaId,
+                pares             = listOf(champSula.campeaoTimeId to champLib.campeaoTimeId),
+                fase              = "Final",
+                rodadaIda         = 1,
+                confrontoIdInicio = 1,
+                ordemGlobalIda    = ORDEM_GLOBAL_RECOPA_IDA,
+                ordemGlobalVolta  = ORDEM_GLOBAL_RECOPA_VOLTA
+            )
+        )
+        return recopaId
+    }
+
+    // Resolução da Recopa: agregado + pênaltis, Hall divisão 38. Fase única "Final".
+    suspend fun verificarEAvancarFaseRecopa(
+        copaId: Int, anoAtual: Int, timeJogadorId: Int = -1, temporadaId: Int = 1
+    ): Boolean = verificarEAvancarFaseCopa(
+        copaId            = copaId,
+        anoAtual          = anoAtual,
+        timeJogadorId     = timeJogadorId,
+        temporadaId       = temporadaId,
+        fases             = listOf("Final"),
+        ordemGlobal       = intArrayOf(ORDEM_GLOBAL_RECOPA_IDA, ORDEM_GLOBAL_RECOPA_VOLTA),
+        divisaoHallDaFama = DIVISAO_HALL_RECOPA,
+        premioCampeao     = PREMIO_RECOPA_CAMPEAO,
+        premioVice        = PREMIO_RECOPA_VICE
+    )
+
+    suspend fun simularProximaFaseRecopaSeJogadorEliminado(
+        copaId: Int, timeJogadorId: Int, anoAtual: Int, temporadaId: Int
+    ) = avancarCopaIdaVoltaSeJogadorEliminado(copaId, timeJogadorId) {
+        verificarEAvancarFaseRecopa(copaId, anoAtual, timeJogadorId, temporadaId)
+    }
+
+    // Pênaltis da Recopa (jogador): mesmos defaults da fase "Final" / Hall 38.
+    suspend fun simularEPersistirPenaltisJogadorRecopa(
+        recopaId: Int, anoAtual: Int, partidaId: Int,
+        cobradoresJogador: List<JogadorNaEscalacao>, timeJogadorId: Int,
+        goleiroJogadorDefesa: Int, temporadaId: Int
+    ): ResultadoPenaltis = simularEPersistirPenaltisJogador(
+        copaId = recopaId, anoAtual = anoAtual, voltaPartidaId = partidaId,
+        cobradoresJogador = cobradoresJogador, timeJogadorId = timeJogadorId,
+        goleiroJogadorDefesa = goleiroJogadorDefesa, temporadaId = temporadaId,
+        fases = listOf("Final"),
+        ordemGlobal = intArrayOf(ORDEM_GLOBAL_RECOPA_IDA, ORDEM_GLOBAL_RECOPA_VOLTA),
+        divisaoHallDaFama = DIVISAO_HALL_RECOPA,
+        premioCampeao = PREMIO_RECOPA_CAMPEAO, premioVice = PREMIO_RECOPA_VICE
+    )
+
+    suspend fun persistirResultadoPenaltisJogadorRecopa(
+        resultado: ResultadoPenaltis, recopaId: Int, anoAtual: Int,
+        voltaPartidaId: Int, timeJogadorId: Int, temporadaId: Int
+    ) = persistirResultadoPenaltisJogador(
+        resultado = resultado, copaId = recopaId, anoAtual = anoAtual, voltaPartidaId = voltaPartidaId,
+        fases = listOf("Final"),
+        ordemGlobal = intArrayOf(ORDEM_GLOBAL_RECOPA_IDA, ORDEM_GLOBAL_RECOPA_VOLTA),
+        divisaoHallDaFama = DIVISAO_HALL_RECOPA,
+        premioCampeao = PREMIO_RECOPA_CAMPEAO, premioVice = PREMIO_RECOPA_VICE,
+        timeJogadorId = timeJogadorId, temporadaId = temporadaId
+    )
 
     // ══════════════════════════════════════════════════════════════
     //  UEFA Champions League  (TipoCampeonato.CONTINENTAL)
@@ -7031,7 +7155,8 @@ class GameRepository @Inject constructor(
                     2    -> (4..5).random()
                     else -> (2..3).random()  // grau 1 ou desconhecido
                 }
-                jogadorRepository.aplicarLesao(ev.jogadorId, partidas)
+                val grau = ev.grauLesao.coerceIn(1, 3)
+                jogadorRepository.aplicarLesao(ev.jogadorId, partidas, grau)
             }
 
         return notas
@@ -9227,8 +9352,8 @@ class GameRepository @Inject constructor(
         return ContinentaisEuropeias(novoChampionsId, novoEuropaLeagueId)
     }
 
-    /** Os ids das duas continentais da CONMEBOL na temporada nova. */
-    private data class ContinentaisSulAmericanas(val libertadores: Int, val sulAmericana: Int)
+    /** Os ids das continentais da CONMEBOL na temporada nova (+ Recopa em fevereiro). */
+    private data class ContinentaisSulAmericanas(val libertadores: Int, val sulAmericana: Int, val recopa: Int)
 
     /**
      * Vira as duas continentais sul-americanas, NA ORDEM: a Libertadores primeiro,
@@ -9263,7 +9388,13 @@ class GameRepository @Inject constructor(
             novoAno                = novoAno,
             timeJogadorId          = timeJogadorId
         )
-        return ContinentaisSulAmericanas(novoLibertadoresId, novoSulAmericanaId)
+        // Recopa Sul-Americana: criada agora, com os campeões do ano que encerrou
+        // (já gravados no Hall pela conclusão forçada acima), para ser disputada em
+        // fevereiro da temporada nova. Só existe a partir da 2ª temporada.
+        val recopaId = try {
+            criarRecopaDeCampeoes(anoCampeoes = ano, novoAno = novoAno, temporadaId = novoTemporadaId)
+        } catch (_: Exception) { -1 }
+        return ContinentaisSulAmericanas(novoLibertadoresId, novoSulAmericanaId, recopaId)
     }
 
     /**

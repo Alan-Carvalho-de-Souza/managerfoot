@@ -149,9 +149,11 @@ fun DashboardScreen(
         }
     }
 
-    // Onboarding — na primeira execução do save, mostra o tutorial de 4 slides
-    // antes de qualquer outra tela. Pular ou concluir marca a flag no DataStore.
-    if (saveState?.onboardingConcluido == false) {
+    // Onboarding — na primeira execução do save, mostra o tutorial de 4 slides.
+    // Ordem: o jogador escolhe o patrocinador PRIMEIRO (botão "Continuar" na tela
+    // de Patrocínio traz de volta aqui); só então o tutorial aparece. Pular ou
+    // concluir marca a flag no DataStore.
+    if (saveState?.onboardingConcluido == false && !precisaEscolherPatrocinador) {
         OnboardingScreen(onConcluir = { vm.concluirOnboarding() })
         return
     }
@@ -509,9 +511,12 @@ private fun AbaInicio(
                 val ehAmistosoPartida = snap != null && snap.campeonatoAmistososId > 0 && partida.campeonatoId == snap.campeonatoAmistososId
                 val ehIntercontinentalPartida = snap != null && snap.intercontinentalId > 0 &&
                     partida.campeonatoId == snap.intercontinentalId
+                val ehRecopaPartida = snap != null && snap.recopaId > 0 &&
+                    partida.campeonatoId == snap.recopaId
                 val resultLabel = when {
                     ehAmistosoPartida -> "Amistoso"
                     ehIntercontinentalPartida -> "Copa Intercontinental"
+                    ehRecopaPartida -> "Recopa Sul-Americana"
                     ehSupercopaPartida -> if (partida.campeonatoId == snap?.supercopaId) "Supercopa Rei" else "Supercopa"
                     ehCopaPartida -> "Copa do Brasil — ${partida.fase ?: "Copa"}"
                     ehCopaArgPartida -> "Copa Argentina — ${partida.fase ?: "Copa"}"
@@ -1429,6 +1434,7 @@ private fun nomeCampeonatoParaData(
     val snap = saveState ?: return "Brasileirao"
     return when {
         snap.intercontinentalId > 0 && ref.campeonatoId == snap.intercontinentalId -> "Intercontinental"
+        snap.recopaId > 0 && ref.campeonatoId == snap.recopaId -> "Recopa Sul-Americana"
         ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId) -> "Supercopa"
         snap.copaId > 0 && ref.campeonatoId == snap.copaId -> "Copa"
         ref.campeonatoId == snap.campeonatoArgAId ||
@@ -1456,6 +1462,9 @@ private fun competitionLabelFor(
         // Jogo único e último oficial da temporada: não tem rodada nem fase a exibir.
         snap.intercontinentalId > 0 && proximaPartida.campeonatoId == snap.intercontinentalId ->
             "Copa Intercontinental — Final"
+        // Recopa Sul-Americana: final em dois jogos (ida/volta).
+        snap.recopaId > 0 && proximaPartida.campeonatoId == snap.recopaId ->
+            "Recopa Sul-Americana — Final"
         ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
         ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"
         // Champions: na Fase de Liga a partida não tem fase (é o que alimenta a

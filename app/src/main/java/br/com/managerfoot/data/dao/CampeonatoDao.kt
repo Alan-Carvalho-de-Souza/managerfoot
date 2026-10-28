@@ -30,6 +30,10 @@ interface CampeonatoDao {
     @Query("SELECT * FROM campeonatos WHERE tipo = :tipo ORDER BY id DESC LIMIT 1")
     fun observeMaisRecentePorTipo(tipo: TipoCampeonato): Flow<CampeonatoEntity?>
 
+    /** Versão suspensa de [observeMaisRecentePorTipo] — p/ resolver o id uma vez. */
+    @Query("SELECT * FROM campeonatos WHERE tipo = :tipo ORDER BY id DESC LIMIT 1")
+    suspend fun buscarMaisRecentePorTipo(tipo: TipoCampeonato): CampeonatoEntity?
+
     @Query("SELECT * FROM campeonatos WHERE encerrado = 0 ORDER BY tipo")
     suspend fun buscarAtivos(): List<CampeonatoEntity>
 
