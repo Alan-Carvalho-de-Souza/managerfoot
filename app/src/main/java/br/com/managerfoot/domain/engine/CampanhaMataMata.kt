@@ -34,13 +34,26 @@ object CampanhaMataMata {
     )
 
     /**
-     * Fase mais avançada alcançada: a fase do último jogo da campanha. Depende dos
-     * jogos virem em ordem cronológica, que é como as consultas os devolvem
-     * (ORDER BY rodada). Null quando nenhum jogo tem fase — caso das ligas de
-     * pontos corridos, que não têm mata-mata.
+     * Fase mais avançada alcançada: a fase do ÚLTIMO jogo da campanha, seja ela
+     * qual for. Funciona porque as competições avançam junto com a rodada e as
+     * consultas devolvem os jogos em ordem (ORDER BY rodada).
+     *
+     * **Devolver null significa "caiu na fase de grupos ou na fase de liga"**, não
+     * "sem fase": os geradores gravam as partidas de grupo (Libertadores,
+     * Sul-Americana) e de fase de liga (Champions, Europa League) com `fase = null`.
+     * Qual das duas foi, só o formato do campeonato diz — quem exibe decide o
+     * rótulo. Para uma liga de pontos corridos, que não passa por aqui, também
+     * seria null.
+     *
+     * Antes isto era `lastOrNull { it.fase != null }`, que pulava justamente as
+     * partidas de grupo e produzia o erro oposto: um clube que passou pela
+     * Pré-Libertadores ("Fase 1".."Fase 3", gravadas DENTRO do mesmo campeonato) e
+     * caiu na fase de grupos aparecia como eliminado na "Fase 3" — como se nem
+     * tivesse chegado aos grupos. Mesmo problema na Sul-Americana, cuja fase
+     * prévia se chama "Primeira Fase".
      */
     fun faseAtingida(jogos: List<Jogo>): String? =
-        jogos.lastOrNull { it.fase != null }?.fase
+        jogos.lastOrNull()?.fase
 
     /**
      * Campeão ou vice, para quem disputou a decisão; null para quem não chegou

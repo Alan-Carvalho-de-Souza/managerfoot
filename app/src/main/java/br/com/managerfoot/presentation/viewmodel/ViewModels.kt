@@ -2484,7 +2484,8 @@ class ClubesViewModel @Inject constructor(
                 vitorias = v, empates = e, derrotas = d, golsPro = gp, golsContra = gc,
                 pontos = 0, jogos = lista.size,
                 faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
-                resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
+                resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha),
+                formato        = first.formato
             )
         }
         // Mesma deduplicação do histórico das estatísticas: uma continental com
@@ -3509,10 +3510,14 @@ data class TemporadaCompeticao(
     val jogos: Int,
     val jogadores: List<br.com.managerfoot.data.dao.EstatisticaJogadorDto>,
     val ehCopa: Boolean = false,
+    // null com `ehCopa` significa que o clube caiu na fase de grupos ou de liga,
+    // que são gravadas sem fase. O `formato` diz qual das duas.
     val faseAtingida: String? = null,
     // Preenchido só para quem disputou a decisão: a tela mostra "Campeão"/"Vice"
     // em vez de "Final". Ver CampanhaMataMata.resultadoDaFinal.
-    val resultadoFinal: ResultadoFinal? = null
+    val resultadoFinal: ResultadoFinal? = null,
+    // Nome do enum FormatoCampeonato.
+    val formato: String = ""
 )
 
 // ── Campanha de mata-mata: fase alcançada e desfecho da decisão ──────────
@@ -3560,7 +3565,9 @@ data class HistoricoTemporada(
     val pontos: Int,
     val jogos: Int,
     val faseAtingida: String? = null,
-    val resultadoFinal: ResultadoFinal? = null
+    val resultadoFinal: ResultadoFinal? = null,
+    // Nome do enum FormatoCampeonato. Ver TemporadaCompeticao.formato.
+    val formato: String = ""
 )
 
 @HiltViewModel
@@ -3647,6 +3654,7 @@ class EstatisticasTimeViewModel @Inject constructor(
             val partidas = gameRepository.buscarPartidasDaEquipe(campId, timeId)
             if (partidas.isEmpty()) continue
             val jogadores = gameRepository.buscarEstatisticasJogadoresPorCampeonato(campId, timeId)
+            val formato = gameRepository.buscarCampeonato(campId)?.formato?.name ?: ""
             val campanha = partidas.campanhaDasPartidas(timeId)
             var v = 0; var e = 0; var d = 0; var gp = 0; var gc = 0
             for (j in campanha) {
@@ -3671,7 +3679,8 @@ class EstatisticasTimeViewModel @Inject constructor(
                     jogadores      = jogadores,
                     ehCopa         = true,
                     faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
-                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
+                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha),
+                    formato        = formato
                 )
             )
         }
@@ -3731,7 +3740,8 @@ class EstatisticasTimeViewModel @Inject constructor(
                     pontos         = 0,
                     jogos          = lista.size,
                     faseAtingida   = CampanhaMataMata.faseAtingida(campanha),
-                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha)
+                    resultadoFinal = CampanhaMataMata.resultadoDaFinal(campanha),
+                    formato        = first.formato
                 )
             }
 

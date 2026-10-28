@@ -702,6 +702,7 @@ interface PartidaDao {
                c.nome           AS nomeCampeonato,
                c.temporadaId    AS temporadaId,
                c.tipo           AS tipo,
+               c.formato        AS formato,
                p.timeCasaId     AS timeCasaId,
                p.timeForaId     AS timeForaId,
                p.golsCasa       AS golsCasa,
@@ -723,6 +724,7 @@ interface PartidaDao {
                c.nome           AS nomeCampeonato,
                c.temporadaId    AS temporadaId,
                c.tipo           AS tipo,
+               c.formato        AS formato,
                p.timeCasaId     AS timeCasaId,
                p.timeForaId     AS timeForaId,
                p.golsCasa       AS golsCasa,
@@ -886,6 +888,10 @@ data class PartidaCopaHistoricoDto(
     // Nome do enum TipoCampeonato, para a UI distinguir copa nacional de
     // continental sem adivinhar pelo nome do campeonato.
     val tipo: String,
+    // Nome do enum FormatoCampeonato. É o que diz se as partidas sem fase são de
+    // fase de GRUPOS (Libertadores, Sul-Americana) ou de fase de LIGA (Champions,
+    // Europa League) — as duas gravam `fase = null`.
+    val formato: String,
     val timeCasaId: Int,
     val timeForaId: Int,
     val golsCasa: Int?,

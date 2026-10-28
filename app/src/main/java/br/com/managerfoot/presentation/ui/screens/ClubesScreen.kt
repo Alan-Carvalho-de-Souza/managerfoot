@@ -33,6 +33,7 @@ import br.com.managerfoot.presentation.ui.components.TeamBadge
 import br.com.managerfoot.presentation.ui.components.corSetor
 import br.com.managerfoot.presentation.ui.components.formatarSaldo
 import br.com.managerfoot.presentation.ui.theme.*
+import br.com.managerfoot.presentation.ui.util.RotuloCampanha
 import br.com.managerfoot.presentation.viewmodel.ClubesViewModel
 import br.com.managerfoot.presentation.viewmodel.ConquistasViewModel
 import br.com.managerfoot.presentation.viewmodel.HistoricoTemporada
@@ -331,7 +332,9 @@ private fun InfoLinha(rotulo: String, valor: String) {
 
 @Composable
 private fun CampanhaCard(h: HistoricoTemporada) {
-    val ehCopa = h.tipo == "COPA_NACIONAL"
+    // Inclui as continentais e as supercopas: com o teste antigo em COPA_NACIONAL
+    // elas caíam no ramo de liga e apareciam com "0º" e "0 pts".
+    val ehCopa = RotuloCampanha.ehMataMata(h.tipo)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radius.md),
@@ -341,7 +344,9 @@ private fun CampanhaCard(h: HistoricoTemporada) {
         Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(h.nomeCampeonato, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                val destaque = if (ehCopa) (h.faseAtingida ?: "—") else "${h.posicao}º"
+                val destaque = if (ehCopa)
+                    (RotuloCampanha.resumo(h.resultadoFinal, h.faseAtingida, h.formato) ?: "—")
+                else "${h.posicao}º"
                 Text(destaque, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = GreenElectric)
             }
             Text(

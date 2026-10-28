@@ -29,9 +29,80 @@ class CampanhaMataMataTest {
 
     @Test
     fun `campanha sem fase nao tem fase atingida`() {
-        // Liga de pontos corridos: nenhuma partida tem fase.
+        // Fase de grupos / fase de liga: as partidas são gravadas sem fase, e
+        // null aqui significa "caiu nessa fase". Quem exibe decide o rótulo pelo
+        // formato do campeonato.
         val campanha = listOf(jogo(null, 1, 0), jogo(null, 2, 2))
         assertNull(CampanhaMataMata.faseAtingida(campanha))
+    }
+
+    // ── Fase de grupos / fase de liga ────────────────────────────────────
+    // Libertadores e Sul-Americana (grupos) e Champions e Europa League (fase de
+    // liga) gravam essas partidas com fase = null.
+
+    @Test
+    fun `eliminado na fase de liga da champions nao tem fase`() {
+        // 8 jogos da fase de liga, sem play-off depois: caiu ali.
+        val campanha = List(8) { jogo(null, 1, 1) }
+        assertNull(CampanhaMataMata.faseAtingida(campanha))
+    }
+
+    @Test
+    fun `quem passa da pre e cai nos grupos nao aparece eliminado na pre`() {
+        // ESTA é a armadilha da Pré-Libertadores: as três fases prévias são
+        // gravadas DENTRO do mesmo campeonato ("Fase 1".."Fase 3") e vêm ANTES
+        // das partidas de grupo, que não têm fase. Pegar a última fase NÃO nula
+        // devolvia "Fase 3" para quem, na verdade, chegou à fase de grupos.
+        val campanha = listOf(
+            jogo("Fase 1", 2, 0), jogo("Fase 1", 1, 1),
+            jogo("Fase 2", 1, 0), jogo("Fase 2", 0, 0),
+            jogo("Fase 3", 3, 1), jogo("Fase 3", 1, 2),
+            // fase de grupos
+            jogo(null, 1, 1), jogo(null, 0, 2), jogo(null, 2, 1),
+            jogo(null, 0, 0), jogo(null, 1, 3), jogo(null, 1, 1)
+        )
+        assertNull(
+            "deveria indicar fase de grupos, não a última fase da Pré",
+            CampanhaMataMata.faseAtingida(campanha)
+        )
+    }
+
+    @Test
+    fun `mesma armadilha na sul-americana, cuja fase previa e Primeira Fase`() {
+        val campanha = listOf(
+            jogo("Primeira Fase", 1, 0), jogo("Primeira Fase", 2, 1),
+            jogo(null, 1, 1), jogo(null, 0, 1)
+        )
+        assertNull(CampanhaMataMata.faseAtingida(campanha))
+    }
+
+    @Test
+    fun `eliminado na pre mantem a fase da pre`() {
+        // Quem cai na Pré não tem partida de grupo depois, então a fase da Pré é
+        // mesmo a última — e deve ser preservada.
+        val campanha = listOf(
+            jogo("Fase 1", 1, 0), jogo("Fase 1", 0, 0),
+            jogo("Fase 2", 0, 1), jogo("Fase 2", 1, 2)
+        )
+        assertEquals("Fase 2", CampanhaMataMata.faseAtingida(campanha))
+    }
+
+    @Test
+    fun `quem passa dos grupos mostra a fase eliminatoria`() {
+        val campanha = listOf(
+            jogo("Fase 3", 2, 0),
+            jogo(null, 1, 1), jogo(null, 2, 0),
+            jogo("Oitavas", 1, 0), jogo("Oitavas", 0, 2),
+            jogo("Quartas", 1, 1), jogo("Quartas", 0, 1)
+        )
+        assertEquals("Quartas", CampanhaMataMata.faseAtingida(campanha))
+    }
+
+    @Test
+    fun `play-off da champions e a fase atingida de quem cai nele`() {
+        val campanha = List(8) { jogo(null, 1, 1) } +
+            listOf(jogo("Play-off", 0, 1), jogo("Play-off", 1, 2))
+        assertEquals("Play-off", CampanhaMataMata.faseAtingida(campanha))
     }
 
     // ── Decisão: campeão e vice ──────────────────────────────────────────

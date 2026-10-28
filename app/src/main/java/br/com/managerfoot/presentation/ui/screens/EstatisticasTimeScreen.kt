@@ -28,6 +28,7 @@ import br.com.managerfoot.presentation.ui.components.ScreenTopBar
 import br.com.managerfoot.presentation.ui.components.SectionTitle
 import br.com.managerfoot.presentation.ui.components.TabRowPill
 import br.com.managerfoot.presentation.ui.theme.*
+import br.com.managerfoot.presentation.ui.util.RotuloCampanha
 import br.com.managerfoot.presentation.ui.util.Trofeus
 import br.com.managerfoot.presentation.viewmodel.EstatisticasTimeViewModel
 import br.com.managerfoot.presentation.viewmodel.HistoricoTemporada
@@ -137,7 +138,7 @@ private fun CompeticaoCard(comp: TemporadaCompeticao) {
                 val (chipTexto, chipCor) = when (comp.resultadoFinal) {
                     ResultadoFinal.CAMPEAO -> "Campeão" to GoldChampion
                     ResultadoFinal.VICE    -> "Vice"    to SilverRunnerUp
-                    null                   -> comp.faseAtingida?.faseLabel() to LibertadoresBlue
+                    null                   -> RotuloCampanha.daCampanha(comp.faseAtingida, comp.formato) to LibertadoresBlue
                 }
                 if (comp.ehCopa && chipTexto != null) {
                     Surface(
@@ -274,7 +275,7 @@ private fun HistoricoCard(h: HistoricoTemporada) {
         // que existiam aqui farejavam o nome por conta própria e só conheciam
         // Copa do Brasil, Copa da Argentina e Supercopa Rei — as continentais
         // caíam no `else` e apareciam com o nome cru, repetindo o ano.
-        h.tipo in TIPOS_MATA_MATA -> Trofeus.resolver(h.nomeCampeonato).nomeCurto
+        RotuloCampanha.ehMataMata(h.tipo) -> Trofeus.resolver(h.nomeCampeonato).nomeCurto
         h.tipo == "LIGA_ARGENTINA" -> "Liga Argentina"
         h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Apertura", ignoreCase = true) -> "Apertura"
         h.tipo == "EXTRANGEIRO_DIVISAO1" && h.nomeCampeonato.contains("Clausura", ignoreCase = true) -> "Clausura"
@@ -294,10 +295,10 @@ private fun HistoricoCard(h: HistoricoTemporada) {
         // demais, pela fase em que caíram. O caso antigo da Supercopa decidia por
         // `vitorias > 0`, que não serve para final de ida e volta nem para
         // decisão por pênaltis — agora é o mesmo cálculo de todas as copas.
-        h.tipo in TIPOS_MATA_MATA -> when (h.resultadoFinal) {
+        RotuloCampanha.ehMataMata(h.tipo) -> when (h.resultadoFinal) {
             ResultadoFinal.CAMPEAO -> "Campeão" to GoldChampion
             ResultadoFinal.VICE    -> "Vice"    to SilverRunnerUp
-            null                   -> (h.faseAtingida?.faseLabel() ?: "—") to LibertadoresBlue
+            null                   -> (RotuloCampanha.daCampanha(h.faseAtingida, h.formato) ?: "—") to LibertadoresBlue
         }
         h.tipo == "LIGA_ARGENTINA" -> "—" to MaterialTheme.colorScheme.onSurfaceVariant
         else -> {
@@ -623,24 +624,6 @@ private fun JogadorEstatRow(j: EstatisticaJogadorDto) {
             textAlign = TextAlign.Center
         )
     }
-}
-
-// Tipos de campeonato com fase eliminatória, como o enum TipoCampeonato os
-// grava. Copas nacionais, supercopas de jogo único e as continentais
-// (Libertadores, Sul-Americana, Recopa, Champions, Europa League e
-// Intercontinental, todas CONTINENTAL).
-private val TIPOS_MATA_MATA = setOf("COPA_NACIONAL", "CONTINENTAL", "SUPERCOPA")
-
-private fun String.faseLabel() = when (this) {
-    "Primeira Fase" -> "1ª Fase"
-    "Segunda Fase"  -> "2ª Fase"
-    "Terceira Fase" -> "3ª Fase"
-    "Quarta Fase"   -> "4ª Fase"
-    "Oitavas"       -> "Oitavas"
-    "Quartas"       -> "Quartas"
-    "Semi"          -> "Semifinal"
-    "Final"         -> "Final"
-    else            -> this
 }
 
 private fun corDaNotaEstat(nota: Float): Color = when {

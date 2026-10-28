@@ -258,6 +258,13 @@ class GameRepository @Inject constructor(
     suspend fun buscarPartidasDaEquipe(campeonatoId: Int, timeId: Int) =
         partidaDao.buscarPartidasDaEquipe(campeonatoId, timeId)
 
+    /**
+     * O campeonato em si. A UI usa o `formato` para saber se as partidas sem fase
+     * são de fase de grupos ou de fase de liga — as duas gravam `fase = null`.
+     */
+    suspend fun buscarCampeonato(campeonatoId: Int) =
+        campeonatoDao.buscarPorId(campeonatoId)
+
     suspend fun buscarHistoricoCopaDoTime(timeId: Int) =
         partidaDao.buscarHistoricoCopaDoTime(timeId)
 
