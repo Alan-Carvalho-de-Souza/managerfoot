@@ -319,6 +319,48 @@ coloração com janelas estreitas.
 O validador que julga tudo isso já existe (`conflitosDoPerfil`) e está testado.
 Falta montar os perfis reais sobre as tabelas e mover os dias até zerar.
 
+#### Impacto em saves: faça a etapa 3 SEM tocar nas tabelas vivas
+
+A etapa 3 pode ser feita de dois jeitos, e eles não têm o mesmo custo.
+
+**(A) Confinada ao `CalendarioDaTemporada`** — decidir qual é o calendário
+certo no objeto novo, que nenhum gerador lê ainda. **Impacto zero em saves.**
+
+**(B) Mexendo nos `intArrayOf` vivos de `MotorCampeonato`** — aí há impacto, e
+ele é específico:
+
+1. **Nada se perde.** As tabelas são lidas na geração, então as partidas já
+   gravadas ficam como estão. Nenhum histórico quebra.
+2. **Mas a temporada corrente fica MISTA.** Há 14 funções `verificarEAvancarFase*`
+   que geram partidas DURANTE a temporada — grupos da Libertadores, oitavas da
+   Champions, fases da Copa do Rei, playoff uruguaio. Num save a meio de
+   temporada, o que já existe usa os dias velhos e o que vier usa os novos:
+   datas incoerentes dentro da mesma competição, e — pior — se um valor novo
+   cair abaixo do de uma partida já jogada, `buscarProximaPartida` (que ordena
+   por `ordemGlobal`) aponta para algo que o calendário mostra no passado. E os
+   conflitos que a etapa 3 resolve **reaparecem** nesse save, porque os valores
+   novos foram escolhidos contra os novos, não contra os velhos.
+3. **Uma quebra de comportamento real:** `GameRepository:2221` identifica o
+   Clausura argentino lendo o valor gravado —
+   `any { it.ordemGlobal > ARG_CLAUSURA_OG_OFFSET + 10 }`. Mudar a faixa
+   argentina faz um save existente deixar de reconhecer o Clausura, e o avanço
+   de fase do torneio erra. Isso não é cosmético.
+4. **Quatro casas mágicas** em `CalendarioDoJogo` leem o valor gravado: `== 1`
+   (supercopa, 25 jan), `== 620` (Troféu), `>= 400` (amistoso de dezembro),
+   `== 440` (Intercontinental). Tirar as supercopas da casa 1 — que é um dos
+   consertos da etapa 3 — faz as novas caírem na curva genérica e exibirem data
+   errada, enquanto as antigas seguem em 25 jan.
+
+**Uma exceção:** competições geradas INTEIRAS no início da temporada (as ligas
+de pontos corridos) só afetam a temporada seguinte, porque o save corrente já
+tem o calendário completo delas. A correção da Championship é desta classe.
+
+**Decisão: a etapa 3 fica no (A).** A troca das tabelas vivas vai junto com a
+etapa 2, que já precisa de migração — **uma ruptura só, com migração, em vez de
+duas sem**. A migração da etapa 2 resolve os quatro pontos acima de uma vez:
+converte a temporada corrente inteira, então não há mistura, o `isClausura` não
+lê faixa errada e as casas mágicas desaparecem porque o dia é o dia.
+
 ### Etapa 3 — como era descrita
 
 Um teste que varre a temporada inteira de cada perfil de clube e falha se:
