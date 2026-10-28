@@ -647,19 +647,5 @@ private fun OfertaConfirmDialog(
     )
 }
 
-private fun nomeDivisao(divisao: Int): String = when (divisao) {
-    1 -> "Série A"
-    2 -> "Série B"
-    3 -> "Série C"
-    4 -> "Série D"
-    5 -> "Primera División"
-    6 -> "Primera Nacional"
-    9 -> "Primera División Uruguaia"
-    10 -> "Segunda División Uruguaia"
-    11 -> "Premier League"
-    12 -> "EFL Championship"
-    13 -> "La Liga"
-    14 -> "Serie A"
-    90, 91, 92 -> "Outros times"
-    else -> "Divisão $divisao"
-}
+private fun nomeDivisao(divisao: Int): String =
+    br.com.managerfoot.presentation.ui.util.NomeDaLiga.deDivisao(divisao)

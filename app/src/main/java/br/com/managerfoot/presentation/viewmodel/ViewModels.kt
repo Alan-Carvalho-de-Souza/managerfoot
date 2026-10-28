@@ -3604,15 +3604,10 @@ class EstatisticasTimeViewModel @Inject constructor(
         val save = gameDataStore.saveState.first()
 
         // Nomeia o campeonato da liga do jogador
-        val nomeLiga = when (save.campeonatoId) {
-            save.campeonatoAId -> "Série A"
-            save.campeonatoBId -> "Série B"
-            save.campeonatoCId -> "Série C"
-            save.campeonatoDId -> "Série D"
-            save.campeonatoArgAId -> "Apertura"
-            save.campeonatoArgClausuraId -> "Clausura"
-            else -> "Liga"
-        }
+        // Esta cadeia só conhecia o Brasil e a Argentina: a liga de um clube
+        // inglês, espanhol ou italiano aparecia como "Liga".
+        val nomeLiga = br.com.managerfoot.presentation.ui.util.MapaDeCompeticoes
+            .de(save).de(save.campeonatoId)?.nome ?: "Liga"
         val temporadaList = mutableListOf<TemporadaCompeticao>()
 
         // Liga do jogador na temporada corrente

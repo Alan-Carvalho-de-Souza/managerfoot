@@ -64,6 +64,9 @@ import br.com.managerfoot.data.database.entities.PropostaIAEntity
 import br.com.managerfoot.data.database.entities.StatusProposta
 import br.com.managerfoot.data.database.entities.StatusPropostaClube
 import br.com.managerfoot.data.database.entities.TipoCampeonato
+import br.com.managerfoot.presentation.ui.util.EstiloCompeticao
+import br.com.managerfoot.presentation.ui.util.MapaDeCompeticoes
+import br.com.managerfoot.presentation.ui.util.NomeDaLiga
 import br.com.managerfoot.data.database.entities.TipoProposta
 import br.com.managerfoot.data.repository.InfoPropostaClube
 import br.com.managerfoot.data.repository.ResultadoTemporadaClube
@@ -333,6 +336,7 @@ private fun AbaInicio(
     val forma = remember(ultimosResultados, meuTimeId) {
         derivarFormaUltimos5(ultimosResultados, meuTimeId)
     }
+    val mapaCompeticoes = remember(saveState) { MapaDeCompeticoes.de(saveState) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -435,7 +439,11 @@ private fun AbaInicio(
                 val escudoCasa = timeCasa?.escudoRes ?: ""
                 val escudoFora = timeFora?.escudoRes ?: ""
 
-                val competitionLabel = competitionLabelFor(saveState, proximaPartida)
+                val competitionLabel = mapaCompeticoes.daProximaPartida(
+                    campeonatoId = proximaPartida.campeonatoId,
+                    fase = proximaPartida.fase,
+                    rodada = proximaPartida.rodada
+                )
                 val dataJogoLabel = run {
                     val nomeCamp = nomeCampeonatoParaData(saveState, proximaPartida, ultimosResultados)
                     val (mes, dia) = dashOrdemGlobalParaData(proximaPartida.ordemGlobal, nomeCamp)
@@ -498,40 +506,24 @@ private fun AbaInicio(
             }
             items(ultimosResultados.take(5).size) { idx ->
                 val partida = ultimosResultados[idx]
-                val snap = saveState
                 val nomeCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.nome ?: "Time ${partida.timeCasaId}"
                 val nomeFora = todosOsTimes.find { it.id == partida.timeForaId }?.nome ?: "Time ${partida.timeForaId}"
                 val escudoCasa = todosOsTimes.find { it.id == partida.timeCasaId }?.escudoRes ?: ""
                 val escudoFora = todosOsTimes.find { it.id == partida.timeForaId }?.escudoRes ?: ""
 
-                val ehCopaPartida = snap != null && snap.copaId > 0 && partida.campeonatoId == snap.copaId
-                val ehCopaArgPartida = snap != null && snap.copaArgId > 0 && partida.campeonatoId == snap.copaArgId
-                val ehSupercopaPartida = snap != null && partida.campeonatoId > 0 &&
-                    partida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
-                val ehAmistosoPartida = snap != null && snap.campeonatoAmistososId > 0 && partida.campeonatoId == snap.campeonatoAmistososId
-                val ehIntercontinentalPartida = snap != null && snap.intercontinentalId > 0 &&
-                    partida.campeonatoId == snap.intercontinentalId
-                val ehRecopaPartida = snap != null && snap.recopaId > 0 &&
-                    partida.campeonatoId == snap.recopaId
-                val resultLabel = when {
-                    ehAmistosoPartida -> "Amistoso"
-                    ehIntercontinentalPartida -> "Copa Intercontinental"
-                    ehRecopaPartida -> "Recopa Sul-Americana"
-                    ehSupercopaPartida -> if (partida.campeonatoId == snap?.supercopaId) "Supercopa Rei" else "Supercopa"
-                    ehCopaPartida -> "Copa do Brasil — ${partida.fase ?: "Copa"}"
-                    ehCopaArgPartida -> "Copa Argentina — ${partida.fase ?: "Copa"}"
-                    partida.campeonatoId == snap?.campeonatoAId -> "Série A · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoBId -> "Série B · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoCId -> "Série C · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoDId -> "Série D · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoArgAId -> "Apertura · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoArgBId -> "Segunda Div. · R${partida.rodada}"
-                    partida.campeonatoId == snap?.campeonatoArgClausuraId -> "Clausura · R${partida.rodada}"
-                    else -> "Rodada ${partida.rodada}"
-                }
-                val labelCor = when {
-                    ehSupercopaPartida -> GoldChampion
-                    ehCopaPartida || ehCopaArgPartida -> MaterialTheme.colorScheme.primary
+                // O mesmo mapa que nomeia a próxima partida nomeia o histórico:
+                // antes esta cadeia só conhecia o Brasil e a Argentina, e tudo
+                // o mais — Premier, La Liga, copas e supercopas europeias,
+                // continentais — virava "Rodada N".
+                val resultLabel = mapaCompeticoes.doResultado(
+                    campeonatoId = partida.campeonatoId,
+                    fase = partida.fase,
+                    rodada = partida.rodada
+                )
+                val labelCor = when (mapaCompeticoes.de(partida.campeonatoId)?.estilo) {
+                    EstiloCompeticao.SUPERCOPA -> GoldChampion
+                    EstiloCompeticao.COPA,
+                    EstiloCompeticao.CONTINENTAL -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 }
                 Column(Modifier.padding(horizontal = Spacing.lg)) {
@@ -1408,16 +1400,7 @@ private fun ResultadoClubeRow(resultado: ResultadoTemporadaClube) {
     }
 }
 
-private fun nomeDivisaoClube(divisao: Int): String = when (divisao) {
-    1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"
-    5 -> "Primeira Div. Argentina (Apertura)"; 6 -> "Segunda Div. Argentina"
-    9 -> "Primeira Div. Uruguai"; 10 -> "Segunda Div. Uruguai"
-    11 -> "Premier League"
-    12 -> "EFL Championship"
-    13 -> "La Liga"
-    14 -> "Serie A"
-    else -> "Div. $divisao"
-}
+private fun nomeDivisaoClube(divisao: Int): String = NomeDaLiga.deDivisao(divisao)
 
 // ─── Helpers de cálculo de data e identificação de campeonato ────────
 
@@ -1432,65 +1415,17 @@ private fun nomeCampeonatoParaData(
 ): String {
     val ref = proximaPartida ?: ultimosResultados.firstOrNull() ?: return "Brasileirao"
     val snap = saveState ?: return "Brasileirao"
+    // Só existem três curvas de data: a de copa (datas avulsas), a argentina
+    // (calendário mais curto) e a de liga. O que importa aqui é qual delas usar,
+    // não o nome da competição — por isso o estilo basta. Antes só a Copa do
+    // Brasil pegava a curva de copa, e a Copa do Rei caía na de liga.
+    val estilo = MapaDeCompeticoes.de(snap).de(ref.campeonatoId)?.estilo
     return when {
-        snap.intercontinentalId > 0 && ref.campeonatoId == snap.intercontinentalId -> "Intercontinental"
-        snap.recopaId > 0 && ref.campeonatoId == snap.recopaId -> "Recopa Sul-Americana"
-        ref.campeonatoId > 0 && ref.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId) -> "Supercopa"
-        snap.copaId > 0 && ref.campeonatoId == snap.copaId -> "Copa"
+        estilo == EstiloCompeticao.COPA || estilo == EstiloCompeticao.SUPERCOPA -> "Copa"
         ref.campeonatoId == snap.campeonatoArgAId ||
         ref.campeonatoId == snap.campeonatoArgBId ||
         ref.campeonatoId == snap.campeonatoArgClausuraId -> "Argentina"
         else -> "Brasileirao"
-    }
-}
-
-/**
- * Constrói o label de competição mostrado no card de "Próxima partida".
- * Cobre Brasileirão (Série A-D), Copa do Brasil, Supercopa, Argentina
- * (Apertura/Clausura/Segunda Div) e as continentais (Champions, Europa League
- * e Libertadores).
- */
-private fun competitionLabelFor(
-    saveState: br.com.managerfoot.data.datasource.SaveState?,
-    proximaPartida: br.com.managerfoot.data.database.entities.PartidaEntity
-): String {
-    val snap = saveState ?: return "Brasileirão"
-    val ehCopa = snap.copaId > 0 && proximaPartida.campeonatoId == snap.copaId
-    val ehSupercopa = proximaPartida.campeonatoId > 0 &&
-        proximaPartida.campeonatoId in setOf(snap.supercopaId, snap.supercopaInglaterraId, snap.supercopaEspanholaId, snap.supercopaItalianaId, snap.supercopaUefaId)
-    return when {
-        // Jogo único e último oficial da temporada: não tem rodada nem fase a exibir.
-        snap.intercontinentalId > 0 && proximaPartida.campeonatoId == snap.intercontinentalId ->
-            "Copa Intercontinental — Final"
-        // Recopa Sul-Americana: final em dois jogos (ida/volta).
-        snap.recopaId > 0 && proximaPartida.campeonatoId == snap.recopaId ->
-            "Recopa Sul-Americana — Final"
-        ehSupercopa -> if (proximaPartida.campeonatoId == snap.supercopaId) "Supercopa Rei" else "Supercopa"
-        ehCopa -> "Copa do Brasil — ${proximaPartida.fase ?: "Copa"}"
-        // Champions: na Fase de Liga a partida não tem fase (é o que alimenta a
-        // tabela de 1 a 36); do play-off em diante o nome da fase aparece.
-        snap.championsId > 0 && proximaPartida.campeonatoId == snap.championsId ->
-            "Champions League — ${proximaPartida.fase ?: "Fase de Liga"}"
-        snap.europaLeagueId > 0 && proximaPartida.campeonatoId == snap.europaLeagueId ->
-            "Europa League — ${proximaPartida.fase ?: "Fase de Liga"}"
-        // Libertadores: a fase de grupos tem fase = null (e o que alimenta as 8
-        // tabelas de 4); a Pre-Libertadores e o mata-mata trazem o nome da fase.
-        snap.libertadoresId > 0 && proximaPartida.campeonatoId == snap.libertadoresId ->
-            "Libertadores — ${proximaPartida.fase ?: "Fase de Grupos"}"
-        // Sul-Americana: mesma forma — a Primeira Fase e o mata-mata trazem o
-        // nome da fase, e a fase de grupos vem com fase = null.
-        snap.sulAmericanaId > 0 && proximaPartida.campeonatoId == snap.sulAmericanaId ->
-            "Copa Sul-Americana — ${proximaPartida.fase ?: "Fase de Grupos"}"
-        else -> when (proximaPartida.campeonatoId) {
-            snap.campeonatoAId -> "Série A"
-            snap.campeonatoBId -> "Série B"
-            snap.campeonatoCId -> "Série C"
-            snap.campeonatoDId -> "Série D"
-            snap.campeonatoArgAId -> "Apertura — ${proximaPartida.fase ?: "Grupo"}"
-            snap.campeonatoArgBId -> "Segunda Div."
-            snap.campeonatoArgClausuraId -> "Clausura — ${proximaPartida.fase ?: "Grupo"}"
-            else -> "Brasileirão"
-        }
     }
 }
 

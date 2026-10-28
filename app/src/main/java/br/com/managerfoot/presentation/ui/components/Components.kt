@@ -138,12 +138,10 @@ fun TimeHeaderCard(
     ano: Int = 0,
     forma: List<Resultado> = emptyList()
 ) {
-    val serieLabel = when (time.divisao) {
-        1 -> "Série A"; 2 -> "Série B"; 3 -> "Série C"; 4 -> "Série D"
-        5 -> "Primera Div."; 6 -> "Segunda Div. (ARG)"
-        in 11..12 -> "Primera Div. (URU)"; in 13..16 -> "Segunda Div. (URU)"
-        else -> "Série"
-    }
+    // Antes esta tabela vivia aqui, e ainda dizia que 11..16 era o Uruguai — de
+    // quando as ligas europeias não existiam. Um clube da La Liga (divisão 13)
+    // aparecia no header como "Segunda Div. (URU)".
+    val serieLabel = br.com.managerfoot.presentation.ui.util.NomeDaLiga.curto(time.divisao)
     val periodoLabel = if (mes in 1..12 && ano > 0) {
         if (dia > 0) "$dia ${NOMES_MESES_HEADER[mes]} $ano"
         else "${NOMES_MESES_HEADER[mes]} $ano"
