@@ -204,13 +204,43 @@ temporada`, construído a partir das tabelas atuais. Persistido na tabela
 Os geradores pedem o dia ao calendário em vez de ler `intArrayOf`. A conversão
 de exibição vira identidade.
 
-- **Saves:** exige migração. Converter o `ordemGlobal` de toda partida existente
-  pela derivação atual, que é função pura de `(ordemGlobal, nome do campeonato)`
-  — ambos gravados. **Há precedente**: `migrarOrdemGlobalCopaBrasil` já reescreve
-  `ordemGlobal` de saves antigos, chamada no startup (`ViewModels:730`).
+- **Saves:** exige migração. Converter o `ordemGlobal` pela derivação atual, que
+  é função pura de `(ordemGlobal, nome do campeonato)` — ambos gravados. **Há
+  precedente**: `migrarOrdemGlobalCopaBrasil` já reescreve `ordemGlobal` de
+  saves antigos, chamada no startup (`ViewModels:730`).
+
+**A migração NÃO pode ser preguiçosa, e não pode ser do save inteiro.**
+
+Converter só na leitura (como foi feito com as transferências sem relógio) não
+serve aqui: no meio de uma temporada, as partidas já geradas estariam na escala
+velha e as geradas depois — os grupos da Libertadores, o mata-mata das copas —
+na nova. Duas escalas dentro da MESMA temporada quebram todo `ORDER BY
+ordemGlobal`, incluindo `buscarProximaPartida`. A conversão tem de ser ansiosa.
+
+Mas o save inteiro é grande. Contando as competições do seed:
+
+| | partidas |
+|---|---|
+| Ligas (BR A–D, Premier, Championship, La Liga, Serie A, ARG, URU) | ~5.500 |
+| Copas nacionais | ~155 |
+| Continentais | ~610 |
+| **por temporada** | **~6.300** |
+| após 10 temporadas | ~63.000 |
+
+Ler 63 mil linhas com o nome do campeonato e reescrevê-las no `onCreate` do app
+é lento o bastante para o usuário ver.
+
+**A saída: migrar ansiosamente só a TEMPORADA CORRENTE (~6.300 linhas).** As
+temporadas passadas só são lidas para histórico, e cada consulta de histórico já
+ordena *dentro* da temporada (`ORDER BY temporadaId DESC, ordemGlobal DESC`) —
+então escalas diferentes entre temporadas não se misturam. Converter as antigas
+vira opcional: melhora as datas exibidas no histórico, e pode ser feito
+preguiçosamente na leitura, onde a mistura de escalas é inofensiva.
+
 - **Risco:** médio. É a etapa que exige mais cuidado e mais teste.
-- **Teste:** a ordem relativa de todas as partidas de um save é preservada pela
-  migração.
+- **Teste:** a ordem relativa de todas as partidas da temporada corrente é
+  preservada pela migração, e nenhuma partida da temporada corrente fica na
+  escala velha.
 
 ### Etapa 3 — restrições reais
 
@@ -260,7 +290,26 @@ Trocar "o jogador joga uma rodada → todo mundo joga a próxima rodada dele"
 
 ---
 
-## 7. O que NÃO foi verificado
+## 7. O que um aparelho conectado ainda mudaria
+
+A análise acima saiu do código e de cálculo sobre as fórmulas. Três perguntas só
+um save real responde, e duas delas mexem no plano:
+
+1. **O modelo de datas confere com o que o app desenha?** Toda a lista de
+   colisões do §2.2 — e portanto a lista de aceitação da etapa 3 — vem de uma
+   reimplementação da curva fora do app. Uma tela do Calendário com as datas de
+   um clube valida ou derruba essa lista. **É a checagem de maior valor.**
+2. **Qual é o ritmo real?** Os intervalos entre jogos num save de verdade dizem
+   que "descanso mínimo" a etapa 3 pode exigir sem tornar o calendário
+   impossível. Hoje esse número seria um palpite.
+3. **Qual o tamanho real deste save?** As ~6.300 partidas/temporada assumem
+   todas as ligas ativas. Se o save tiver menos, a migração da etapa 2 é menor.
+
+O que um aparelho **não** dá: o banco. O APK instalado é de release, então
+`run-as` não abre o diretório do app, e instalar um debug exigiria desinstalar —
+o que apagaria o save. As checagens acima são todas por tela e por logcat.
+
+## 8. O que NÃO foi verificado
 
 - Nada disto foi executado no app nem num save real. As colisões e as
   divergências de mês foram calculadas sobre as fórmulas e as tabelas do código.
