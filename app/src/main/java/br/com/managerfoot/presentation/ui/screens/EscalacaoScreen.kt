@@ -2786,8 +2786,13 @@ private fun TransferenciaCard(t: br.com.managerfoot.data.dao.TransferenciaDetalh
                         modifier = Modifier.widthIn(max = 80.dp)
                     )
                 }
+                // A data da negociação, como na tela de Finanças. Aqui ainda
+                // ficava "Temp. 3 · Mês 7", que é o índice interno da temporada
+                // e não diz nada ao jogador. Um registro sem relógio — save
+                // anterior à coluna, ou janela de janeiro, antes do primeiro
+                // jogo — cai de volta no rótulo antigo em vez de ficar vazio.
                 Text(
-                    "Temp. ${t.temporadaId} · Mês ${t.mes}",
+                    t.data.curta().ifBlank { "Temp. ${t.temporadaId} · Mês ${t.mes}" },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
