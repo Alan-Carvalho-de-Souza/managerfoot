@@ -1,0 +1,270 @@
+# Calendário da temporada — análise e plano de ação
+
+Levantamento do que existe hoje e o caminho para um calendário de 365 dias que
+sirva de base para a simulação, as transferências e todo dado com data.
+
+Tudo aqui foi medido no código, não estimado. O que não foi verificado está
+marcado como tal.
+
+---
+
+## 1. O que já existe (e é mais do que parece)
+
+### O jogo já é dirigido por um relógio
+
+`ordemGlobal` é um inteiro por partida, monotônico dentro da temporada. O ponto
+que mais importa e que não é óbvio: **o mês do save não é a fonte da verdade —
+ele persegue o relógio.**
+
+```kotlin
+// ViewModels.kt, fechamento mensal
+val ordemRef    = (proximaPartida ?: ultimoNaoAmistoso)?.ordemGlobal ?: 0
+val mesDerived  = if (ordemRef > 0) ordemGlobalParaMes(ordemRef) else save.mesAtual
+while (save.mesAtual <= mesDerived && iteracoesMes < 12) { … avancarMes() }
+```
+
+Ou seja: já há um único relógio, e ele é mais fino do que um calendário diário
+precisa. A temporada ocupa 295 dias (8 fev – 30 nov) e o `ordemGlobal` usa a
+faixa 1–620. **A estrutura para o calendário real já está lá.** O que falta é
+ela deixar de ser derivada na exibição e passar a ser decidida no agendamento.
+
+### O acoplamento, medido
+
+| | Ocorrências | Concentração |
+|---|---|---|
+| `ordemGlobal` | 258 | `GameRepository` 71, `MotorCampeonato` 64 |
+| — **escrita** (atribuição + tabelas) | ~46 | 35 atribuições + 16 `intArrayOf` |
+| — **leitura semântica** (ordenar/comparar) | ~15 | 9 `ORDER BY`, 4 comparações, 2 `MAX` |
+| Simulação por rodada | 32 | 26 em `GameRepository` |
+
+A maior parte do acoplamento é **escrever** o calendário, não interpretá-lo.
+Isso é o que torna a mudança viável: quase tudo que *lê* continua valendo se o
+número seguir sendo monotônico.
+
+### As tabelas de calendário que existem hoje
+
+16 `intArrayOf` em `MotorCampeonato` mais ~12 constantes soltas:
+
+| Competição | Casas de `ordemGlobal` |
+|---|---|
+| Ligas de 38 rodadas (BR A–D, Premier, Championship, La Liga, Serie A) | `rodada * 10` → 10…380 |
+| Copa do Brasil | 13, 33, 53, 83, 133, 163, 207, 233, 278, 313, 357, 383 |
+| Copa Argentina | 25, 45, 85, 115, 145, 175, 205, 215, 415, 425 |
+| Copa da Inglaterra | 35, 95, 165, 255, 335 |
+| Copa do Rei / Coppa Italia | 95, 115, 165, 185, 245, 265, 325, 345 |
+| Champions | 27…287 (liga), 303/307 (play-off), 313…373 (mata-mata) |
+| Europa League | as mesmas +1 |
+| Libertadores | 15…39 (Pré), 45…195 (grupos), 265…385 (mata-mata) |
+| Sul-Americana | 41 (1ª fase), 52…202 (grupos), 212…372 (mata-mata) |
+| Argentina | Apertura `r*10`, Clausura `r*10 + 210` |
+| Uruguai | Apertura `r*10`, Intermediário `+155`, Clausura `+250`, playoff 411/421, Competencia `+450` |
+| Avulsos | Supercopa Rei 1 · Recopa 6/9 · Intercontinental 440 · Troféu ARG 620 · Amistosos ~5 / ~450 |
+
+---
+
+## 2. Os defeitos que a varredura encontrou
+
+Estes são a lista de aceitação do trabalho: cada um precisa deixar de existir.
+
+### 2.1 Quatro conversores de `ordemGlobal` → mês, com fórmulas diferentes
+
+| Onde | Divisor | Conhece casos especiais? |
+|---|---|---|
+| `CalendarioDoJogo.ordemGlobalParaMesDia` | 370 (410 p/ Argentina) | sim |
+| `ViewModels.ordemGlobalParaMes` | **370** | só Supercopa |
+| `Repositories.ordemGlobalParaMesCarreira` | **380** | Supercopa + Troféu |
+
+Consequências medidas:
+
+- **`/370` vs `/380` discordam do mês em 5 das 38 rodadas** da Série A (OG 190,
+  230, 270, 310, 350). O mês que fecha as finanças e o mês que atribui as
+  partidas aos clubes no histórico de carreira divergem — e é perto de uma
+  transferência que a atribuição erra o clube.
+- **Para um clube argentino, o mês do relógio (`/370`) discorda do mês exibido
+  (`/410`) em 21 das 58 rodadas.** `mesDerived` usa `/370` sem olhar o país, e é
+  ele que dispara salários e patrocínio. Jogando na Argentina, o fechamento
+  financeiro corre em descompasso com a data na tela por mais de um terço da
+  temporada. *(Medido na fórmula; não reproduzido no app.)*
+
+### 2.2 Colisões de data entre competições do mesmo clube
+
+Por perfil de clube, convertendo as casas atuais pela curva de exibição:
+
+| Perfil | Mesmo `ordemGlobal` | Mesma data |
+|---|---|---|
+| Brasileiro + Libertadores | 0 | **3** (Pré-Libertadores × Série A, em fev/mar) |
+| Brasileiro + Sul-Americana | 0 | 0 |
+| **Argentino + Libertadores** | **2** (casas 25 e 45: Copa Argentina × Libertadores) | **5** |
+| Inglês + Champions | 0 | 0 |
+| Espanhol + Champions | 0 | 0 |
+| Italiano + Europa League | 0 | 0 |
+
+A colisão argentina é a pior: **mesmo `ordemGlobal`**, ou seja, dois jogos no
+mesmo instante do relógio para um clube que dispute as duas.
+
+E mais três casos de **jogos em dias consecutivos** entre Copa do Brasil e Série
+A (5/4 e 4/4, 15/5 e 14/5, 10/9 e 11/9).
+
+### 2.3 Casas mágicas espalhadas
+
+`ordemGlobal == 1` (Supercopa), `== 620` (Troféu), `>= 400` (amistoso de
+dezembro), `> ARG_CLAUSURA_OG_OFFSET + 10` (detectar Clausura), `== 440`
+(Intercontinental). São números que só significam algo porque alguém lembrou.
+
+### 2.4 A tabela `temporadas` existe e nunca é populada
+
+`TemporadaEntity(id, ano, encerrada)` está no schema, sem DAO e sem nenhum
+insert. Já causou um bug real: o ranking mundial vinha vazio porque uma query
+fazia `INNER JOIN temporadas`. **É a casa natural do calendário.**
+
+### 2.5 `rodada` não é rodada
+
+Já documentado em `regras_libertadores.md`: a rodada gravada é um slot dentro do
+campeonato (Pré 1–6, grupos 11–16, mata-mata 20+). Qualquer coisa nova que leia
+`rodada` como "a enésima rodada" vai errar.
+
+---
+
+## 3. O que `mes` e `ano` decidem hoje
+
+Importa porque o calendário diário precisa continuar alimentando tudo isto:
+
+| Regra | Granularidade | Onde |
+|---|---|---|
+| Fechamento mensal (salários, patrocínio, bilheteria) | mês | `fecharMes` |
+| Janela de transferências (`mes <= 6` → 0/1) | semestre | `janelaTransferencia` |
+| Propostas da IA ao time do jogador (meses 1,2,10,11,12) | mês | `GameRepository:5855` |
+| Probabilidade de transferência IA↔IA (`mes <= 2` → 30%) | mês | `GameRepository:7398` |
+| Retorno de empréstimo (`anoRetorno`, `mesRetorno`) | mês | `processarRetornosEmprestimo` |
+| Amistosos de entressafra (dez / jan) | mês | `criarAmistoso` |
+| Carimbo de transferência (`ano`, `ordemGlobal`) | **dia** | `carimboDeData` |
+
+Nenhuma dessas regras é por dia. **O calendário diário entra por baixo delas sem
+exigir que nenhuma mude** — o mês passa a sair do dia em vez da curva.
+
+---
+
+## 4. A proposta
+
+### A ideia central: `ordemGlobal` passa a SER o dia da temporada
+
+Em vez de uma escala abstrata de 1 a 620 convertida por curvas diferentes por
+competição, o número vira o **dia absoluto da temporada (1–365)**.
+
+O que isso resolve de uma vez:
+
+- **a data deixa de ser derivada.** Os quatro conversores do §2.1 viram um só, e
+  trivial — o mesmo para todo país, o que mata a divergência argentina;
+- **tudo que ordena continua valendo.** `ORDER BY ordemGlobal`,
+  `buscarProximaPartida`, as janelas de ranking (`ordemGlobal <= :atual`) e
+  `MAX(ordemGlobal)` seguem corretos, porque o número segue monotônico;
+- **`ordemGlobalAtual` vira literalmente "que dia é hoje"**, que é a peça que
+  falta para qualquer coisa dirigida por data;
+- **as casas mágicas desaparecem**: "Supercopa no dia 25" é legível.
+
+O custo está concentrado nas ~46 escritas, que já estão em dois arquivos.
+
+### Por que não é um problema de satisfação de restrições
+
+Metade do calendário não existe no começo da temporada: os grupos da
+Libertadores só são sorteados quando a Pré termina, o mata-mata quando os grupos
+terminam. Um agendador global com restrições não teria o que agendar.
+
+Mas as faixas de `ordemGlobal` já **reservam** espaço para o que ainda não foi
+sorteado. Então o trabalho não é inventar um agendador: é **trocar números
+abstratos por dias reais nas faixas que já existem**, e validar o resultado.
+
+---
+
+## 5. Plano de ação
+
+### Etapa 0 — unificar os conversores de mês *(independente, barato)*
+
+Um conversor só, o de `CalendarioDoJogo`, usado por `ViewModels` e por
+`Repositories`. Elimina a divergência `/370` × `/380` × `/410` do §2.1.
+
+- **Não depende de nada e pode ir sozinha.** Conserta um bug real hoje.
+- **Saves:** nenhum impacto de dados. Muda o mês derivado em algumas rodadas,
+  o que é a correção.
+- **Teste:** o mês de uma partida é o mesmo por qualquer caminho, para toda casa
+  de `ordemGlobal` de toda competição.
+
+### Etapa 1 — o calendário como dado explícito
+
+`CalendarioDaTemporada` no domínio: mapa `(competição, rodada ou fase) → dia da
+temporada`, construído a partir das tabelas atuais. Persistido na tabela
+`temporadas` (hoje morta) ou numa nova `calendario_temporada`.
+
+- **Nada de comportamento muda** — é a mesma informação, num lugar só e legível.
+- **Saves:** tabela nova, nada quebra.
+- **Teste:** o calendário reproduz exatamente as casas atuais.
+
+### Etapa 2 — `ordemGlobal` passa a ser o dia
+
+Os geradores pedem o dia ao calendário em vez de ler `intArrayOf`. A conversão
+de exibição vira identidade.
+
+- **Saves:** exige migração. Converter o `ordemGlobal` de toda partida existente
+  pela derivação atual, que é função pura de `(ordemGlobal, nome do campeonato)`
+  — ambos gravados. **Há precedente**: `migrarOrdemGlobalCopaBrasil` já reescreve
+  `ordemGlobal` de saves antigos, chamada no startup (`ViewModels:730`).
+- **Risco:** médio. É a etapa que exige mais cuidado e mais teste.
+- **Teste:** a ordem relativa de todas as partidas de um save é preservada pela
+  migração.
+
+### Etapa 3 — restrições reais
+
+Um teste que varre a temporada inteira de cada perfil de clube e falha se:
+nenhum clube joga duas vezes no mesmo dia; nenhum joga em dias consecutivos;
+descanso mínimo respeitado; nenhuma partida fora da janela da temporada.
+
+Corrigir o que o teste achar — já sei de **8 colisões e 3 jogos consecutivos**
+(§2.2), e a colisão argentina de `ordemGlobal` é obrigatória.
+
+- **Saves:** muda datas de partidas **futuras**; as já jogadas ficam.
+
+### Etapa 4 — transferências e demais dados pelo dia
+
+Metade do caminho já está feito: a transferência já carimba `ordemGlobal`. Com
+`ordemGlobal` = dia, a data vira exata sem conversão nenhuma, e o mesmo carimbo
+serve para contratos, empréstimos e o que mais precisar de data.
+
+- **Saves:** nenhum impacto; o fallback para registros sem relógio já existe.
+
+### Etapa 5 — simulação dirigida por data *(opcional, e a cara)*
+
+Trocar "o jogador joga uma rodada → todo mundo joga a próxima rodada dele"
+(`simularRodadaEmOutrosCampeonatos`) por "avança para o próximo dia com jogos".
+
+- Mexe nos 26 pontos de rodada do `GameRepository`, nos placares ao vivo (hoje
+  "outros jogos da mesma rodada", passariam a ser "outros jogos de hoje") e na
+  tela de Rodada.
+- **Saves:** o risco não é de dados, é de **comportamento** — um save no meio da
+  temporada tem cada competição numa `rodadaAtual` diferente, e um motor por
+  data precisa reconciliar isso.
+- **Só vale se o avanço dia a dia for uma mecânica desejada.** As etapas 0–4
+  entregam o calendário real sem ela.
+
+---
+
+## 6. Resumo de impacto em saves existentes
+
+| Etapa | Quebra save? | Por quê |
+|---|---|---|
+| 0 — conversores | não | só corrige o mês derivado |
+| 1 — calendário como dado | não | tabela nova |
+| 2 — `ordemGlobal` = dia | **não, com migração** | a data atual é função pura de dados já gravados; há precedente |
+| 3 — restrições | não | muda só partidas futuras |
+| 4 — transferências | não | fallback já existe |
+| 5 — simulação por data | risco de comportamento | reconciliar `rodadaAtual` de cada competição |
+
+---
+
+## 7. O que NÃO foi verificado
+
+- Nada disto foi executado no app nem num save real. As colisões e as
+  divergências de mês foram calculadas sobre as fórmulas e as tabelas do código.
+- O descompasso financeiro em clube argentino (§2.1) é o que a fórmula produz;
+  não foi reproduzido jogando.
+- O calendário uruguaio (`ordemGlobal` até 520) e os amistosos (~5 / ~450) não
+  entraram na checagem de colisões por perfil.
