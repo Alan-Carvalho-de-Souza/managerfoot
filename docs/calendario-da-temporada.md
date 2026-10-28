@@ -178,6 +178,40 @@ abstratos por dias reais nas faixas que já existem**, e validar o resultado.
 
 ## 5. Plano de ação
 
+### Estado atual
+
+| Etapa | Estado | Onde |
+|---|---|---|
+| **0a** — ordenar por `(temporadaId, ordemGlobal)` | ✅ **feito** | `1e0af35` |
+| **0b** — unificar os conversores de mês | 🟡 **metade** | ver abaixo |
+| **1** — calendário como dado explícito | ⬜ não começou | |
+| **2** — `ordemGlobal` passa a ser o dia | ⬜ não começou | |
+| **3** — restrições reais | ⬜ não começou | |
+| **4** — transferências e demais dados pelo dia | 🟡 **base pronta** | `b48e8d2`, `e1751f3` |
+| **5** — simulação dirigida por data | ⬜ não começou (opcional) | |
+
+**0b, o que já foi:** `CalendarioScreen` e `DashboardScreen` deixaram de ter
+fórmula própria e passaram a delegar para `CalendarioDoJogo` (`b48e8d2`).
+
+**0b, o que falta — e é a metade que causa o bug:** os dois conversores que
+ainda carregam fórmula própria são justamente os divergentes.
+
+| Conversor | Divisor | Usado em |
+|---|---|---|
+| `ViewModels.ordemGlobalParaMes` | **/370** | `mesDerived` (fecha salários e patrocínio) e `_mesAtual` |
+| `Repositories.ordemGlobalParaMesCarreira` | **/380** | atribuir partidas a clubes no histórico de carreira |
+
+Nenhum dos dois conhece a curva argentina (/410). Enquanto estiverem assim: o
+mês que fecha as finanças e o que atribui a carreira discordam em 5 das 38
+rodadas, e para clube argentino o mês do relógio discorda do exibido em 21 das
+58.
+
+**4, o que já foi:** a transferência carimba `ano` e `ordemGlobal` no momento em
+que acontece, e o histórico já deriva a data daí. Falta só o `ordemGlobal` virar
+o dia (etapa 2) para a data ficar exata sem conversão.
+
+
+
 ### Etapa 0 — o relógio que zera a cada temporada *(independente, barato, urgente)*
 
 Duas coisas, nenhuma dependendo do resto do plano, e as duas consertam bug de hoje:
