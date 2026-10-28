@@ -1,5 +1,7 @@
 package br.com.managerfoot.domain.engine
 
+import br.com.managerfoot.data.database.entities.CalendarioVersao
+
 // ─────────────────────────────────────────────────────────────────────────────
 // A data exata de um momento do jogo.
 //
@@ -83,7 +85,34 @@ object CalendarioDoJogo {
      * um momento que não pertence a competição nenhuma (uma transferência, por
      * exemplo), passe a string vazia e a curva genérica das ligas é usada.
      */
-    fun ordemGlobalParaMesDia(ordemGlobal: Int, nomeCampeonato: String = ""): Pair<Int, Int> = when {
+    /**
+     * (mês, dia) de um momento de uma temporada da **grade**, onde
+     * `ordemGlobal` já É o dia do ano. Não há curva nem nome de campeonato: o
+     * valor gravado é a resposta.
+     */
+    fun diaParaMesDia(diaDoAno: Int): Pair<Int, Int> = diaDoAnoParaMesDia(diaDoAno)
+
+    /**
+     * (mês, dia) de um momento do jogo, na escala da temporada dele.
+     *
+     * [versao] não tem valor padrão de propósito. Um default faria um ponto de
+     * leitura esquecido continuar compilando e passar a mostrar datas erradas em
+     * silêncio nas temporadas novas; sem ele, o compilador lista todos.
+     */
+    fun ordemGlobalParaMesDia(
+        ordemGlobal: Int,
+        nomeCampeonato: String,
+        versao: Int
+    ): Pair<Int, Int> =
+        if (versao == CalendarioVersao.CURVA) naCurva(ordemGlobal, nomeCampeonato)
+        else diaParaMesDia(ordemGlobal)
+
+    /**
+     * A curva antiga: `ordemGlobal` é um contador de slots, e o dia sai de
+     * espalhá-lo sobre o ano. É a escala de [CalendarioVersao.CURVA], e segue
+     * aqui para ler as temporadas gravadas antes da grade.
+     */
+    fun naCurva(ordemGlobal: Int, nomeCampeonato: String = ""): Pair<Int, Int> = when {
         // Amistosos de entressafra: dezembro (~450) ou janeiro (~5).
         nomeCampeonato.contains("Amistoso", ignoreCase = true) ->
             if (ordemGlobal >= 400) 12 to 20 else 1 to 15
@@ -101,8 +130,13 @@ object CalendarioDoJogo {
     }
 
     /** O mesmo, já com o ano. */
-    fun ordemGlobalParaData(ordemGlobal: Int, ano: Int, nomeCampeonato: String = ""): DataDoJogo {
-        val (mes, dia) = ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
+    fun ordemGlobalParaData(
+        ordemGlobal: Int,
+        ano: Int,
+        nomeCampeonato: String,
+        versao: Int
+    ): DataDoJogo {
+        val (mes, dia) = ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato, versao)
         return DataDoJogo(ano, mes, dia)
     }
 

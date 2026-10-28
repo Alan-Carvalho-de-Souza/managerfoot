@@ -36,9 +36,15 @@ import javax.inject.Inject
  * Esta função tinha fórmula própria, fixa em /370 e cega ao país — e é ela que
  * decide quando os salários e o patrocínio são cobrados.
  */
-private fun ordemGlobalParaMes(ordemGlobal: Int, nomeCampeonato: String): Int =
-    br.com.managerfoot.domain.engine.CalendarioDoJogo
-        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
+private fun ordemGlobalParaMes(
+    ordemGlobal: Int,
+    campeonato: br.com.managerfoot.data.database.entities.CampeonatoEntity?
+): Int =
+    br.com.managerfoot.domain.engine.CalendarioDoJogo.ordemGlobalParaMesDia(
+        ordemGlobal,
+        campeonato?.nome ?: "",
+        campeonato?.calendarioVersao ?: br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA
+    ).first
 
 // ═══════════════════════════════════════════════════════════
 //  InicioViewModel
@@ -572,6 +578,17 @@ class DashboardViewModel @Inject constructor(
     private val _proximaPartida = MutableStateFlow<PartidaEntity?>(null)
     val proximaPartida: StateFlow<PartidaEntity?> = _proximaPartida.asStateFlow()
 
+    /**
+     * A escala de `ordemGlobal` da temporada corrente.
+     *
+     * A tela só recebe `PartidaEntity`, que carrega `campeonatoId` mas não a
+     * versão — e sem ela a data do chip do header sairia da curva antiga numa
+     * temporada da grade. Uma versão só basta porque toda competição de uma
+     * temporada nasce no rollover com a mesma.
+     */
+    private val _calendarioVersao = MutableStateFlow(br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA)
+    val calendarioVersao: StateFlow<Int> = _calendarioVersao.asStateFlow()
+
     private val _ultimosResultados = MutableStateFlow<List<PartidaEntity>>(emptyList())
     val ultimosResultados: StateFlow<List<PartidaEntity>> = _ultimosResultados.asStateFlow()
 
@@ -744,6 +761,7 @@ class DashboardViewModel @Inject constructor(
             timeId, listOf(campeonatoId, copaIdInicial, save.copaArgId, save.copaInglaterraId, save.supercopaId, save.campeonatoArgClausuraId, save.championsId, save.europaLeagueId, save.libertadoresId, save.sulAmericanaId, save.campeonatoAmistososId).filter { it > 0 }
         )
         _proximaPartida.value = gameRepository.buscarProximaPartida(timeId)
+        _calendarioVersao.value = gameRepository.versaoDoCalendario(save.temporadaId)
         _posicaoNaTabela.value = gameRepository.buscarPosicaoNaTabela(campeonatoId, timeId)
         _uiState.value = DashboardUiState.Pronto
     }
@@ -1399,7 +1417,7 @@ class DashboardViewModel @Inject constructor(
                 if (ordemRef > 0 && partidaRef != null)
                     ordemGlobalParaMes(
                         ordemRef,
-                        gameRepository.buscarCampeonato(partidaRef.campeonatoId)?.nome ?: ""
+                        gameRepository.buscarCampeonato(partidaRef.campeonatoId)
                     )
                 else save.mesAtual
 
@@ -3878,7 +3896,7 @@ class FinancasViewModel @Inject constructor(
             if (ordemRef > 0 && partidaRef != null)
                 ordemGlobalParaMes(
                     ordemRef,
-                    gameRepository.buscarCampeonato(partidaRef.campeonatoId)?.nome ?: ""
+                    gameRepository.buscarCampeonato(partidaRef.campeonatoId)
                 )
             else save.mesAtual
         _anoAtual.value = save.anoAtual

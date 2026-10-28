@@ -266,7 +266,7 @@ object CalendarioDaTemporada {
      * etapa 2 seguem na escala que entendem, e é esta função que as data.
      */
     fun diaDaCasa(ordemGlobal: Int, nomeCampeonato: String = ""): Int {
-        val (mes, dia) = CalendarioDoJogo.ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
+        val (mes, dia) = CalendarioDoJogo.naCurva(ordemGlobal, nomeCampeonato)
         return diaDoAno(mes, dia)
     }
 

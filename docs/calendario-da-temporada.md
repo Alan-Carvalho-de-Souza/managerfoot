@@ -245,7 +245,69 @@ validador de conflitos. **Ainda não é usado pelos geradores** — isso é a et
 - Persistir na tabela `temporadas` (hoje morta) fica para a etapa 2, quando o
   calendário passar a ser lido na geração.
 
-### Etapa 2 — `ordemGlobal` passa a ser o dia
+### Etapa 2 — `ordemGlobal` passa a ser o dia ✅ *(feita: versionada por temporada)*
+
+#### O que foi feito
+
+**A versão do calendário mora no campeonato** (`campeonatos.calendarioVersao`,
+migração 36 → 37 com `DEFAULT 1`). Uma temporada ou é inteira da `CURVA` — o
+`ordemGlobal` é um slot de 1 a 620 e o dia sai de uma curva — ou é inteira da
+`GRADE`, onde o `ordemGlobal` É o dia do ano. Nenhuma partida gravada foi
+reescrita.
+
+**Os geradores não mudaram.** Os ~109 lugares que montam calendário seguem
+produzindo as casas de `MotorCampeonato`. A tradução de slot para dia acontece
+num ponto só, `GameRepository.gravarPartida`/`gravarPartidas`, por onde passam
+as 36 gravações de partida do projeto — todas no mesmo arquivo. `CalendarioDeSlots`
+faz a conversão por índice: dentro de uma competição os slots são uma lista
+ordenada e os dias são outra, do mesmo tamanho.
+
+Isso foi de propósito. Trocar o valor na origem seria um refactor largo para um
+ganho nenhum, porque a informação é a mesma; o que importa é que o valor
+GRAVADO seja o dia, de onde saem a ordem cronológica e a data de uma
+transferência.
+
+**A versão viaja com a linha, e não tem valor padrão.** `ordemGlobalParaMesDia`
+exige `versao`, e foi o compilador que listou os 8 pontos de leitura. Um default
+faria um ponto esquecido continuar compilando e mostrar data errada em silêncio.
+Onde a linha não sabe sozinha, a versão veio de onde ela mora:
+
+| Leitor | De onde vem a versão |
+|---|---|
+| tela do Calendário | `CalendarioPartidaDto`, no mesmo JOIN do nome |
+| histórico de transferências | subquery da temporada, ao lado de `nomeTemporada` |
+| histórico de carreira | memo por campeonato e por temporada |
+| chip de data do Dashboard | `StateFlow` do `DashboardViewModel` |
+| fechamento de salários | o `CampeonatoEntity` que o ViewModel já buscava |
+| `diaDaCasa` | fixo na `CURVA`: é o leitor do histórico |
+
+**Uma armadilha que estava mapeada e se confirmou:** o `isClausura` argentino
+decidia por `ordemGlobal > 220`. Numa temporada da grade qualquer jogo depois de
+agosto passa de 220, e o torneio declararia Clausura no meio do Apertura,
+registrando a divisão errada no Hall da Fama. Agora quem diz é o nome do
+campeonato, e o ramo antigo ficou para as temporadas da `CURVA`.
+
+**O que a grade pegou que eu não tinha previsto:** "Recopa Sul-Americana" contém
+"Sul-Americana", então ela casava com o ramo da Sul-Americana, não achava os
+seus slots e voltava em silêncio para a curva antiga. Foi o teste de
+`reconhece` que acusou — é a mesma pegadinha de ordem de ramos que a
+Intercontinental já tinha.
+
+#### O que NÃO está coberto por teste
+
+- **O `ALTER TABLE` de verdade.** Executá-lo pede SQLite real, e o projeto não
+  tem teste instrumentado; um `androidTest` exigiria instalar no aparelho, o que
+  apagaria o save do usuário. O que está testado é a corrente de migrações, que
+  é o que destrói dado: com `fallbackToDestructiveMigration`, uma versão subida
+  sem migração faz o Room apagar o banco em silêncio.
+- **A fiação em si.** Os testes cobrem a tradução e as duas escalas, que são
+  puras. Que cada tela leia a versão certa não foi verificado num save real.
+- **Uma imperfeição de transição conhecida:** as duas consultas de janela de 12
+  meses (`PartidaDao`, linhas 199–210) comparam `ordemGlobal` da temporada
+  anterior com o da corrente. Na única temporada em que a anterior é `CURVA` e a
+  corrente é `GRADE`, essa janela fica torta — um recorte de forma e estatística
+  um pouco errado, por uma temporada, sem perda de dado.
+
 
 > **Alternativa melhor do que migrar: versionar o calendário por temporada.**
 >
@@ -488,11 +550,15 @@ Corrigir o que o teste achar — já sei de **8 colisões e 3 jogos consecutivos
 
 - **Saves:** muda datas de partidas **futuras**; as já jogadas ficam.
 
-### Etapa 4 — transferências e demais dados pelo dia
+### Etapa 4 — transferências e demais dados pelo dia ✅ *(saiu com a etapa 2)*
 
-Metade do caminho já está feito: a transferência já carimba `ordemGlobal`. Com
-`ordemGlobal` = dia, a data vira exata sem conversão nenhuma, e o mesmo carimbo
-serve para contratos, empréstimos e o que mais precisar de data.
+Ela não precisou de código próprio. A transferência já carimbava `ordemGlobal`,
+e a etapa 2 levou a versão da temporada até o DTO dela — então numa temporada da
+grade o `ordemGlobal` gravado já É o dia, e a data exata aparece sem conversão.
+O mesmo carimbo serve para contratos, empréstimos e o que mais precisar de data.
+
+Nas temporadas da `CURVA` o comportamento é o de antes: o mês é real e o dia sai
+da curva.
 
 - **Saves:** nenhum impacto; o fallback para registros sem relógio já existe.
 

@@ -1376,6 +1376,27 @@ class JogadorRepository @Inject constructor(
                 try { campeonatoDao.buscarPorId(campeonatoId)?.nome ?: "" } catch (_: Exception) { "" }
             }
 
+        // A escala de `ordemGlobal` daquele campeonato. Uma temporada da CURVA
+        // guarda slots e uma da GRADE guarda o dia do ano, e ler uma pela outra
+        // mostra data errada — por isso toda conversão aqui passa por um destes.
+        val versaoPorCampeonato = mutableMapOf<Int, Int>()
+        suspend fun versaoDoCampeonato(campeonatoId: Int): Int =
+            versaoPorCampeonato.getOrPut(campeonatoId) {
+                try {
+                    campeonatoDao.buscarPorId(campeonatoId)?.calendarioVersao
+                        ?: br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA
+                } catch (_: Exception) { br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA }
+            }
+
+        val versaoPorTemporada = mutableMapOf<Int, Int>()
+        suspend fun versaoDaTemporada(temporadaId: Int): Int =
+            versaoPorTemporada.getOrPut(temporadaId) {
+                try {
+                    campeonatoDao.versaoDoCalendarioDaTemporada(temporadaId)
+                        ?: br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA
+                } catch (_: Exception) { br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA }
+            }
+
         val anoPorTemporada = mutableMapOf<Int, Int>()
         suspend fun anoDaTemporada(temporadaId: Int): Int = anoPorTemporada.getOrPut(temporadaId) {
             try {
@@ -1400,7 +1421,7 @@ class JogadorRepository @Inject constructor(
                 val ano = if (t.ano > 0) t.ano else anoDaTemporada(t.temporadaId)
                 val data = if (t.ordemGlobal > 0)
                     br.com.managerfoot.domain.engine.CalendarioDoJogo
-                        .ordemGlobalParaData(t.ordemGlobal, ano)
+                        .ordemGlobalParaData(t.ordemGlobal, ano, "", versaoDaTemporada(t.temporadaId))
                 else
                     br.com.managerfoot.domain.engine.DataDoJogo(ano, t.mes, 0)
                 Move(t.temporadaId, t.mes, novoTime, data)
@@ -1436,9 +1457,14 @@ class JogadorRepository @Inject constructor(
             }
 
         // Time do jogador num momento (temporadaId, ordemGlobal aproximado para mês)
-        fun timeNoMomento(temporadaId: Int, ordemGlobal: Int, nomeCampeonato: String): Int? {
+        fun timeNoMomento(
+            temporadaId: Int,
+            ordemGlobal: Int,
+            nomeCampeonato: String,
+            versao: Int
+        ): Int? {
             val mesAprox = br.com.managerfoot.domain.engine.CalendarioDoJogo
-                .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
+                .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato, versao).first
             var atual: Int? = null
             for (m in moves) {
                 val moveBeforeOrAt = m.temporadaId < temporadaId ||
@@ -1451,7 +1477,10 @@ class JogadorRepository @Inject constructor(
         // ── Agrupa eventos por (timeId, ano)
         val porTimeAno = mutableMapOf<Pair<Int, Int>, MutableList<br.com.managerfoot.data.dao.EventoCarreiraDto>>()
         for (ev in eventos) {
-            val derivado = timeNoMomento(ev.temporadaId, ev.ordemGlobal, nomeDoCampeonato(ev.campeonatoId))
+            val derivado = timeNoMomento(
+                ev.temporadaId, ev.ordemGlobal,
+                nomeDoCampeonato(ev.campeonatoId), versaoDoCampeonato(ev.campeonatoId)
+            )
             // Validação: time derivado deve ser um dos dois da partida
             val timeId: Int? = when {
                 derivado != null && (derivado == ev.timeCasaId || derivado == ev.timeForaId) -> derivado
@@ -1495,9 +1524,12 @@ class JogadorRepository @Inject constructor(
             }
             .sortedWith(compareBy({ it.timeId }, { it.ano }))
 
-        suspend fun mesDe(ordemGlobal: Int, nomeCampeonato: String): Int =
-            br.com.managerfoot.domain.engine.CalendarioDoJogo
-                .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
+        suspend fun mesDe(ordemGlobal: Int, campeonatoId: Int): Int =
+            br.com.managerfoot.domain.engine.CalendarioDoJogo.ordemGlobalParaMesDia(
+                ordemGlobal,
+                nomeDoCampeonato(campeonatoId),
+                versaoDoCampeonato(campeonatoId)
+            ).first
 
         val passagens = mutableListOf<PassagemClube>()
         var atual: PassagemClube? = null
@@ -1506,7 +1538,7 @@ class JogadorRepository @Inject constructor(
             if (cur != null && cur.timeId == s.timeId && s.ano <= cur.anoFim + 1) {
                 atual = cur.copy(
                     anoFim = s.ano,
-                    mesFim = mesDe(s.maxOrdem, nomeDoCampeonato(s.campMax)),
+                    mesFim = mesDe(s.maxOrdem, s.campMax),
                     partidas = cur.partidas + s.partidas,
                     gols = cur.gols + s.gols,
                     assistencias = cur.assistencias + s.assists
@@ -1520,8 +1552,8 @@ class JogadorRepository @Inject constructor(
                     escudoRes = time?.escudoRes ?: "",
                     anoInicio = s.ano,
                     anoFim = s.ano,
-                    mesInicio = mesDe(s.minOrdem, nomeDoCampeonato(s.campMin)),
-                    mesFim = mesDe(s.maxOrdem, nomeDoCampeonato(s.campMax)),
+                    mesInicio = mesDe(s.minOrdem, s.campMin),
+                    mesFim = mesDe(s.maxOrdem, s.campMax),
                     partidas = s.partidas,
                     gols = s.gols,
                     assistencias = s.assists

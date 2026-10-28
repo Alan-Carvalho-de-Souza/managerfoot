@@ -1,5 +1,7 @@
 package br.com.managerfoot.domain.engine
 
+import br.com.managerfoot.data.database.entities.CalendarioVersao
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,13 +46,13 @@ class CalendarioDoJogoTest {
 
     @Test
     fun `a supercopa rei abre a temporada em 25 de janeiro`() {
-        assertEquals(1 to 25, CalendarioDoJogo.ordemGlobalParaMesDia(1, "Supercopa Rei 2027"))
+        assertEquals(1 to 25, CalendarioDoJogo.naCurva(1, "Supercopa Rei 2027"))
     }
 
     @Test
     fun `os amistosos caem na entressafra de dezembro ou janeiro`() {
-        assertEquals(12 to 20, CalendarioDoJogo.ordemGlobalParaMesDia(450, "Amistoso"))
-        assertEquals(1 to 15, CalendarioDoJogo.ordemGlobalParaMesDia(5, "Amistoso"))
+        assertEquals(12 to 20, CalendarioDoJogo.naCurva(450, "Amistoso"))
+        assertEquals(1 to 15, CalendarioDoJogo.naCurva(5, "Amistoso"))
     }
 
     @Test
@@ -59,39 +61,39 @@ class CalendarioDoJogoTest {
         // genérico viesse primeiro, ela seria datada pela curva das copas.
         assertEquals(
             12 to 18,
-            CalendarioDoJogo.ordemGlobalParaMesDia(385, "Copa Intercontinental 2027")
+            CalendarioDoJogo.naCurva(385, "Copa Intercontinental 2027")
         )
     }
 
     @Test
     fun `o trofeu dos campeoes e em meados de dezembro`() {
-        assertEquals(12 to 15, CalendarioDoJogo.ordemGlobalParaMesDia(620, ""))
+        assertEquals(12 to 15, CalendarioDoJogo.naCurva(620, ""))
         assertEquals(
             12 to 15,
-            CalendarioDoJogo.ordemGlobalParaMesDia(500, "Troféu dos Campeões 2027")
+            CalendarioDoJogo.naCurva(500, "Troféu dos Campeões 2027")
         )
     }
 
     @Test
     fun `as casas fixas da copa do brasil sao respeitadas`() {
-        assertEquals(2 to 10, CalendarioDoJogo.ordemGlobalParaMesDia(13, "Copa do Brasil 2027"))
-        assertEquals(12 to 3, CalendarioDoJogo.ordemGlobalParaMesDia(383, "Copa do Brasil 2027"))
+        assertEquals(2 to 10, CalendarioDoJogo.naCurva(13, "Copa do Brasil 2027"))
+        assertEquals(12 to 3, CalendarioDoJogo.naCurva(383, "Copa do Brasil 2027"))
     }
 
     // ── Curvas das ligas ─────────────────────────────────────────────────
 
     @Test
     fun `a liga comeca em 8 de fevereiro e termina em 30 de novembro`() {
-        assertEquals(2 to 8, CalendarioDoJogo.ordemGlobalParaMesDia(10, "Brasileiro Série A 2027"))
-        assertEquals(11 to 30, CalendarioDoJogo.ordemGlobalParaMesDia(380, "Brasileiro Série A 2027"))
+        assertEquals(2 to 8, CalendarioDoJogo.naCurva(10, "Brasileiro Série A 2027"))
+        assertEquals(11 to 30, CalendarioDoJogo.naCurva(380, "Brasileiro Série A 2027"))
     }
 
     @Test
     fun `o calendario argentino estica o mesmo periodo sobre mais rodadas`() {
         // 58 rodadas no mesmo intervalo que o brasileiro cobre com 38: na mesma
         // ordemGlobal o argentino ainda está mais atrás no ano.
-        val brasil = CalendarioDoJogo.ordemGlobalParaMesDia(300, "Brasileiro Série A 2027")
-        val argentina = CalendarioDoJogo.ordemGlobalParaMesDia(300, "Primera División Argentina 2027")
+        val brasil = CalendarioDoJogo.naCurva(300, "Brasileiro Série A 2027")
+        val argentina = CalendarioDoJogo.naCurva(300, "Primera División Argentina 2027")
         assertTrue(
             "$argentina deveria vir antes de $brasil",
             argentina.first * 100 + argentina.second < brasil.first * 100 + brasil.second
@@ -100,7 +102,7 @@ class CalendarioDoJogoTest {
 
     @Test
     fun `a data avanca junto com o relogio`() {
-        val datas = (10..380 step 10).map { CalendarioDoJogo.ordemGlobalParaMesDia(it, "") }
+        val datas = (10..380 step 10).map { CalendarioDoJogo.naCurva(it, "") }
         val numeros = datas.map { it.first * 100 + it.second }
         assertEquals(numeros.sorted(), numeros)
     }
@@ -109,8 +111,8 @@ class CalendarioDoJogoTest {
     fun `sem nome de campeonato vale a curva generica das ligas`() {
         // É o caso de uma transferência, que não pertence a competição nenhuma.
         assertEquals(
-            CalendarioDoJogo.ordemGlobalParaMesDia(200, "Brasileiro Série A 2027"),
-            CalendarioDoJogo.ordemGlobalParaMesDia(200, "")
+            CalendarioDoJogo.naCurva(200, "Brasileiro Série A 2027"),
+            CalendarioDoJogo.naCurva(200, "")
         )
     }
 
@@ -118,7 +120,7 @@ class CalendarioDoJogoTest {
 
     @Test
     fun `a data curta traz dia, mes e ano`() {
-        val data = CalendarioDoJogo.ordemGlobalParaData(10, 2027)
+        val data = CalendarioDoJogo.ordemGlobalParaData(10, 2027, "", CalendarioVersao.CURVA)
         assertEquals(DataDoJogo(2027, 2, 8), data)
         assertEquals("8 fev 2027", data.curta())
     }
@@ -176,7 +178,7 @@ class CalendarioDoJogoTest {
     // ── Regressão: as fórmulas divergentes que existiam ──────────────────
 
     private fun mes(og: Int, nome: String = "") =
-        CalendarioDoJogo.ordemGlobalParaMesDia(og, nome).first
+        CalendarioDoJogo.naCurva(og, nome).first
 
     @Test
     fun `o mes de uma rodada e o mesmo por qualquer caminho`() {
@@ -228,5 +230,54 @@ class CalendarioDoJogoTest {
         assertEquals(2030, CalendarioDoJogo.anoDoNomeDoCampeonato("Copa do Rei 2030"))
         assertEquals(0, CalendarioDoJogo.anoDoNomeDoCampeonato("Sem ano"))
         assertEquals(0, CalendarioDoJogo.anoDoNomeDoCampeonato(""))
+    }
+    // ── As duas escalas ──────────────────────────────────────────────────
+
+    @Test
+    fun `numa temporada da grade o ordemGlobal ja e o dia do ano`() {
+        // Não há curva nem nome de campeonato: o valor gravado é a resposta.
+        for (diaDoAno in listOf(1, 39, 180, 333, 365)) {
+            assertEquals(
+                "dia $diaDoAno",
+                CalendarioDoJogo.diaDoAnoParaMesDia(diaDoAno),
+                CalendarioDoJogo.ordemGlobalParaMesDia(diaDoAno, "", CalendarioVersao.GRADE)
+            )
+        }
+        assertEquals(2 to 8, CalendarioDoJogo.ordemGlobalParaMesDia(39, "", CalendarioVersao.GRADE))
+        assertEquals(11 to 29, CalendarioDoJogo.ordemGlobalParaMesDia(333, "", CalendarioVersao.GRADE))
+    }
+
+    @Test
+    fun `na grade o nome do campeonato nao muda mais a data`() {
+        // É o ganho da etapa 2: a casa especial, a curva da copa e a curva
+        // argentina deixam de existir, porque o dia está gravado.
+        val nomes = listOf(
+            "", "Brasileiro Série A 2027", "Copa do Brasil 2027",
+            "Primera División Argentina Clausura 2027", "Amistoso", "Copa Intercontinental 2027"
+        )
+        val datas = nomes.map { CalendarioDoJogo.ordemGlobalParaMesDia(200, it, CalendarioVersao.GRADE) }
+        assertEquals(1, datas.distinct().size)
+    }
+
+    @Test
+    fun `a mesma casa da datas diferentes nas duas escalas`() {
+        // Ler uma temporada pela escala da outra mostra data errada, e é por isso
+        // que a versão viaja junto com a linha em vez de ter um valor padrão.
+        val naCurva = CalendarioDoJogo.ordemGlobalParaMesDia(200, "Brasileiro Série A 2027", CalendarioVersao.CURVA)
+        val naGrade = CalendarioDoJogo.ordemGlobalParaMesDia(200, "Brasileiro Série A 2027", CalendarioVersao.GRADE)
+        assertEquals(7 to 9, naCurva)
+        assertEquals(7 to 19, naGrade)
+    }
+
+    @Test
+    fun `a data completa respeita a escala`() {
+        assertEquals(
+            DataDoJogo(2027, 2, 8),
+            CalendarioDoJogo.ordemGlobalParaData(39, 2027, "", CalendarioVersao.GRADE)
+        )
+        assertEquals(
+            DataDoJogo(2027, 2, 8),
+            CalendarioDoJogo.ordemGlobalParaData(10, 2027, "", CalendarioVersao.CURVA)
+        )
     }
 }

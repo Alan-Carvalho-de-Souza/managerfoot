@@ -1,5 +1,6 @@
 package br.com.managerfoot.data.dao
 
+import br.com.managerfoot.data.database.entities.CalendarioVersao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -34,7 +35,18 @@ data class TransferenciaDetalhe(
      * `ano`: os campeonatos das temporadas passadas nunca são apagados do save,
      * então o ano de uma venda antiga continua recuperável.
      */
-    val nomeTemporada: String? = null
+    val nomeTemporada: String? = null,
+
+    /**
+     * A escala de `ordemGlobal` da temporada da negociação. Uma transferência
+     * não pertence a competição nenhuma, então ela não tem como saber sozinha se
+     * o relógio dela é um slot ou um dia — quem sabe é a temporada, e é por isso
+     * que isto vem da mesma subquery de [nomeTemporada].
+     *
+     * O padrão é [CalendarioVersao.CURVA] porque é o que todo registro gravado
+     * antes da grade é.
+     */
+    val calendarioVersaoTemporada: Int = CalendarioVersao.CURVA
 ) {
 
     /** O ano da negociação, do carimbo dela ou, na falta dele, da temporada. */
@@ -51,7 +63,9 @@ data class TransferenciaDetalhe(
      * a tela mostra "mar 2027" em vez de inventar um dia.
      */
     val data: DataDoJogo
-        get() = if (ordemGlobal > 0) CalendarioDoJogo.ordemGlobalParaData(ordemGlobal, anoEfetivo)
+        get() = if (ordemGlobal > 0) CalendarioDoJogo.ordemGlobalParaData(
+            ordemGlobal, anoEfetivo, nomeTemporada ?: "", calendarioVersaoTemporada
+        )
                 else DataDoJogo(anoEfetivo, mes, 0)
 }
 
@@ -95,7 +109,10 @@ interface FinancaDao {
                t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
                (SELECT c.nome FROM campeonatos c
                  WHERE c.temporadaId = t.temporadaId
-                 ORDER BY c.id LIMIT 1) AS nomeTemporada
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada,
+               (SELECT c.calendarioVersao FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS calendarioVersaoTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
@@ -115,7 +132,10 @@ interface FinancaDao {
                t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
                (SELECT c.nome FROM campeonatos c
                  WHERE c.temporadaId = t.temporadaId
-                 ORDER BY c.id LIMIT 1) AS nomeTemporada
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada,
+               (SELECT c.calendarioVersao FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS calendarioVersaoTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
@@ -139,7 +159,10 @@ interface FinancaDao {
                t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
                (SELECT c.nome FROM campeonatos c
                  WHERE c.temporadaId = t.temporadaId
-                 ORDER BY c.id LIMIT 1) AS nomeTemporada
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada,
+               (SELECT c.calendarioVersao FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS calendarioVersaoTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId

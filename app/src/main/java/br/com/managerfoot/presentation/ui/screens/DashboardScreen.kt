@@ -114,6 +114,7 @@ fun DashboardScreen(
     val todosOsTimes by vm.todosOsTimes.collectAsStateWithLifecycle()
     val ultimosResultados by vm.ultimosResultados.collectAsStateWithLifecycle()
     val proximaPartida by vm.proximaPartida.collectAsStateWithLifecycle()
+    val calendarioVersao by vm.calendarioVersao.collectAsStateWithLifecycle()
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val resultadoSimulado by vm.resultadoSimulado.collectAsStateWithLifecycle()
     val outrosJogosRodada by vm.outrosJogosRodada.collectAsStateWithLifecycle()
@@ -216,6 +217,7 @@ fun DashboardScreen(
                 proximaPartida = proximaPartida,
                 ultimosResultados = ultimosResultados,
                 saveState = saveState,
+                calendarioVersao = calendarioVersao,
                 uiState = uiState,
                 posicaoNaTabela = posicaoNaTabela,
                 metaTemporada = metaTemporada,
@@ -309,6 +311,7 @@ private fun AbaInicio(
     proximaPartida: br.com.managerfoot.data.database.entities.PartidaEntity?,
     ultimosResultados: List<br.com.managerfoot.data.database.entities.PartidaEntity>,
     saveState: br.com.managerfoot.data.datasource.SaveState?,
+    calendarioVersao: Int,
     uiState: DashboardUiState,
     posicaoNaTabela: Int,
     metaTemporada: br.com.managerfoot.domain.engine.MotorFinanceiro.MetaTemporada? = null,
@@ -352,7 +355,7 @@ private fun AbaInicio(
                 val ordemRef = (proximaPartida ?: ultimosResultados.firstOrNull())?.ordemGlobal ?: 0
                 val (mesChip, diaChip) = if (ordemRef > 0) {
                     val nomeCamp = nomeCampeonatoParaData(saveState, proximaPartida, ultimosResultados)
-                    dashOrdemGlobalParaData(ordemRef, nomeCamp)
+                    dashOrdemGlobalParaData(ordemRef, nomeCamp, calendarioVersao)
                 } else (saveState?.mesAtual ?: 0) to 0
 
                 TimeHeaderCard(
@@ -446,7 +449,7 @@ private fun AbaInicio(
                 )
                 val dataJogoLabel = run {
                     val nomeCamp = nomeCampeonatoParaData(saveState, proximaPartida, ultimosResultados)
-                    val (mes, dia) = dashOrdemGlobalParaData(proximaPartida.ordemGlobal, nomeCamp)
+                    val (mes, dia) = dashOrdemGlobalParaData(proximaPartida.ordemGlobal, nomeCamp, calendarioVersao)
                     val meses = listOf("", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
                     "$dia ${meses[mes]}"
                 }
@@ -1434,9 +1437,13 @@ private fun nomeCampeonatoParaData(
 // com o calendário e com o histórico de transferências. A cópia que existia
 // aqui não conhecia amistosos, Intercontinental nem o Troféu dos Campeões, e
 // datava os três pela curva genérica das ligas.
-private fun dashOrdemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> =
+private fun dashOrdemGlobalParaData(
+    ordemGlobal: Int,
+    nomeCampeonato: String,
+    versao: Int
+): Pair<Int, Int> =
     br.com.managerfoot.domain.engine.CalendarioDoJogo
-        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
+        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato, versao)
 
 // ─── Card de meta da temporada ──────────────────────────────
 @Composable

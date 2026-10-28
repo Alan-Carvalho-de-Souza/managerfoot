@@ -23,6 +23,17 @@ interface CampeonatoDao {
     @Query("SELECT nome FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY id LIMIT 1")
     suspend fun nomeDeUmCampeonatoDaTemporada(temporadaId: Int): String?
 
+    /**
+     * A escala de `ordemGlobal` de uma temporada. Vale para a temporada inteira:
+     * toda competição dela nasce no rollover, com a mesma versão.
+     *
+     * Serve a quem guarda `ordemGlobal` sem pertencer a competição nenhuma — uma
+     * transferência —, e por isso não tem como saber sozinho se o número que
+     * gravou é um slot ou um dia do ano.
+     */
+    @Query("SELECT calendarioVersao FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY id LIMIT 1")
+    suspend fun versaoDoCalendarioDaTemporada(temporadaId: Int): Int?
+
     @Query("SELECT * FROM campeonatos WHERE id = :id")
     suspend fun buscarPorId(id: Int): CampeonatoEntity?
 

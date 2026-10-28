@@ -536,6 +536,7 @@ interface PartidaDao {
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               c.calendarioVersao AS calendarioVersao,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
@@ -553,6 +554,7 @@ interface PartidaDao {
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               c.calendarioVersao AS calendarioVersao,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
@@ -578,6 +580,7 @@ interface PartidaDao {
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               c.calendarioVersao AS calendarioVersao,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
@@ -602,6 +605,7 @@ interface PartidaDao {
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               c.calendarioVersao AS calendarioVersao,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
@@ -619,6 +623,7 @@ interface PartidaDao {
         SELECT p.id AS partidaId, p.campeonatoId AS campeonatoId,
                c.nome AS nomeCampeonato, p.rodada AS rodada,
                p.fase AS fase, p.ordemGlobal AS ordemGlobal,
+               c.calendarioVersao AS calendarioVersao,
                p.timeCasaId AS timeCasaId, tc.nome AS nomeCasa, tc.escudoRes AS escudoCasa,
                p.timeForaId AS timeForaId, tf.nome AS nomeFora, tf.escudoRes AS escudoFora,
                p.golsCasa AS golsCasa, p.golsFora AS golsFora, p.jogada AS jogada,
@@ -857,6 +862,16 @@ data class CalendarioPartidaDto(
     val partidaId: Int,
     val campeonatoId: Int,
     val nomeCampeonato: String,
+
+    /**
+     * A escala de `ordemGlobal` desta partida. Vem do campeonato, no mesmo JOIN
+     * de [nomeCampeonato].
+     *
+     * Sem ela a tela do calendário leria o valor gravado pela curva antiga: numa
+     * temporada da grade, onde `ordemGlobal` já É o dia do ano, a data sairia
+     * completamente errada.
+     */
+    val calendarioVersao: Int = br.com.managerfoot.data.database.entities.CalendarioVersao.CURVA,
     val rodada: Int,
     val fase: String?,
     val ordemGlobal: Int,

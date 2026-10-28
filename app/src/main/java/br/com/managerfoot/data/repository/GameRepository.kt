@@ -50,6 +50,50 @@ class GameRepository @Inject constructor(
 ) {
     private val simulador = SimuladorPartida()
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  A gravação de partidas, e a única tradução de calendário do projeto
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    //  Os ~109 lugares que montam calendário continuam produzindo as casas de
+    //  MotorCampeonato, que são slots num contador de 1 a 620. Quem decide o que
+    //  vai para o banco são estas duas funções: numa temporada da GRADE o slot é
+    //  traduzido para o dia do ano, e numa da CURVA ele é gravado como sempre.
+    //
+    //  Toda partida do jogo passa por aqui — são 36 chamadas, todas neste
+    //  arquivo —, e é isso que torna a troca de escala uma mudança de um ponto
+    //  em vez de um refactor de centenas. Gravar pelo partidaDao direto fura a
+    //  tradução em silêncio.
+
+    /** Grava uma partida, já na escala de calendário do campeonato dela. */
+    private suspend fun gravarPartida(partida: PartidaEntity): Long =
+        partidaDao.inserir(naEscalaDoCampeonato(listOf(partida)).first())
+
+    /** Grava partidas, já na escala de calendário dos campeonatos delas. */
+    private suspend fun gravarPartidas(partidas: List<PartidaEntity>) {
+        if (partidas.isEmpty()) return
+        partidaDao.inserirTodas(naEscalaDoCampeonato(partidas))
+    }
+
+    private suspend fun naEscalaDoCampeonato(partidas: List<PartidaEntity>): List<PartidaEntity> {
+        // Uma lista pode trazer partidas de mais de um campeonato (os oito grupos
+        // de uma continental saem juntos), então a versão é buscada por id, uma
+        // vez por campeonato distinto.
+        val porId = mutableMapOf<Int, CampeonatoEntity?>()
+        return partidas.map { partida ->
+            val campeonato = porId.getOrPut(partida.campeonatoId) {
+                runCatching { campeonatoDao.buscarPorId(partida.campeonatoId) }.getOrNull()
+            } ?: return@map partida
+            if (campeonato.calendarioVersao == CalendarioVersao.CURVA) return@map partida
+            // Slot 0 ou negativo é "sem posição no calendário" — algumas fases de
+            // mata-mata nascem assim. Traduzir isso inventaria uma data e mudaria
+            // a ordenação dessas partidas, então fica como está.
+            if (partida.ordemGlobal <= 0) return@map partida
+            partida.copy(
+                ordemGlobal = CalendarioDeSlots.dia(campeonato, partida.ordemGlobal, partida.rodada)
+            )
+        }
+    }
+
     /**
      * Insere times e jogadores do seed em uma única transação atômica.
      * Se qualquer parte falhar, nenhuma linha fica no banco — evitando o
@@ -183,7 +227,7 @@ class GameRepository @Inject constructor(
         )
 
         val partidas = MotorCampeonato.gerarCalendarioPontosCorridos(campeonatoId, participantesIds)
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
 
         val tabela = MotorCampeonato.gerarClassificacaoInicial(campeonatoId, participantesIds)
         classificacaoDao.inserirTodos(tabela)
@@ -264,6 +308,11 @@ class GameRepository @Inject constructor(
      */
     suspend fun buscarCampeonato(campeonatoId: Int) =
         campeonatoDao.buscarPorId(campeonatoId)
+
+    /** A escala de `ordemGlobal` de uma temporada. Ver `CalendarioVersao`. */
+    suspend fun versaoDoCalendario(temporadaId: Int): Int =
+        runCatching { campeonatoDao.versaoDoCalendarioDaTemporada(temporadaId) }
+            .getOrNull() ?: CalendarioVersao.CURVA
 
     suspend fun buscarHistoricoCopaDoTime(timeId: Int) =
         partidaDao.buscarHistoricoCopaDoTime(timeId)
@@ -983,7 +1032,7 @@ class GameRepository @Inject constructor(
         val rodada = (existentes.maxOfOrNull { it.rodada } ?: 0) + 1
         val casa = if (ehCasa) timeJogadorId else adversarioId
         val fora = if (ehCasa) adversarioId else timeJogadorId
-        val id = partidaDao.inserir(
+        val id = gravarPartida(
             PartidaEntity(
                 campeonatoId = campId,
                 rodada       = rodada,
@@ -2187,7 +2236,7 @@ class GameRepository @Inject constructor(
         val partidasZonaB   = MotorCampeonato.gerarTurnoUnicoGrupo(campeonatoId, grupoB, 1, ogOffset, MotorCampeonato.ARG_ROUNDS_ZONA)
         val partidasInter   = MotorCampeonato.gerarInterzonais(campeonatoId, grupoA, grupoB,
             MotorCampeonato.ARG_ROUNDS_ZONA + 1, ogOffset)
-        partidaDao.inserirTodas(partidasZonaA + partidasZonaB + partidasInter)
+        gravarPartidas(partidasZonaA + partidasZonaB + partidasInter)
 
         // Classificação inicial por grupo
         val tabela =
@@ -2218,7 +2267,15 @@ class GameRepository @Inject constructor(
         val todasPartidas = partidaDao.buscarTodasPorCampeonato(campeonatoId)
         if (todasPartidas.isEmpty()) return false
 
-        val isClausura = todasPartidas.any { it.ordemGlobal > MotorCampeonato.ARG_CLAUSURA_OG_OFFSET + 10 }
+        // Quem diz é o NOME do campeonato, não o ordemGlobal gravado. Numa
+        // temporada da GRADE o ordemGlobal é o dia do ano, e qualquer jogo depois
+        // de agosto passa de 220 — a heurística antiga declararia Clausura no
+        // meio do Apertura, e o Hall da Fama registraria a divisão errada.
+        // O ramo antigo fica para as temporadas da CURVA, onde ele é o que
+        // sempre foi.
+        val isClausura = CalendarioDeSlots.ehArgentinaClausura(camp.nome) ||
+            (camp.calendarioVersao == CalendarioVersao.CURVA &&
+                todasPartidas.any { it.ordemGlobal > MotorCampeonato.ARG_CLAUSURA_OG_OFFSET + 10 })
         val ogOffset   = if (isClausura) MotorCampeonato.ARG_CLAUSURA_OG_OFFSET else 0
 
         // ── Transição: grupo → oitavas ─────────────────────────────
@@ -2233,7 +2290,7 @@ class GameRepository @Inject constructor(
             if (top8A.size < 8 || top8B.size < 8) return false
             val oitavas = MotorCampeonato.gerarOitavasArgentina(
                 campeonatoId, top8A, top8B, MotorCampeonato.ARG_ROUND_KNOCKOUT_START, ogOffset)
-            partidaDao.inserirTodas(oitavas)
+            gravarPartidas(oitavas)
             return false
         }
 
@@ -2333,7 +2390,7 @@ class GameRepository @Inject constructor(
                     MotorCampeonato.ARG_FASES_KNOCKOUT.indexOf(proximaFase)
             val novasPartidas = MotorCampeonato.gerarProximaFaseKnockoutArgentina(
                 campeonatoId, vencedores, rodadaProxima, proximaFase, ogOffset)
-            partidaDao.inserirTodas(novasPartidas)
+            gravarPartidas(novasPartidas)
             return false
         }
         return false
@@ -2603,7 +2660,7 @@ class GameRepository @Inject constructor(
             ordemGlobalIda   = MotorCampeonato.COPA_ORDEM_GLOBAL[0],
             ordemGlobalVolta = MotorCampeonato.COPA_ORDEM_GLOBAL[1]
         )
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
         return copaId
     }
 
@@ -2621,7 +2678,7 @@ class GameRepository @Inject constructor(
             ordemGlobalIda    = MotorCampeonato.COPA_ARG_ORDEM_GLOBAL[0],
             ordemGlobalVolta  = MotorCampeonato.COPA_ARG_ORDEM_GLOBAL[1]
         )
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
         return copaArgId
     }
 
@@ -2661,7 +2718,7 @@ class GameRepository @Inject constructor(
             confrontoIdInicio = 1,
             ordemGlobal       = MotorCampeonato.COPA_ING_ORDEM_GLOBAL[0]
         )
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
         return copaId
     }
 
@@ -2702,7 +2759,7 @@ class GameRepository @Inject constructor(
             ordemGlobalIda    = MotorCampeonato.COPA16_ORDEM_GLOBAL[0],
             ordemGlobalVolta  = MotorCampeonato.COPA16_ORDEM_GLOBAL[1]
         )
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
         return copaId
     }
 
@@ -2867,7 +2924,7 @@ class GameRepository @Inject constructor(
         ))
         // Ida na casa do campeão da Sul-Americana; volta na casa do campeão da
         // Libertadores (mando de volta para o campeão da competição mais forte).
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = recopaId,
                 pares             = listOf(champSula.campeaoTimeId to champLib.campeaoTimeId),
@@ -3125,7 +3182,7 @@ class GameRepository @Inject constructor(
         classificacaoDao.inserirTodos(
             MotorCampeonato.gerarClassificacaoInicial(campeonatoId, participantes)
         )
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseLigaChampions(
                 campeonatoId, sorteio.confrontos, random, formato
             )
@@ -3386,7 +3443,7 @@ class GameRepository @Inject constructor(
         val classificados = classificacaoDao.buscarTabelaOrdenada(championsId).map { it.timeId }
         val pares = MotorCampeonato.paresPlayoffChampions(classificados, formato)
         if (pares.isEmpty()) return
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = championsId,
                 pares             = pares,
@@ -3418,7 +3475,7 @@ class GameRepository @Inject constructor(
         if (vencedores.size < formato.classificadosDireto) return
 
         val pares = MotorCampeonato.paresOitavasChampions(classificados, vencedores, formato)
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = championsId,
                 pares             = pares,
@@ -3643,7 +3700,7 @@ class GameRepository @Inject constructor(
                 confrontoIdInicio = maxConfId + 1,
                 ordemGlobal       = MotorCampeonato.COPA_ING_ORDEM_GLOBAL[faseIndex]
             )
-            partidaDao.inserirTodas(novasPartidas)
+            gravarPartidas(novasPartidas)
             return false
         }
         return false
@@ -3808,7 +3865,7 @@ class GameRepository @Inject constructor(
         ).toInt()
         campeonatoDao.inserirParticipantes(participantes.map { CampeonatoTimeEntity(campeonatoId, it) })
         val partidas = MotorCampeonato.gerarTurnoUnicoGrupo(campeonatoId, participantes, rodadaBase = 1, ogOffset = 0)
-        partidaDao.inserirTodas(partidas)
+        gravarPartidas(partidas)
         classificacaoDao.inserirTodos(MotorCampeonato.gerarClassificacaoInicial(campeonatoId, participantes))
         return campeonatoId
     }
@@ -3848,7 +3905,7 @@ class GameRepository @Inject constructor(
                 ordemGlobal  = ap.ordemGlobal + MotorCampeonato.URU_CLAUSURA_OG_OFFSET
             )
         }
-        partidaDao.inserirTodas(clausuraPartidas)
+        gravarPartidas(clausuraPartidas)
         classificacaoDao.inserirTodos(MotorCampeonato.gerarClassificacaoInicial(clausuraId, participantes))
         return clausuraId
     }
@@ -3894,7 +3951,7 @@ class GameRepository @Inject constructor(
             ogOffset = MotorCampeonato.URU_INTERM_OG_OFFSET,
             maxRodadas = MotorCampeonato.URU_ROUNDS_INTERM_GROUP
         )
-        partidaDao.inserirTodas(partidasA + partidasB)
+        gravarPartidas(partidasA + partidasB)
         val tabela =
             MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoA, MotorCampeonato.ARG_GRUPO_A) +
             MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoB, MotorCampeonato.ARG_GRUPO_B)
@@ -3930,7 +3987,7 @@ class GameRepository @Inject constructor(
                 ?: return false
             val liderB = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_B }.firstOrNull()?.timeId
                 ?: return false
-            partidaDao.inserirTodas(listOf(PartidaEntity(
+            gravarPartidas(listOf(PartidaEntity(
                 campeonatoId = intermedidId,
                 rodada       = MotorCampeonato.URU_INTERM_FINAL_RODADA,
                 timeCasaId   = liderA,
@@ -4033,7 +4090,7 @@ class GameRepository @Inject constructor(
             ogOffset = MotorCampeonato.URU_B_COMPET_OG_OFFSET,
             maxRodadas = MotorCampeonato.URU_B_COMPET_ROUNDS_GROUP
         )
-        partidaDao.inserirTodas(partidasA + partidasB)
+        gravarPartidas(partidasA + partidasB)
         val tabela =
             MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoA, MotorCampeonato.ARG_GRUPO_A) +
             MotorCampeonato.gerarClassificacaoInicial(campeonatoId, grupoB, MotorCampeonato.ARG_GRUPO_B)
@@ -4069,7 +4126,7 @@ class GameRepository @Inject constructor(
                 ?: return false
             val liderB = tabelaOrdenada.filter { it.grupo == MotorCampeonato.ARG_GRUPO_B }.firstOrNull()?.timeId
                 ?: return false
-            partidaDao.inserirTodas(listOf(PartidaEntity(
+            gravarPartidas(listOf(PartidaEntity(
                 campeonatoId = competId,
                 rodada       = MotorCampeonato.URU_B_COMPET_FINAL_RODADA,
                 timeCasaId   = liderA,
@@ -4213,14 +4270,14 @@ class GameRepository @Inject constructor(
             // Líder Anual = campeão do Apertura ou Clausura → Final direta (skip Semi)
             if (anualLiderId == aperturaChampId || anualLiderId == clausuraChampId) {
                 val adversario = if (anualLiderId == aperturaChampId) clausuraChampId else aperturaChampId
-                partidaDao.inserirTodas(listOf(PartidaEntity(
+                gravarPartidas(listOf(PartidaEntity(
                     campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_FINAL_RODADA,
                     timeCasaId = anualLiderId, timeForaId = adversario,
                     fase = "Final", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_FINAL
                 )))
             } else {
                 // Caso normal: Semi = Apertura champ vs Clausura champ
-                partidaDao.inserirTodas(listOf(PartidaEntity(
+                gravarPartidas(listOf(PartidaEntity(
                     campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_SEMI_RODADA,
                     timeCasaId = aperturaChampId, timeForaId = clausuraChampId,
                     fase = "Semi", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_SEMI
@@ -4246,7 +4303,7 @@ class GameRepository @Inject constructor(
             }
             val tabelaAnual  = calcularTabelaAnualUruguai(aperturaId, clausuraId, intermedidId)
             val anualLiderId = tabelaAnual.maxByOrNull { it.value }?.key ?: return false
-            partidaDao.inserirTodas(listOf(PartidaEntity(
+            gravarPartidas(listOf(PartidaEntity(
                 campeonatoId = clausuraId, rodada = MotorCampeonato.URU_PLAYOFF_FINAL_RODADA,
                 timeCasaId = semiVencedor, timeForaId = anualLiderId,
                 fase = "Final", ordemGlobal = MotorCampeonato.URU_PLAYOFF_OG_FINAL
@@ -4552,7 +4609,7 @@ class GameRepository @Inject constructor(
             CampeonatoTimeEntity(supercopaId, campeonatoCopaId)
         ))
         // Jogo único disputado no final de janeiro (ordemGlobal = 1, antes de tudo)
-        partidaDao.inserirTodas(listOf(
+        gravarPartidas(listOf(
             PartidaEntity(
                 campeonatoId = supercopaId,
                 rodada       = 1,
@@ -4635,7 +4692,7 @@ class GameRepository @Inject constructor(
         ))
 
         // Campeão da Libertadores como mandante nominal; o jogo é em campo neutro.
-        partidaDao.inserirTodas(listOf(
+        gravarPartidas(listOf(
             PartidaEntity(
                 campeonatoId = copaId,
                 rodada       = 1,
@@ -4829,7 +4886,7 @@ class GameRepository @Inject constructor(
         ))
 
         // Cria a única partida (campeão do Apertura como mandante por convenção)
-        val partidaId = partidaDao.inserir(
+        val partidaId = gravarPartida(
             PartidaEntity(
                 campeonatoId = trofeuId,
                 rodada       = 1,
@@ -5079,7 +5136,7 @@ class GameRepository @Inject constructor(
                 ordemGlobalIda     = ordemGlobal[faseIndex * 2],
                 ordemGlobalVolta   = ordemGlobal[faseIndex * 2 + 1]
             )
-            partidaDao.inserirTodas(novasPartidas)
+            gravarPartidas(novasPartidas)
             return false
         }
         return false
@@ -8034,7 +8091,7 @@ class GameRepository @Inject constructor(
         // decide em casa. Ver SorteioLibertadores.sortearFase1.
         val filaPre = naPre.sortedWith(ListaDeAcessoChampions.ORDEM)
         val fase1 = filaPre.takeLast(ListaDeAcessoLibertadores.PRE_FASE1_CLUBES)
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = campeonatoId,
                 pares             = SorteioLibertadores.sortearFase1(paraSorteio(fase1), random),
@@ -8208,7 +8265,7 @@ class GameRepository @Inject constructor(
         } else {
             SorteioLibertadores.chavearFase3(vencedores)
         }
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = libertadoresId,
                 pares             = pares,
@@ -8282,7 +8339,7 @@ class GameRepository @Inject constructor(
                 )
             }
         )
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarGruposTurnoReturno(
                 campeonatoId         = libertadoresId,
                 grupos               = sorteio.grupos.map { g -> g.clubes.map { it.timeId } },
@@ -8314,7 +8371,7 @@ class GameRepository @Inject constructor(
             primeiros = rotulos.map { porGrupo.getValue(it)[0].timeId },
             segundos  = rotulos.map { porGrupo.getValue(it)[1].timeId }
         )
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = libertadoresId,
                 pares             = pares,
@@ -8428,7 +8485,7 @@ class GameRepository @Inject constructor(
                     ordemGlobalVolta  = formato.ordemGlobalMataMata[(indice + 1) * 2 + 1]
                 )
             }
-            partidaDao.inserirTodas(novas)
+            gravarPartidas(novas)
             return false
         }
         return false
@@ -8769,7 +8826,7 @@ class GameRepository @Inject constructor(
         // Primeira Fase: DENTRO de cada país, 1º×4º e 2º×3º pelo ranking, em
         // partida única, o melhor ranqueado em casa. Ver
         // SorteioSulAmericana.chavearPrimeiraFase.
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseJogoUnico(
                 campeonatoId      = campeonatoId,
                 pares             = SorteioSulAmericana.chavearPrimeiraFase(paraSorteio(naPrimeira)),
@@ -8939,7 +8996,7 @@ class GameRepository @Inject constructor(
                 )
             }
         )
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarGruposTurnoReturno(
                 campeonatoId         = sulAmericanaId,
                 grupos               = sorteio.grupos.map { g -> g.clubes.map { it.timeId } },
@@ -8985,7 +9042,7 @@ class GameRepository @Inject constructor(
             terceiros.map { CampeonatoTimeEntity(sulAmericanaId, it, PORTA_PRE) }
         )
 
-        partidaDao.inserirTodas(
+        gravarPartidas(
             MotorCampeonato.gerarFaseIdaVolta(
                 campeonatoId      = sulAmericanaId,
                 pares             = MotorCampeonato.paresOitavasLibertadores(
@@ -9074,7 +9131,7 @@ class GameRepository @Inject constructor(
                     ordemGlobalVolta  = formato.ordemGlobalMataMata[(indice + 1) * 2 + 1]
                 )
             }
-            partidaDao.inserirTodas(novas)
+            gravarPartidas(novas)
             return false
         }
         return false

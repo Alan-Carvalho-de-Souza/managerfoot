@@ -46,14 +46,14 @@ fun CalendarioScreen(
         partidas.filter { !it.jogada }.sortedWith(
             compareBy(
                 { anoDePartida(it.nomeCampeonato) },
-                { val (m, d) = ordemGlobalParaData(it.ordemGlobal, it.nomeCampeonato); m * 100 + d }
+                { val (m, d) = ordemGlobalParaData(it); m * 100 + d }
             )
         )
     }
     val realizados = remember(partidas) {
         partidas.filter { it.jogada }.sortedWith(
             compareByDescending<CalendarioPartidaDto> { anoDePartida(it.nomeCampeonato) }
-                .thenByDescending { val (m, d) = ordemGlobalParaData(it.ordemGlobal, it.nomeCampeonato); m * 100 + d }
+                .thenByDescending { val (m, d) = ordemGlobalParaData(it); m * 100 + d }
         )
     }
 
@@ -96,7 +96,7 @@ fun CalendarioScreen(
                 buildList {
                     var chavePrev = ""
                     lista.forEach { p ->
-                        val (mes, dia) = ordemGlobalParaData(p.ordemGlobal, p.nomeCampeonato)
+                        val (mes, dia) = ordemGlobalParaData(p)
                         val ano = anoDePartida(p.nomeCampeonato)
                         val chave = "${ano}_${"%02d".format(mes)}_${"%02d".format(dia)}"
                         val mesNome = NOMES_MESES[mes]
@@ -149,7 +149,7 @@ private fun CalendarioCard(
     val isJogadorFora = partida.timeForaId == timeJogadorId
     val envolvido = isJogadorCasa || isJogadorFora
 
-    val (mes, dia) = ordemGlobalParaData(partida.ordemGlobal, partida.nomeCampeonato)
+    val (mes, dia) = ordemGlobalParaData(partida)
     val dataCurta  = "$dia ${NOMES_MESES[mes].take(3)}"
 
     // Cor da borda: verde elétrico quando o jogador está envolvido
@@ -306,9 +306,12 @@ private sealed class CalendarioItem {
 // ─────────────────────────────────────────────────────────────
 private val NOMES_MESES = br.com.managerfoot.domain.engine.CalendarioDoJogo.MESES
 
-private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> =
-    br.com.managerfoot.domain.engine.CalendarioDoJogo
-        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
+private fun ordemGlobalParaData(
+    partida: br.com.managerfoot.data.dao.CalendarioPartidaDto
+): Pair<Int, Int> =
+    br.com.managerfoot.domain.engine.CalendarioDoJogo.ordemGlobalParaMesDia(
+        partida.ordemGlobal, partida.nomeCampeonato, partida.calendarioVersao
+    )
 
 private fun anoDePartida(nomeCampeonato: String): Int =
     br.com.managerfoot.domain.engine.CalendarioDoJogo.anoDoNomeDoCampeonato(nomeCampeonato)
