@@ -1,6 +1,7 @@
 package br.com.managerfoot.presentation.ui.util
 
 import br.com.managerfoot.data.datasource.SaveState
+import br.com.managerfoot.domain.engine.MotorCampeonato
 
 // ─────────────────────────────────────────────────────────────────────────────
 // De qual competição é uma partida, a partir do id do campeonato.
@@ -32,7 +33,14 @@ enum class EstiloCompeticao { LIGA, COPA, SUPERCOPA, CONTINENTAL, AMISTOSO }
 data class Competicao(
     val nome: String,
     val estilo: EstiloCompeticao,
-    val fasePadrao: String? = null
+    val fasePadrao: String? = null,
+    /**
+     * Faixa de rodadas em que a fase de grupos é GRAVADA, quando a competição
+     * tem uma. Na Libertadores e na Sul-Americana ela é 11..16, e não 1..6,
+     * para não colidir com a Pré dentro do mesmo campeonato — ver
+     * [MapaDeCompeticoes.rodadaVisivel].
+     */
+    val rodadasDosGrupos: IntRange? = null
 )
 
 class MapaDeCompeticoes(competicoes: Map<Int, Competicao>) {
@@ -84,6 +92,20 @@ class MapaDeCompeticoes(competicoes: Map<Int, Competicao>) {
     private fun rodadaOuPartida(rodada: Int): String =
         if (rodada > 0) "Rodada $rodada" else "Partida"
 
+    /**
+     * A rodada como o jogador a conta.
+     *
+     * Para quase toda competição é a própria rodada gravada. Na fase de grupos
+     * da Libertadores e da Sul-Americana a gravação começa em 11, porque a Pré
+     * ocupa 1..6 no mesmo campeonato — e o jogador via "R11" na primeira rodada
+     * dos grupos. A Pré e o mata-mata não passam por aqui: as partidas deles têm
+     * fase, e quem nomeia é a fase.
+     */
+    fun rodadaVisivel(campeonatoId: Int, rodada: Int): Int {
+        val faixa = de(campeonatoId)?.rodadasDosGrupos ?: return rodada
+        return if (rodada in faixa) rodada - faixa.first + 1 else rodada
+    }
+
     companion object {
         val VAZIO = MapaDeCompeticoes(emptyMap())
 
@@ -92,6 +114,9 @@ class MapaDeCompeticoes(competicoes: Map<Int, Competicao>) {
          * europeias. Acrescentar um campeonato ao SaveState é acrescentar uma
          * linha aqui — e aí todas as telas passam a nomeá-lo.
          */
+        private fun faixaDeGrupos(formato: MotorCampeonato.FormatoLibertadores): IntRange =
+            formato.rodadaBaseGrupos until formato.rodadaBaseGrupos + formato.rodadasGrupos
+
         fun de(save: SaveState?): MapaDeCompeticoes {
             if (save == null) return VAZIO
             val liga = EstiloCompeticao.LIGA
@@ -135,8 +160,14 @@ class MapaDeCompeticoes(competicoes: Map<Int, Competicao>) {
                     // ── Continentais ─────────────────────────────────────────
                     save.championsId              to Competicao("Champions League", continental, "Fase de Liga"),
                     save.europaLeagueId           to Competicao("Europa League", continental, "Fase de Liga"),
-                    save.libertadoresId           to Competicao("Libertadores", continental, "Fase de Grupos"),
-                    save.sulAmericanaId           to Competicao("Copa Sul-Americana", continental, "Fase de Grupos"),
+                    save.libertadoresId           to Competicao(
+                        "Libertadores", continental, "Fase de Grupos",
+                        rodadasDosGrupos = faixaDeGrupos(MotorCampeonato.FORMATO_LIBERTADORES)
+                    ),
+                    save.sulAmericanaId           to Competicao(
+                        "Copa Sul-Americana", continental, "Fase de Grupos",
+                        rodadasDosGrupos = faixaDeGrupos(MotorCampeonato.FORMATO_SULAMERICANA)
+                    ),
                     save.recopaId                 to Competicao("Recopa Sul-Americana", continental, "Final"),
                     save.intercontinentalId       to Competicao("Copa Intercontinental", continental, "Final"),
 

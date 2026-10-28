@@ -938,6 +938,22 @@ object MotorCampeonato {
             get() = (rodadaBaseGrupos until rodadaBaseGrupos + rodadasGrupos).toList()
 
         /**
+         * A rodada da fase de GRUPOS como o jogador a conta: a primeira é 1.
+         *
+         * A rodada gravada é um slot dentro do campeonato, e a faixa dos grupos
+         * começa em [rodadaBaseGrupos] (11) para não colidir com a da Pré (1..6)
+         * dentro do mesmo campeonato. Esse 11 é detalhe de armazenamento: na tela
+         * a fase de grupos tem seis rodadas e a primeira delas é a primeira.
+         *
+         * Devolve null fora da faixa dos grupos — ali a rodada não é uma rodada
+         * de grupo, e quem nomeia é a fase.
+         */
+        fun rodadaDosGruposVisivel(rodada: Int): Int? =
+            if (rodada in rodadaBaseGrupos until rodadaBaseGrupos + rodadasGrupos)
+                rodada - rodadaBaseGrupos + 1
+            else null
+
+        /**
          * Rótulo de uma rodada da Pré — "Fase 2 — Volta" —, ou null quando a
          * rodada não é dela.
          *

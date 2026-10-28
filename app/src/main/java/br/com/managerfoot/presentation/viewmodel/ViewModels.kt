@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import br.com.managerfoot.data.database.entities.*
 import br.com.managerfoot.data.datasource.GameDataStore
+import br.com.managerfoot.presentation.ui.util.MapaDeCompeticoes
 import br.com.managerfoot.data.datasource.SeedDataSource
 import br.com.managerfoot.data.repository.*
 import br.com.managerfoot.domain.engine.*
@@ -3329,13 +3330,25 @@ class ConfrontoViewModel @Inject constructor(
 // ═══════════════════════════════════════════════════════════
 @HiltViewModel
 class CalendarioViewModel @Inject constructor(
-    private val partidaDao: PartidaDao
+    private val partidaDao: PartidaDao,
+    private val gameDataStore: GameDataStore
 ) : ViewModel() {
 
     private val _partidas = MutableStateFlow<List<CalendarioPartidaDto>>(emptyList())
     val partidas: StateFlow<List<CalendarioPartidaDto>> = _partidas.asStateFlow()
 
+    /**
+     * De qual competição é cada partida do calendário. O calendário mistura
+     * todas elas, e sem isto a tela não tem como saber que a "rodada 11" de uma
+     * partida é a 1ª rodada dos grupos da Libertadores.
+     */
+    private val _competicoes = MutableStateFlow(MapaDeCompeticoes.VAZIO)
+    val competicoes: StateFlow<MapaDeCompeticoes> = _competicoes.asStateFlow()
+
     fun carregar(timeId: Int) = viewModelScope.launch {
+        launch {
+            gameDataStore.saveState.collect { _competicoes.value = MapaDeCompeticoes.de(it) }
+        }
         partidaDao.observeCalendario(timeId).collect { _partidas.value = it }
     }
 }
@@ -4283,11 +4296,16 @@ class RodadaViewModel @Inject constructor(
      * rótulo é o da fase, "Fase 2 — Ida".
      */
     fun rotuloDaRodada(divisao: Int, rodada: Int): String {
-        if (divisao == 40) {
-            MotorCampeonato.FORMATO_LIBERTADORES.rotuloDaRodadaPre(rodada)?.let { return it }
+        val formato = when (divisao) {
+            40   -> MotorCampeonato.FORMATO_LIBERTADORES
+            42   -> MotorCampeonato.FORMATO_SULAMERICANA
+            else -> null
         }
-        if (divisao == 42) {
-            MotorCampeonato.FORMATO_SULAMERICANA.rotuloDaRodadaPre(rodada)?.let { return it }
+        if (formato != null) {
+            formato.rotuloDaRodadaPre(rodada)?.let { return it }
+            // E a fase de grupos conta do 1: a faixa 11..16 é só o slot em que
+            // ela é gravada, para não colidir com a Pré no mesmo campeonato.
+            formato.rodadaDosGruposVisivel(rodada)?.let { return "Rodada $it" }
         }
         return "Rodada $rodada"
     }

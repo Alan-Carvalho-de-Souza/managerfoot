@@ -177,6 +177,35 @@ class RotuloCompeticaoTest {
         }
     }
 
+    // ── Rodada visível ───────────────────────────────────────────────────
+
+    @Test
+    fun `a rodada dos grupos das continentais sul-americanas conta do 1`() {
+        // Gravadas como 11..16, porque a Pré ocupa 1..6 no mesmo campeonato.
+        for (gravada in 11..16) {
+            assertEquals("Libertadores R$gravada", gravada - 10, mapa.rodadaVisivel(42, gravada))
+            assertEquals("Sul-Americana R$gravada", gravada - 10, mapa.rodadaVisivel(43, gravada))
+        }
+    }
+
+    @Test
+    fun `fora da faixa dos grupos a rodada nao e mexida`() {
+        // Pré e mata-mata: essas partidas têm fase, e quem as nomeia é a fase.
+        assertEquals(1, mapa.rodadaVisivel(42, 1))
+        assertEquals(6, mapa.rodadaVisivel(42, 6))
+        assertEquals(20, mapa.rodadaVisivel(42, 20))
+    }
+
+    @Test
+    fun `competicao sem fase de grupos nunca tem a rodada deslocada`() {
+        // Uma liga na rodada 11 é a rodada 11, e nada mais.
+        for (id in listOf(13, 1, 20, 40, 30, 60)) {
+            assertEquals("camp $id", 11, mapa.rodadaVisivel(id, 11))
+        }
+        // E o campeonato desconhecido também fica como está.
+        assertEquals(11, mapa.rodadaVisivel(999, 11))
+    }
+
     // ── Save ausente ─────────────────────────────────────────────────────
 
     @Test

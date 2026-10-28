@@ -38,6 +38,7 @@ fun CalendarioScreen(
     vm: CalendarioViewModel = hiltViewModel()
 ) {
     val partidas by vm.partidas.collectAsState()
+    val competicoes by vm.competicoes.collectAsState()
 
     LaunchedEffect(timeId) { vm.carregar(timeId) }
 
@@ -125,7 +126,8 @@ fun CalendarioScreen(
                         is CalendarioItem.Header -> DataHeader(item.label)
                         is CalendarioItem.Jogo   -> CalendarioCard(
                             partida = item.partida,
-                            timeJogadorId = timeId
+                            timeJogadorId = timeId,
+                            competicoes = competicoes
                         )
                     }
                 }
@@ -140,7 +142,8 @@ fun CalendarioScreen(
 @Composable
 private fun CalendarioCard(
     partida: CalendarioPartidaDto,
-    timeJogadorId: Int
+    timeJogadorId: Int,
+    competicoes: br.com.managerfoot.presentation.ui.util.MapaDeCompeticoes
 ) {
     val isJogadorCasa = partida.timeCasaId == timeJogadorId
     val isJogadorFora = partida.timeForaId == timeJogadorId
@@ -182,7 +185,11 @@ private fun CalendarioCard(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "$dataCurta · ${partida.fase ?: "R${partida.rodada}"}",
+                    // A rodada como o jogador a conta: a 1ª rodada dos grupos da
+                    // Libertadores é gravada como 11 (a Pré ocupa 1..6 no mesmo
+                    // campeonato) e aparecia aqui como "R11".
+                    text = "$dataCurta · ${partida.fase
+                        ?: "R${competicoes.rodadaVisivel(partida.campeonatoId, partida.rodada)}"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1

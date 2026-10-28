@@ -177,3 +177,17 @@ torneio sem destino.
    quando a fase é "Final".
 7. **Hall da Fama na divisão 35**, já reservada a esta competição, e a pontuação nos dois
    rankings, que também já está implementada e testada — basta chamar.
+
+---
+
+## As faixas de rodada
+
+Como na Libertadores, as três etapas dividem a numeração de rodadas dentro do
+mesmo campeonato: a Primeira Fase ocupa a 1, os grupos as 11..16 e o mata-mata
+da 21 em diante.
+
+Essa faixa é **slot de armazenamento, não numeração de tela**. A fase de grupos
+tem seis rodadas e a primeira delas é a primeira: `rodadaDosGruposVisivel`
+traduz 11..16 para 1..6, e é por ela que o seletor de rodadas e o calendário
+passam. A Primeira Fase e o mata-mata não precisam disso — as partidas deles têm
+`fase`, e quem nomeia é a fase.

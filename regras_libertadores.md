@@ -336,6 +336,8 @@ o mata-mata 21..27, com a final única na 27. **As casas de `ordemGlobal`** são
 335/345 e 385 no mata-mata — nenhuma colide com a Champions, com a Europa League
 ou com os múltiplos de 10 das ligas nacionais, e um teste trava isso.
 
+Essa faixa é **slot de armazenamento, não numeração de tela**. A fase de grupos tem seis rodadas e a primeira delas é a primeira: `rodadaDosGruposVisivel` traduz 11..16 para 1..6, e é por ela que o seletor de rodadas e o calendário passam. A Pré e o mata-mata não precisam disso — as partidas deles têm `fase`, e quem nomeia é a fase.
+
 **O repositório** cria a competição com a Pré-Libertadores e sorteia os grupos
 quando a Fase 3 termina — tem de ser nessa ordem, porque 4 dos 32 vêm da Pré. É o
 mesmo padrão do play-off → oitavas da Champions. O rótulo de
