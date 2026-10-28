@@ -1,5 +1,6 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.util.BarraComparativa
 import br.com.managerfoot.presentation.ui.theme.fundoApp
 
 import androidx.compose.foundation.Canvas
@@ -738,7 +739,10 @@ private fun ComparativoLinha(
 ) {
     val corMeu = if (meu >= adv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val corAdv = if (adv >= meu) MaterialTheme.colorScheme.error   else MaterialTheme.colorScheme.onSurfaceVariant
-    val total = (meu + adv).coerceAtLeast(1)
+    // Um setor pode valer 0 (sem titular, ou escalação ainda não montada num jogo
+    // novo), e o Compose recusa weight <= 0. Ver BarraComparativa.
+    val fracMeu = BarraComparativa.fracaoDoPrimeiro(meu, adv)
+    val fracAdv = 1f - fracMeu
     val peso = if (destaque) FontWeight.Bold else FontWeight.SemiBold
     Row(
         Modifier.fillMaxWidth(),
@@ -768,13 +772,13 @@ private fun ComparativoLinha(
         ) {
             Box(
                 Modifier
-                    .weight(meu.toFloat() / total)
+                    .weight(fracMeu)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.primary)
             )
             Box(
                 Modifier
-                    .weight(adv.toFloat() / total)
+                    .weight(fracAdv)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
             )

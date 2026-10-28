@@ -1,5 +1,6 @@
 package br.com.managerfoot.presentation.ui.screens
 
+import br.com.managerfoot.presentation.ui.util.BarraComparativa
 import br.com.managerfoot.presentation.ui.theme.fundoApp
 
 import androidx.compose.animation.*
@@ -1024,7 +1025,7 @@ private fun EstatisticaRow(
     val corCasa = MaterialTheme.colorScheme.primary
     val corFora = MaterialTheme.colorScheme.error
     val total = valorCasa + valorFora
-    val fracCasa = if (total > 0) (valorCasa.toFloat() / total).coerceIn(0.02f, 0.98f) else 0.5f
+    val fracCasa = BarraComparativa.fracaoDoPrimeiro(valorCasa, valorFora)
     val fracFora = 1f - fracCasa
 
     val casaMelhor = if (invertido) valorCasa < valorFora else valorCasa > valorFora
