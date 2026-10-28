@@ -73,6 +73,30 @@ clube de pool que não tem campanha nenhuma.
 > geral do país na temporada anterior". Aqui as 5 saem da tabela, porque o jogo não tem o
 > ranking de associações que distribui essa vaga extra.
 
+### Conferência com a fonte oficial da Premier League
+
+As regras de classificação europeia publicadas pela Premier League foram conferidas contra
+o que está implementado. O que elas **confirmam**:
+
+| Regra da fonte | Estado no jogo |
+|---|---|
+| Os 4 primeiros vão direto à Champions, e o 5º também quando a Inglaterra fica entre as melhores federações do coeficiente (bônus EPS) | **Implementado como 5 vagas fixas.** É o cenário COM o bônus, e é a simplificação registrada acima: o jogo não tem ranking de associações para decidir ano a ano. |
+| Europa League: campeão da FA Cup + melhor da liga logo abaixo da zona da Champions | **Implementado.** Ver a tabela de mapeamento em [europa_league.md](europa_league.md). |
+| Vaga de copa cujo campeão já se classificou pela liga desce para o próximo não classificado, podendo chegar ao 7º | **Implementado**, na lista de acesso e na zona da tabela (`VagasEuropeias`). Com uma única copa no jogo, o limite é o 7º; o 8º da fonte depende da Copa da Liga. |
+
+O que ficou **de fora, de propósito**:
+
+- **UEFA Conference League** e a vaga do campeão da **EFL Cup**. Nenhuma das duas existe no
+  jogo: a Conference tem só o código de Hall reservado (32), e a Copa da Liga é justamente o
+  "torneio secundário" que [ranking_mundial.md](ranking_mundial.md) manda ignorar. São duas
+  competições novas para construir, não um ajuste de cota.
+- **A 5ª vaga condicional.** Tornar o bônus EPS dependente do desempenho do país exigiria um
+  ranking de **associações**, que o jogo não tem — o `RankingEuropa` é de clubes — e mudaria
+  a soma de 28 vagas diretas, que é o que fecha os 36 da Fase de Liga.
+
+E o que falta de verdade é a **vaga do campeão vigente** — item 4 de [Falta](#falta), que é
+de onde sai o cenário de representação expandida que a fonte descreve.
+
 ---
 
 ## 2. O sorteio — modelo híbrido
@@ -242,3 +266,15 @@ com as faixas de oitavas e play-off; o mata-mata na aba "Champions" do chaveamen
 3. **Chaveamento fixo das oitavas em diante.** Das quartas à final os confrontos são
    sorteados a cada fase (`sortearPares`), como nas outras copas do jogo, em vez de seguirem
    um quadro fechado a partir das oitavas como na Champions de verdade.
+4. **A vaga estrutural do campeão vigente.** O campeão da Champions e o da Europa League
+   deveriam entrar na edição seguinte **por fora da cota do país**, com a vaga da liga
+   cascateando quando eles também se classificariam por ela. É disso que vem a
+   "representação expandida" que a fonte da Premier League descreve — até 11 clubes ingleses
+   em cenários excepcionais. Hoje `ListaDeAcessoChampions.montar` distribui apenas as vagas
+   diretas e a qualificação, então um campeão que termina fora da zona simplesmente não se
+   classifica para defender o título.
+
+   O caminho está pronto dos dois lados: o Hall da Fama já guarda os dois campeões (divisões
+   30 e 31), e o Brasil já faz exatamente isso com a Libertadores — ver
+   `VagasDoBrasileirao` e o `campeoesContinentaisTimeIds` de
+   `buscarVagasContinentaisDoBrasil`. Falta portar para a Europa.

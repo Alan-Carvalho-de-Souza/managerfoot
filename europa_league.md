@@ -87,6 +87,14 @@ E se o campeão da copa já estiver classificado à Champions pela liga, a vaga 
 colocado seguinte**. Isso precisa ser explícito no código: sem essa regra o clube ocuparia
 duas vagas e o país entraria com um time a menos.
 
+> **Conferido com a fonte oficial da Premier League.** Ela descreve exatamente este
+> mapeamento — campeão da FA Cup mais o melhor da liga abaixo da zona da Champions, com a
+> vaga de copa descendo para o próximo não classificado, o que pode levar o 7º à Europa
+> League. A fonte menciona também uma vaga de **Conference League** para o campeão da EFL
+> Cup; nenhuma das duas existe no jogo, e a decisão de deixar as duas de fora está
+> registrada em [regras_championsleague.md](regras_championsleague.md), na seção
+> "Conferência com a fonte oficial da Premier League".
+
 Os demais países são clubes de pool, sem liga nem copa. Para eles decide o coeficiente da
 UEFA com a reputação desempatando, igual ao que a Champions já faz.
 
