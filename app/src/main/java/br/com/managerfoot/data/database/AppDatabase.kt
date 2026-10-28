@@ -35,7 +35,7 @@ import br.com.managerfoot.data.database.entities.*
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 35,
+    version = 36,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -192,6 +192,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transferencias ADD COLUMN ano INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE transferencias ADD COLUMN ordemGlobal INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -203,7 +210,8 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
                         MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
-                        MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35
+                        MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35,
+                        MIGRATION_35_36
                     )
                     .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()

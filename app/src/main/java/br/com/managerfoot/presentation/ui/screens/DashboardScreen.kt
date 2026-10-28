@@ -1429,33 +1429,14 @@ private fun nomeCampeonatoParaData(
     }
 }
 
-// ─── Cálculo de data por ordem global (preservado da versão dev) ────
-private val DASH_COPA_DATAS: Map<Int, Pair<Int, Int>> = mapOf(
-    13 to (2 to 10), 33 to (2 to 25),
-    53 to (3 to 15), 83 to (4 to 5),
-    133 to (5 to 15), 163 to (6 to 10),
-    207 to (7 to 15), 233 to (8 to 5),
-    278 to (9 to 10), 313 to (10 to 8),
-    357 to (11 to 12), 383 to (12 to 3)
-)
-private val DASH_DIAS_MES = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-private fun dashDiaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {
-    var rem = diaDoAno.coerceIn(1, 365)
-    for (m in 1..12) {
-        if (rem <= DASH_DIAS_MES[m]) return m to rem
-        rem -= DASH_DIAS_MES[m]
-    }
-    return 12 to 31
-}
-private fun dashOrdemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> = when {
-    ordemGlobal == 1 -> 1 to 25
-    nomeCampeonato.contains("Copa", ignoreCase = true) ->
-        DASH_COPA_DATAS[ordemGlobal] ?: dashDiaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
-    nomeCampeonato.contains("Argentina", ignoreCase = true) ->
-        dashDiaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 410).coerceIn(1, 365))
-    else ->
-        dashDiaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
-}
+// ─── Datas ──────────────────────────────────────────────────────────
+// A conversão de ordemGlobal em data vive em CalendarioDoJogo, compartilhada
+// com o calendário e com o histórico de transferências. A cópia que existia
+// aqui não conhecia amistosos, Intercontinental nem o Troféu dos Campeões, e
+// datava os três pela curva genérica das ligas.
+private fun dashOrdemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> =
+    br.com.managerfoot.domain.engine.CalendarioDoJogo
+        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
 
 // ─── Card de meta da temporada ──────────────────────────────
 @Composable

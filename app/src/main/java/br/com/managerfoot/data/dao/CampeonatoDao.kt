@@ -16,6 +16,13 @@ interface CampeonatoDao {
     @Query("SELECT * FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY tipo")
     suspend fun buscarPorTemporadaId(temporadaId: Int): List<CampeonatoEntity>
 
+    /**
+     * O nome de um campeonato da temporada — de onde sai o ANO dela.
+     * O ano não tem coluna própria: mora no nome ("Brasileiro Série A 2027").
+     */
+    @Query("SELECT nome FROM campeonatos WHERE temporadaId = :temporadaId ORDER BY id LIMIT 1")
+    suspend fun nomeDeUmCampeonatoDaTemporada(temporadaId: Int): String?
+
     @Query("SELECT * FROM campeonatos WHERE id = :id")
     suspend fun buscarPorId(id: Int): CampeonatoEntity?
 

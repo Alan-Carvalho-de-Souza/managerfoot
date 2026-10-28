@@ -1472,7 +1472,26 @@ private val MESES_ABREV = arrayOf(
  * desconhecido (saves antigos / passagem sem eventos) e para um traço quando o ano
  * também é desconhecido.
  */
-private fun formatarPeriodoPassagem(anoInicio: Int, anoFim: Int, mesInicio: Int, mesFim: Int): String {
+private fun formatarPeriodoPassagem(
+    anoInicio: Int,
+    anoFim: Int,
+    mesInicio: Int,
+    mesFim: Int,
+    chegada: br.com.managerfoot.domain.engine.DataDoJogo?,
+    saida: br.com.managerfoot.domain.engine.DataDoJogo?
+): String {
+    // Quando há transferência delimitando a passagem, ela é a resposta exata:
+    // diz quando ele chegou e quando foi para o outro clube. Os meses derivados
+    // das partidas só dizem quando ele estreou e quando jogou pela última vez.
+    if (chegada != null && chegada.conhecida) {
+        val ini = chegada.curta()
+        val fim = saida?.takeIf { it.conhecida }?.curta()
+        return when {
+            fim == null  -> "Desde $ini"
+            fim == ini   -> ini
+            else         -> "$ini – $fim"
+        }
+    }
     if (anoInicio <= 0 && anoFim <= 0) return "Período indisponível"
     if (mesInicio !in 1..12 || mesFim !in 1..12) {
         return if (anoInicio == anoFim) "$anoInicio" else "$anoInicio – $anoFim"
@@ -1498,6 +1517,8 @@ fun PassagemClubeCard(
     partidas: Int,
     mesInicio: Int = 0,
     mesFim: Int = 0,
+    chegada: br.com.managerfoot.domain.engine.DataDoJogo? = null,
+    saida: br.com.managerfoot.domain.engine.DataDoJogo? = null,
     notaMedia: Float? = null,
     destaque: Boolean = false,
     modifier: Modifier = Modifier
@@ -1539,7 +1560,7 @@ fun PassagemClubeCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            formatarPeriodoPassagem(anoInicio, anoFim, mesInicio, mesFim),
+                            formatarPeriodoPassagem(anoInicio, anoFim, mesInicio, mesFim, chegada, saida),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

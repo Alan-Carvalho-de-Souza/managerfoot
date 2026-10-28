@@ -301,61 +301,14 @@ private sealed class CalendarioItem {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Mapeamento ordemGlobal → data exata (preservado de dev)
-//
-//  Regras por campeonato:
-//  • Supercopa Rei          → ordemGlobal = 1  → 25 Jan
-//  • Copa do Brasil         → mapeamento fixo pelos ordemGlobal conhecidos
-//  • Argentina A/B          → 58 rodadas, OG 10-580 → Fev 8 – Nov 30
-//  • Brasileirão A-D        → 38 rodadas, OG 10-380 → Fev 8 – Nov 30
+//  Datas: a conversão vive em CalendarioDoJogo, compartilhada com o dashboard
+//  e com o histórico de transferências. Aqui ficam só os apelidos locais.
 // ─────────────────────────────────────────────────────────────
-private val NOMES_MESES = listOf(
-    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-)
+private val NOMES_MESES = br.com.managerfoot.domain.engine.CalendarioDoJogo.MESES
 
-private val COPA_DATAS: Map<Int, Pair<Int, Int>> = mapOf(
-    13  to (2 to 10),   33  to (2 to 25),
-    53  to (3 to 15),   83  to (4 to  5),
-    133 to (5 to 15),  163  to (6 to 10),
-    207 to (7 to 15),  233  to (8 to  5),
-    278 to (9 to 10),  313  to (10 to  8),
-    357 to (11 to 12), 383  to (12 to  3)
-)
-
-private val DIAS_MES = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-/** Converte dia-do-ano (1-365) em (mês, dia). */
-private fun diaDanoParaMesDia(diaDoAno: Int): Pair<Int, Int> {
-    var rem = diaDoAno.coerceIn(1, 365)
-    for (m in 1..12) {
-        if (rem <= DIAS_MES[m]) return m to rem
-        rem -= DIAS_MES[m]
-    }
-    return 12 to 31
-}
-
-/** Retorna (mês, dia) para uma partida baseado em ordemGlobal e nome do campeonato. */
-private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> = when {
-    // Amistosos de entressafra: OG ~450 (dezembro) ou ~5 (janeiro).
-    nomeCampeonato.contains("Amistoso", ignoreCase = true) ->
-        if (ordemGlobal >= 400) 12 to 20 else 1 to 15
-    ordemGlobal == 1 -> 1 to 25   // Supercopa Rei: 25 de Janeiro
-    // Copa Intercontinental: jogo único no fim da temporada (depois das finais
-    // da Champions e da Libertadores). Vem antes do ramo genérico de "Copa".
-    nomeCampeonato.contains("Intercontinental", ignoreCase = true) -> 12 to 18
-    // Troféu dos Campeões (ARG): jogo único em mid-Dezembro do mesmo ano
-    ordemGlobal == 620 || (nomeCampeonato.contains("Troféu", ignoreCase = true) && nomeCampeonato.contains("Campe", ignoreCase = true)) -> 12 to 15
-    nomeCampeonato.contains("Copa", ignoreCase = true) ->
-        COPA_DATAS[ordemGlobal]
-            ?: diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
-    nomeCampeonato.contains("Argentina", ignoreCase = true) -> {
-        diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 410).coerceIn(1, 365))
-    }
-    else -> {
-        diaDanoParaMesDia((39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365))
-    }
-}
+private fun ordemGlobalParaData(ordemGlobal: Int, nomeCampeonato: String): Pair<Int, Int> =
+    br.com.managerfoot.domain.engine.CalendarioDoJogo
+        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato)
 
 private fun anoDePartida(nomeCampeonato: String): Int =
-    Regex("\\d{4}").find(nomeCampeonato)?.value?.toIntOrNull() ?: 0
+    br.com.managerfoot.domain.engine.CalendarioDoJogo.anoDoNomeDoCampeonato(nomeCampeonato)

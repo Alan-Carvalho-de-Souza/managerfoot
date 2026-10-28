@@ -104,8 +104,28 @@ class JogadorRepository @Inject constructor(
     private val jogadorDao: JogadorDao,
     private val financaDao: br.com.managerfoot.data.dao.FinancaDao,
     private val timeDao: TimeDao,
-    private val partidaDao: br.com.managerfoot.data.dao.PartidaDao
+    private val partidaDao: br.com.managerfoot.data.dao.PartidaDao,
+    private val campeonatoDao: br.com.managerfoot.data.dao.CampeonatoDao
 ) {
+
+    /**
+     * O carimbo de data de uma transferência: (ano, ordemGlobal).
+     *
+     * `ordemGlobal` é o relógio da temporada e dá o DIA exato da negociação pela
+     * mesma conversão que data as partidas; o ano vem do nome de um campeonato
+     * da temporada, que é onde ele mora. Nenhuma das duas falhas é motivo para
+     * perder a transferência: sem carimbo o histórico cai para mês/temporada,
+     * como era antes.
+     */
+    private suspend fun carimboDeData(temporadaId: Int): Pair<Int, Int> {
+        val ordemGlobal = try { partidaDao.ordemGlobalAtual(temporadaId) } catch (_: Exception) { 0 }
+        val ano = try {
+            br.com.managerfoot.domain.engine.CalendarioDoJogo.anoDoNomeDoCampeonato(
+                campeonatoDao.nomeDeUmCampeonatoDaTemporada(temporadaId) ?: ""
+            )
+        } catch (_: Exception) { 0 }
+        return ano to ordemGlobal
+    }
     companion object {
         /**
          * Janela de transferências monotônica: 2 por temporada
@@ -171,6 +191,7 @@ class JogadorRepository @Inject constructor(
         temporadaId: Int,
         mes: Int
     ) {
+        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         // Mudar dono do jogador (carimbando a janela → anti-revenda IA na mesma janela)
         jogadorDao.transferirJogadorComJanela(
             oferta.jogadorId, oferta.timeCompradorId, janelaTransferencia(temporadaId, mes)
@@ -193,7 +214,9 @@ class JogadorRepository @Inject constructor(
                 tipo = if (oferta.timeVendedorId != null || oferta.valor > 0L)
                            TipoTransferencia.COMPRA
                        else
-                           TipoTransferencia.FIM_CONTRATO
+                           TipoTransferencia.FIM_CONTRATO,
+                ano = ano,
+                ordemGlobal = ordemGlobal
             )
         )
     }
@@ -210,6 +233,7 @@ class JogadorRepository @Inject constructor(
         temporadaId: Int,
         mes: Int
     ) {
+        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         // compradorId <= 0 significa "sem comprador" → jogador vai para o mercado livre (timeId = null)
         val novoTimeId = if (oferta.timeCompradorId > 0) oferta.timeCompradorId else null
 
@@ -232,7 +256,9 @@ class JogadorRepository @Inject constructor(
                 valor = oferta.valor,
                 temporadaId = temporadaId,
                 mes = mes,
-                tipo = TipoTransferencia.VENDA
+                tipo = TipoTransferencia.VENDA,
+                ano = ano,
+                ordemGlobal = ordemGlobal
             )
         )
     }
@@ -249,6 +275,7 @@ class JogadorRepository @Inject constructor(
         anoRetorno: Int,
         mesRetorno: Int
     ) {
+        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         jogadorDao.transferirJogadorComJanela(oferta.jogadorId, oferta.timeCompradorId, janelaTransferencia(temporadaId, mes))
         jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
         oferta.timeVendedorId?.let { origem ->
@@ -262,7 +289,9 @@ class JogadorRepository @Inject constructor(
                 valor = oferta.valor,
                 temporadaId = temporadaId,
                 mes = mes,
-                tipo = TipoTransferencia.EMPRESTIMO_SAIDA
+                tipo = TipoTransferencia.EMPRESTIMO_SAIDA,
+                ano = ano,
+                ordemGlobal = ordemGlobal
             )
         )
     }
@@ -276,6 +305,7 @@ class JogadorRepository @Inject constructor(
      * ao clube de origem, registrando um [TipoTransferencia.EMPRESTIMO_RETORNO].
      */
     suspend fun processarRetornosEmprestimo(anoAtual: Int, mesAtual: Int, temporadaId: Int) {
+        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         val expirados = jogadorDao.buscarEmprestadosParaRetorno(anoAtual, mesAtual)
         for (j in expirados) {
             val origemId = j.timeOrigemEmprestimo ?: continue
@@ -290,7 +320,9 @@ class JogadorRepository @Inject constructor(
                     valor = 0L,
                     temporadaId = temporadaId,
                     mes = mesAtual,
-                    tipo = TipoTransferencia.EMPRESTIMO_RETORNO
+                    tipo = TipoTransferencia.EMPRESTIMO_RETORNO,
+                    ano = ano,
+                    ordemGlobal = ordemGlobal
                 )
             )
         }
@@ -904,6 +936,7 @@ class JogadorRepository @Inject constructor(
     suspend fun dispensarJunior(jogadorId: Int, temporadaId: Int, mes: Int) {
         val entity = jogadorDao.buscarPorId(jogadorId) ?: return
         val timeOrigemId = entity.timeId
+        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         jogadorDao.dispensarJuniorDb(jogadorId)
         financaDao.inserirTransferencia(
             TransferenciaEntity(
@@ -913,7 +946,9 @@ class JogadorRepository @Inject constructor(
                 valor        = 0L,
                 temporadaId  = temporadaId,
                 mes          = mes,
-                tipo         = TipoTransferencia.DISPENSADO_BASE
+                tipo         = TipoTransferencia.DISPENSADO_BASE,
+                ano          = ano,
+                ordemGlobal  = ordemGlobal
             )
         )
     }
@@ -1323,9 +1358,14 @@ class JogadorRepository @Inject constructor(
                 .toMap()
 
         // ── Construção dos "moves" cronológicos
-        data class Move(val temporadaId: Int, val mes: Int, val novoTime: Int?)
+        data class Move(
+            val temporadaId: Int,
+            val mes: Int,
+            val novoTime: Int?,
+            val data: br.com.managerfoot.domain.engine.DataDoJogo
+        )
         val moves: List<Move> = transfers
-            .sortedWith(compareBy({ it.temporadaId }, { it.mes }))
+            .sortedWith(compareBy({ it.temporadaId }, { it.ordemGlobal }, { it.id }))
             .map { t ->
                 val novoTime: Int? = when (t.tipo) {
                     TipoTransferencia.COMPRA,
@@ -1336,7 +1376,41 @@ class JogadorRepository @Inject constructor(
                     TipoTransferencia.FIM_CONTRATO,
                     TipoTransferencia.DISPENSADO_BASE -> null
                 }
-                Move(t.temporadaId, t.mes, novoTime)
+                val data = if (t.ordemGlobal > 0)
+                    br.com.managerfoot.domain.engine.CalendarioDoJogo
+                        .ordemGlobalParaData(t.ordemGlobal, t.ano)
+                else
+                    br.com.managerfoot.domain.engine.DataDoJogo(t.ano, t.mes, 0)
+                Move(t.temporadaId, t.mes, novoTime, data)
+            }
+
+        // ── Períodos de contrato, do encadeamento das transferências ─────
+        // Cada move abre um período no clube de destino e fecha o anterior. É
+        // isto que responde "quando ele chegou e quando saiu", que as partidas
+        // não respondem: entre assinar e estrear, e entre o último jogo e a
+        // saída, ele seguia no clube.
+        data class PeriodoNoClube(
+            val timeId: Int,
+            val anoInicio: Int,
+            val chegada: br.com.managerfoot.domain.engine.DataDoJogo,
+            val saida: br.com.managerfoot.domain.engine.DataDoJogo?
+        )
+        val periodos = moves.mapIndexedNotNull { idx, move ->
+            val timeId = move.novoTime ?: return@mapIndexedNotNull null
+            PeriodoNoClube(
+                timeId = timeId,
+                anoInicio = move.data.ano,
+                chegada = move.data,
+                saida = moves.getOrNull(idx + 1)?.data
+            )
+        }
+        /** O período que cobre a passagem [anoInicio]..[anoFim] naquele clube. */
+        fun periodoDa(timeId: Int, anoInicio: Int, anoFim: Int): PeriodoNoClube? =
+            periodos.firstOrNull { p ->
+                p.timeId == timeId &&
+                    // Sem ano no carimbo não dá para casar com a passagem.
+                    (p.anoInicio <= 0 || p.anoInicio <= anoFim) &&
+                    (p.saida?.ano?.let { it <= 0 || it >= anoInicio } ?: true)
             }
 
         // Time do jogador num momento (temporadaId, ordemGlobal aproximado para mês)
@@ -1422,6 +1496,14 @@ class JogadorRepository @Inject constructor(
             }
         }
         atual?.let { passagens.add(it) }
+
+        // Cola em cada passagem o período de contrato correspondente.
+        val passagensComPeriodo = passagens.map { p ->
+            val periodo = periodoDa(p.timeId, p.anoInicio, p.anoFim)
+            if (periodo == null) p else p.copy(chegada = periodo.chegada, saida = periodo.saida)
+        }
+        passagens.clear()
+        passagens.addAll(passagensComPeriodo)
 
         // Marca a passagem atual com nota média da temporada
         val passagensComNota: List<PassagemClube> = if (passagens.isNotEmpty() &&
@@ -1564,7 +1646,22 @@ data class PassagemClube(
     val partidas: Int,
     val gols: Int,
     val assistencias: Int,
-    val notaMedia: Float? = null  // nota da temporada atual (apenas última passagem)
+    val notaMedia: Float? = null, // nota da temporada atual (apenas última passagem)
+
+    /**
+     * Quando ele CHEGOU e quando SAIU, pelas transferências.
+     *
+     * [anoInicio]/[mesInicio] dizem quando ele estreou e quando jogou pela
+     * última vez naquele clube — são derivados das partidas, e por isso nunca
+     * contaram o tempo entre a assinatura e o primeiro jogo, nem entre o último
+     * jogo e a saída. Estes dois dizem o período de contrato de fato.
+     *
+     * null quando não há transferência que delimite a passagem: é o caso do
+     * clube de origem de todo jogador do seed, que nunca foi contratado de
+     * lugar nenhum. Aí a tela volta a mostrar o período pelas partidas.
+     */
+    val chegada: br.com.managerfoot.domain.engine.DataDoJogo? = null,
+    val saida: br.com.managerfoot.domain.engine.DataDoJogo? = null
 )
 
 data class HistoricoCarreira(

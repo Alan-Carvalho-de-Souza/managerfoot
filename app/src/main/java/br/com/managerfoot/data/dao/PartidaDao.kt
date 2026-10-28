@@ -217,6 +217,15 @@ interface PartidaDao {
     """)
     fun observeOrdemGlobalAtual(temporadaAtual: Int): Flow<Int>
 
+    /** O mesmo relógio, para quem precisa carimbar o "agora" numa gravação. */
+    @Query("""
+        SELECT COALESCE(MAX(p.ordemGlobal), 0)
+        FROM partidas p
+        INNER JOIN campeonatos c ON c.id = p.campeonatoId
+        WHERE p.jogada = 1 AND c.temporadaId = :temporadaAtual
+    """)
+    suspend fun ordemGlobalAtual(temporadaAtual: Int): Int
+
     @Query("DELETE FROM partidas")
     suspend fun deleteAll()
 

@@ -577,6 +577,16 @@ private fun TransferenciaRow(t: TransferenciaDetalhe, positivo: Boolean, prefixo
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // A data exata da negociação. A lista já vem em ordem cronológica
+            // decrescente do banco, pelo relógio da temporada.
+            val dataLabel = t.data.curta().ifBlank { rotuloDeMesAno(t.mes, t.ano) }
+            if (dataLabel.isNotBlank()) {
+                Text(
+                    dataLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Text(
             formatarSaldo(t.valor),
@@ -683,4 +693,11 @@ private fun EmptyFinancas(texto: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+/** "mar 2027" — o recurso de quem não tem dia: janela de janeiro ou save antigo. */
+private fun rotuloDeMesAno(mes: Int, ano: Int): String {
+    if (mes !in 1..12) return ""
+    val nome = br.com.managerfoot.domain.engine.CalendarioDoJogo.MESES_ABREV[mes]
+    return if (ano > 0) "$nome $ano" else nome
 }

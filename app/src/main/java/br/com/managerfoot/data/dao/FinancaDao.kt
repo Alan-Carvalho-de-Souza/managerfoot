@@ -7,6 +7,8 @@ import androidx.room.Query
 import br.com.managerfoot.data.database.entities.FinancaEntity
 import br.com.managerfoot.data.database.entities.TipoTransferencia
 import br.com.managerfoot.data.database.entities.TransferenciaEntity
+import br.com.managerfoot.domain.engine.CalendarioDoJogo
+import br.com.managerfoot.domain.engine.DataDoJogo
 import kotlinx.coroutines.flow.Flow
 
 // ─────────────────────────────────────────────
@@ -23,8 +25,22 @@ data class TransferenciaDetalhe(
     val valor: Long,
     val tipo: TipoTransferencia,
     val temporadaId: Int,
-    val mes: Int
-)
+    val mes: Int,
+    val ano: Int,
+    val ordemGlobal: Int
+) {
+    /**
+     * A data exata da negociação.
+     *
+     * O dia sai do relógio da temporada (`ordemGlobal`), pela mesma conversão
+     * que data as partidas. Sem relógio — janela de janeiro, antes do primeiro
+     * jogo, ou registro anterior a esta coluna — resta o mês, e o dia fica 0:
+     * a tela mostra "mar 2027" em vez de inventar um dia.
+     */
+    val data: DataDoJogo
+        get() = if (ordemGlobal > 0) CalendarioDoJogo.ordemGlobalParaData(ordemGlobal, ano)
+                else DataDoJogo(ano, mes, 0)
+}
 
 // ─────────────────────────────────────────────
 //  FinancaDao
@@ -49,7 +65,7 @@ interface FinancaDao {
     @Query("""
         SELECT * FROM transferencias
         WHERE jogadorId = :jogadorId
-        ORDER BY temporadaId ASC, mes ASC
+        ORDER BY temporadaId ASC, ordemGlobal ASC, id ASC
     """)
     suspend fun buscarTransferenciasDoJogador(jogadorId: Int): List<TransferenciaEntity>
 
@@ -63,12 +79,16 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
         LEFT JOIN times dest ON dest.id = t.timeDestinoId
-        ORDER BY t.temporadaId DESC, t.mes DESC
+        -- Cronológica exata, da venda mais recente para a mais antiga.
+        -- ordemGlobal é o relógio da temporada e é monotônico dentro dela; o id
+        -- desempata os registros de um mesmo instante (e ordena os antigos, sem
+        -- ordemGlobal, pela ordem em que foram gravados).
+        ORDER BY t.temporadaId DESC, t.ordemGlobal DESC, t.id DESC
     """)
     fun observeTodasTransferencias(): Flow<List<TransferenciaDetalhe>>
 
@@ -76,13 +96,17 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
         LEFT JOIN times dest ON dest.id = t.timeDestinoId
         WHERE t.timeOrigemId = :timeId AND t.tipo = 'VENDA'
-        ORDER BY t.temporadaId DESC, t.mes DESC
+        -- Cronológica exata, da venda mais recente para a mais antiga.
+        -- ordemGlobal é o relógio da temporada e é monotônico dentro dela; o id
+        -- desempata os registros de um mesmo instante (e ordena os antigos, sem
+        -- ordemGlobal, pela ordem em que foram gravados).
+        ORDER BY t.temporadaId DESC, t.ordemGlobal DESC, t.id DESC
     """)
     fun observeVendasDoTime(timeId: Int): Flow<List<TransferenciaDetalhe>>
 
@@ -93,13 +117,17 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
         LEFT JOIN times dest ON dest.id = t.timeDestinoId
         WHERE t.timeDestinoId = :timeId AND t.tipo = 'COMPRA'
-        ORDER BY t.temporadaId DESC, t.mes DESC
+        -- Cronológica exata, da venda mais recente para a mais antiga.
+        -- ordemGlobal é o relógio da temporada e é monotônico dentro dela; o id
+        -- desempata os registros de um mesmo instante (e ordena os antigos, sem
+        -- ordemGlobal, pela ordem em que foram gravados).
+        ORDER BY t.temporadaId DESC, t.ordemGlobal DESC, t.id DESC
     """)
     fun observeComprasDoTime(timeId: Int): Flow<List<TransferenciaDetalhe>>
 

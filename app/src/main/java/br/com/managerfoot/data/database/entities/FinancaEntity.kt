@@ -76,7 +76,26 @@ data class TransferenciaEntity(
     val valor: Long,                    // em centavos (0 = livre)
     val temporadaId: Int,
     val mes: Int,
-    val tipo: TipoTransferencia
+    val tipo: TipoTransferencia,
+
+    /**
+     * Ano-calendário da transferência. `temporadaId` é um índice que começa em 1
+     * em 2026, então o ano daria para derivar — mas derivar amarra a exibição a
+     * essa origem, e um save que comece noutro ano passaria a mentir. 0 = antigo.
+     */
+    val ano: Int = 0,
+
+    /**
+     * O relógio do jogo no momento da transferência: o maior `ordemGlobal` já
+     * jogado na temporada. É dele que sai o DIA exato da negociação, pela mesma
+     * conversão que data as partidas (CalendarioDoJogo), e é por ele que o
+     * histórico é ordenado — `ordemGlobal` é monotônico dentro da temporada, o
+     * que torna a ordenação exatamente cronológica.
+     *
+     * 0 quando a temporada ainda não teve jogo nenhum (janela de janeiro) ou em
+     * registros anteriores a esta coluna.
+     */
+    val ordemGlobal: Int = 0
 )
 
 enum class TipoTransferencia {

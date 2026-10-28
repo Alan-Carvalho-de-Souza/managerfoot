@@ -107,6 +107,8 @@ fun HistoricoJogadorScreen(
                                 anoFim = passagem.anoFim,
                                 mesInicio = passagem.mesInicio,
                                 mesFim = passagem.mesFim,
+                                chegada = passagem.chegada,
+                                saida = passagem.saida,
                                 gols = passagem.gols,
                                 assistencias = passagem.assistencias,
                                 partidas = passagem.partidas,
