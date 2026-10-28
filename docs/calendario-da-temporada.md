@@ -184,9 +184,9 @@ abstratos por dias reais nas faixas que já existem**, e validar o resultado.
 |---|---|---|
 | **0a** — ordenar por `(temporadaId, ordemGlobal)` | ✅ **feito** | `1e0af35` |
 | **0b** — unificar os conversores de mês | ✅ **feito** | `b48e8d2`, e o resto abaixo |
-| **1** — calendário como dado explícito | ⬜ não começou | |
+| **1** — calendário como dado explícito | ✅ **feito** | `CalendarioDaTemporada` |
 | **2** — `ordemGlobal` passa a ser o dia | ⬜ não começou | |
-| **3** — restrições reais | ⬜ não começou | |
+| **3** — restrições reais | 🟡 **validador pronto, conflitos abertos** | ver §5.3 |
 | **4** — transferências e demais dados pelo dia | 🟡 **base pronta** | `b48e8d2`, `e1751f3` |
 | **5** — simulação dirigida por data | ⬜ não começou (opcional) | |
 
@@ -233,15 +233,17 @@ Um conversor só, o de `CalendarioDoJogo`, usado por `ViewModels` e por
 - **Teste:** o mês de uma partida é o mesmo por qualquer caminho, para toda casa
   de `ordemGlobal` de toda competição.
 
-### Etapa 1 — o calendário como dado explícito
+### Etapa 1 — o calendário como dado explícito ✅
 
-`CalendarioDaTemporada` no domínio: mapa `(competição, rodada ou fase) → dia da
-temporada`, construído a partir das tabelas atuais. Persistido na tabela
-`temporadas` (hoje morta) ou numa nova `calendario_temporada`.
+`CalendarioDaTemporada` no domínio: os dias de uma liga por número de rodadas, a
+ponte `ordemGlobal → dia` para as competições ainda não convertidas, e o
+validador de conflitos. **Ainda não é usado pelos geradores** — isso é a etapa 2.
 
-- **Nada de comportamento muda** — é a mesma informação, num lugar só e legível.
-- **Saves:** tabela nova, nada quebra.
-- **Teste:** o calendário reproduz exatamente as casas atuais.
+- `diasDeLiga(38)` reproduz exatamente as datas de hoje (há teste), e
+  `diasDeLiga(46)` **conserta a Championship**, que colapsava rodadas em 31 dez.
+- **Saves:** nada muda; é peça nova, não ligada.
+- Persistir na tabela `temporadas` (hoje morta) fica para a etapa 2, quando o
+  calendário passar a ser lido na geração.
 
 ### Etapa 2 — `ordemGlobal` passa a ser o dia
 
@@ -286,7 +288,38 @@ preguiçosamente na leitura, onde a mistura de escalas é inofensiva.
   preservada pela migração, e nenhuma partida da temporada corrente fica na
   escala velha.
 
-### Etapa 3 — restrições reais
+### Etapa 3 — restrições reais *(revisada depois da enumeração)*
+
+A enumeração completa achou **mais conflitos do que o §2.2 tinha**, e três
+classes novas que a análise por perfil não cobria:
+
+| Defeito | Onde |
+|---|---|
+| **Todas as supercopas na casa 1** (25 jan) | um clube que ganhe a liga e a Champions joga a Supercopa nacional e a da UEFA no mesmo dia |
+| **Championship colapsa 3 rodadas em 31 dez** | 46 rodadas na curva calibrada para 38 — **corrigido na etapa 1** |
+| **Finais da Copa do Brasil e da Libertadores em 3 dez** | um clube pode estar nas duas |
+
+E por perfil de clube, sobre o calendário de hoje:
+
+| Perfil | Mesmo dia | Dias consecutivos |
+|---|---|---|
+| Brasileiro + Libertadores | 4 | 6 |
+| Argentino + Libertadores | 5 | 6 |
+| Inglês + Champions | 0 | 1 |
+| Espanhol + Champions | 0 | 2 |
+
+**E a correção é mais difícil do que "ajuste de tabela".** Eu tinha escrito que
+não era um problema de satisfação de restrições; isso vale para a *reserva* de
+faixas, não para o reparo dos conflitos. Exigir distinção e não-adjacência
+globais é impossível: são ~200 jogos de calendário e cada um pediria 2 dias, o
+que não cabe em 295. O reparo tem de ser **por perfil** — só competições que um
+mesmo clube pode disputar juntas se excluem —, e aí vira um problema de
+coloração com janelas estreitas.
+
+O validador que julga tudo isso já existe (`conflitosDoPerfil`) e está testado.
+Falta montar os perfis reais sobre as tabelas e mover os dias até zerar.
+
+### Etapa 3 — como era descrita
 
 Um teste que varre a temporada inteira de cada perfil de clube e falha se:
 nenhum clube joga duas vezes no mesmo dia; nenhum joga em dias consecutivos;
