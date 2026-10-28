@@ -247,6 +247,48 @@ validador de conflitos. **Ainda não é usado pelos geradores** — isso é a et
 
 ### Etapa 2 — `ordemGlobal` passa a ser o dia
 
+> **Alternativa melhor do que migrar: versionar o calendário por temporada.**
+>
+> Verificado: **todas as competições de uma temporada são criadas no rollover**
+> — ligas, copas, supercopas, Champions, Europa League, Libertadores,
+> Sul-Americana, Recopa, Intercontinental e Troféu. As FASES de cada uma são
+> geradas mais tarde, mas sempre dentro de um campeonato que já existe.
+>
+> Então o limite da temporada é uma fronteira limpa para criar competições, e
+> dá para carimbar a versão do calendário no `campeonatos` (coluna nova, default
+> 1). Cada gerador de fase já tem o campeonato em mãos (`buscarPorId`) e escolhe
+> o calendário pela versão dele.
+>
+> O que isso elimina:
+>
+> - **a migração de `partidas` some inteira** — nada é reescrito, e some junto o
+>   risco de converter ~6.300 linhas no startup;
+> - **a mistura dentro da temporada fica impossível por construção** — uma
+>   temporada v1 termina inteira em v1, inclusive as fases geradas depois;
+> - **o `isClausura` e as casas mágicas continuam corretos** para as temporadas
+>   v1, porque elas seguem na escala que entendem;
+> - **não há exigência de o jogador atualizar num momento certo.**
+>
+> O custo: a curva antiga fica no código para sempre, como LEITOR de temporadas
+> v1 no histórico. É um leitor, não um agendador — aceitável. E a exibição passa
+> a escolher o leitor pela versão da temporada, o que é um ponto a mais para
+> acertar (`observeCalendario` já reordena por data derivada em Kotlin).
+
+#### Fim ou início de temporada: faz diferença?
+
+| Momento em que o código novo chega ao save | Com versionamento | Sem versionamento (migração) |
+|---|---|---|
+| **Fim da temporada**, antes do rollover | a próxima temporada já nasce no calendário novo | **o único momento seguro**: não há nada por gerar na temporada velha |
+| **Início**, logo depois do rollover | a temporada recém-criada é v1 e termina assim; o novo só entra daqui a um ano de jogo | a temporada inteira precisa ser migrada |
+| **Meio** da temporada | igual ao início | pior caso: fases por gerar entram na escala nova dentro de uma temporada velha |
+
+**Conclusão: o fim da temporada é melhor nos dois cenários, por razões
+diferentes.** Sem versionamento é o único momento sem risco. Com versionamento
+não há risco em momento nenhum — mas é o fim da temporada que faz o calendário
+novo valer já na temporada seguinte, em vez de daqui a um ano de jogo.
+
+
+
 Os geradores pedem o dia ao calendário em vez de ler `intArrayOf`. A conversão
 de exibição vira identidade.
 
