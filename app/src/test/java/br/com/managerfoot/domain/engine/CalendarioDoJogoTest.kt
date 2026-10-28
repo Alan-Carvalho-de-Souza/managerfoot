@@ -173,6 +173,53 @@ class CalendarioDoJogoTest {
         )
     }
 
+    // ── Regressão: as fórmulas divergentes que existiam ──────────────────
+
+    private fun mes(og: Int, nome: String = "") =
+        CalendarioDoJogo.ordemGlobalParaMesDia(og, nome).first
+
+    @Test
+    fun `o mes de uma rodada e o mesmo por qualquer caminho`() {
+        // Havia três conversores: /370 no ViewModel (fecha salários), /380 no
+        // repositório (atribui partidas a clubes na carreira) e /370+/410 aqui.
+        // Nestas cinco rodadas da Série A o /380 dava um mês A MENOS que o /370,
+        // e era perto de uma transferência que a atribuição errava o clube.
+        val divergiam = mapOf(190 to 7, 230 to 8, 270 to 9, 310 to 10, 350 to 11)
+        for ((og, mesEsperado) in divergiam) {
+            assertEquals("OG $og", mesEsperado, mes(og, "Brasileiro Série A 2027"))
+        }
+    }
+
+    @Test
+    fun `o calendario argentino tem o proprio mes, e nao o generico`() {
+        // O conversor do ViewModel era fixo em /370 e cego ao país, e é ele que
+        // decide quando salários e patrocínio são cobrados. Em 21 das 58 rodadas
+        // argentinas ele discordava da data exibida.
+        val arg = "Primera División Argentina Apertura 2027"
+        assertEquals(3, mes(80, arg))   // genérico daria 4
+        assertEquals(4, mes(120, arg))  // genérico daria 5
+        assertEquals(5, mes(160, arg))  // genérico daria 6
+        assertEquals(6, mes(190, arg))  // genérico daria 7
+
+        // E o genérico segue como era, para quem não é argentino.
+        assertEquals(4, mes(80))
+        assertEquals(7, mes(190))
+    }
+
+    @Test
+    fun `o nome do torneio argentino e o que seleciona a curva`() {
+        // Apertura e Clausura são criados com "Primera División Argentina" no
+        // nome. Se isso mudar, a curva deixa de ser escolhida e o mês volta a
+        // ser o genérico, em silêncio.
+        for (nome in listOf(
+            "Primera División Argentina Apertura 2027",
+            "Primera División Argentina Clausura 2027",
+            "Segunda División Argentina 2027"
+        )) {
+            assertEquals(nome, 3, mes(80, nome))
+        }
+    }
+
     // ── Ano no nome do campeonato ────────────────────────────────────────
 
     @Test

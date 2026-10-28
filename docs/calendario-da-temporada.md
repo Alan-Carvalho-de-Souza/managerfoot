@@ -183,28 +183,29 @@ abstratos por dias reais nas faixas que já existem**, e validar o resultado.
 | Etapa | Estado | Onde |
 |---|---|---|
 | **0a** — ordenar por `(temporadaId, ordemGlobal)` | ✅ **feito** | `1e0af35` |
-| **0b** — unificar os conversores de mês | 🟡 **metade** | ver abaixo |
+| **0b** — unificar os conversores de mês | ✅ **feito** | `b48e8d2`, e o resto abaixo |
 | **1** — calendário como dado explícito | ⬜ não começou | |
 | **2** — `ordemGlobal` passa a ser o dia | ⬜ não começou | |
 | **3** — restrições reais | ⬜ não começou | |
 | **4** — transferências e demais dados pelo dia | 🟡 **base pronta** | `b48e8d2`, `e1751f3` |
 | **5** — simulação dirigida por data | ⬜ não começou (opcional) | |
 
-**0b, o que já foi:** `CalendarioScreen` e `DashboardScreen` deixaram de ter
-fórmula própria e passaram a delegar para `CalendarioDoJogo` (`b48e8d2`).
+**0b:** existe **uma única fórmula de data no projeto**, em `CalendarioDoJogo`.
+As quatro cópias foram embora em dois passos — `CalendarioScreen` e
+`DashboardScreen` em `b48e8d2`, e os dois divergentes depois.
 
-**0b, o que falta — e é a metade que causa o bug:** os dois conversores que
-ainda carregam fórmula própria são justamente os divergentes.
+O que mudou de comportamento ao unificar:
 
-| Conversor | Divisor | Usado em |
+| Conversor removido | Era | Decidia |
 |---|---|---|
-| `ViewModels.ordemGlobalParaMes` | **/370** | `mesDerived` (fecha salários e patrocínio) e `_mesAtual` |
-| `Repositories.ordemGlobalParaMesCarreira` | **/380** | atribuir partidas a clubes no histórico de carreira |
+| `ViewModels.ordemGlobalParaMes` | /370, cego ao país | `mesDerived` — quando salários e patrocínio são cobrados |
+| `Repositories.ordemGlobalParaMesCarreira` | /380, cego ao país | a que clube cada partida pertence no histórico de carreira |
 
-Nenhum dos dois conhece a curva argentina (/410). Enquanto estiverem assim: o
-mês que fecha as finanças e o que atribui a carreira discordam em 5 das 38
-rodadas, e para clube argentino o mês do relógio discorda do exibido em 21 das
-58.
+Os dois passaram a receber o **nome do campeonato**, que é o que seleciona a
+curva. Três testes de regressão fixam o que divergia: as 5 rodadas da Série A em
+que /370 e /380 discordavam, as rodadas argentinas em que a curva própria difere
+da genérica, e o fato de a seleção depender de "Primera División Argentina"
+aparecer no nome — se isso mudar, a curva volta a ser a genérica em silêncio.
 
 **4, o que já foi:** a transferência carimba `ano` e `ordemGlobal` no momento em
 que acontece, e o histórico já deriva a data daí. Falta só o `ordemGlobal` virar

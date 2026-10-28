@@ -1367,6 +1367,15 @@ class JogadorRepository @Inject constructor(
         // O ano de uma transferência antiga não está nela: está no nome de um
         // campeonato da temporada, que o save nunca apaga. Um lookup por
         // temporada, reaproveitado por todas as transferências dela.
+        // E o nome do campeonato escolhe a CURVA do calendário: a argentina
+        // espalha 58 rodadas no mesmo intervalo em que a brasileira espalha 38,
+        // então a mesma ordemGlobal cai em meses diferentes nas duas.
+        val nomePorCampeonato = mutableMapOf<Int, String>()
+        suspend fun nomeDoCampeonato(campeonatoId: Int): String =
+            nomePorCampeonato.getOrPut(campeonatoId) {
+                try { campeonatoDao.buscarPorId(campeonatoId)?.nome ?: "" } catch (_: Exception) { "" }
+            }
+
         val anoPorTemporada = mutableMapOf<Int, Int>()
         suspend fun anoDaTemporada(temporadaId: Int): Int = anoPorTemporada.getOrPut(temporadaId) {
             try {
@@ -1427,8 +1436,9 @@ class JogadorRepository @Inject constructor(
             }
 
         // Time do jogador num momento (temporadaId, ordemGlobal aproximado para mês)
-        fun timeNoMomento(temporadaId: Int, ordemGlobal: Int): Int? {
-            val mesAprox = ordemGlobalParaMesCarreira(ordemGlobal)
+        fun timeNoMomento(temporadaId: Int, ordemGlobal: Int, nomeCampeonato: String): Int? {
+            val mesAprox = br.com.managerfoot.domain.engine.CalendarioDoJogo
+                .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
             var atual: Int? = null
             for (m in moves) {
                 val moveBeforeOrAt = m.temporadaId < temporadaId ||
@@ -1441,7 +1451,7 @@ class JogadorRepository @Inject constructor(
         // ── Agrupa eventos por (timeId, ano)
         val porTimeAno = mutableMapOf<Pair<Int, Int>, MutableList<br.com.managerfoot.data.dao.EventoCarreiraDto>>()
         for (ev in eventos) {
-            val derivado = timeNoMomento(ev.temporadaId, ev.ordemGlobal)
+            val derivado = timeNoMomento(ev.temporadaId, ev.ordemGlobal, nomeDoCampeonato(ev.campeonatoId))
             // Validação: time derivado deve ser um dos dois da partida
             val timeId: Int? = when {
                 derivado != null && (derivado == ev.timeCasaId || derivado == ev.timeForaId) -> derivado
@@ -1463,7 +1473,11 @@ class JogadorRepository @Inject constructor(
             val gols: Int,
             val assists: Int,
             val minOrdem: Int,
-            val maxOrdem: Int
+            val maxOrdem: Int,
+            // O campeonato de cada ponta: a passagem pode começar numa competição
+            // e terminar noutra, e cada uma tem a sua curva de calendário.
+            val campMin: Int,
+            val campMax: Int
         )
         val passagensAno = porTimeAno.entries
             .map { (key, evs) ->
@@ -1474,10 +1488,16 @@ class JogadorRepository @Inject constructor(
                     gols = evs.count { it.tipo == "GOL" },
                     assists = evs.count { it.tipo == "ASSISTENCIA" },
                     minOrdem = evs.minOf { it.ordemGlobal },
-                    maxOrdem = evs.maxOf { it.ordemGlobal }
+                    maxOrdem = evs.maxOf { it.ordemGlobal },
+                    campMin = evs.minByOrNull { it.ordemGlobal }?.campeonatoId ?: 0,
+                    campMax = evs.maxByOrNull { it.ordemGlobal }?.campeonatoId ?: 0
                 )
             }
             .sortedWith(compareBy({ it.timeId }, { it.ano }))
+
+        suspend fun mesDe(ordemGlobal: Int, nomeCampeonato: String): Int =
+            br.com.managerfoot.domain.engine.CalendarioDoJogo
+                .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
 
         val passagens = mutableListOf<PassagemClube>()
         var atual: PassagemClube? = null
@@ -1486,7 +1506,7 @@ class JogadorRepository @Inject constructor(
             if (cur != null && cur.timeId == s.timeId && s.ano <= cur.anoFim + 1) {
                 atual = cur.copy(
                     anoFim = s.ano,
-                    mesFim = ordemGlobalParaMesCarreira(s.maxOrdem),
+                    mesFim = mesDe(s.maxOrdem, nomeDoCampeonato(s.campMax)),
                     partidas = cur.partidas + s.partidas,
                     gols = cur.gols + s.gols,
                     assistencias = cur.assistencias + s.assists
@@ -1500,8 +1520,8 @@ class JogadorRepository @Inject constructor(
                     escudoRes = time?.escudoRes ?: "",
                     anoInicio = s.ano,
                     anoFim = s.ano,
-                    mesInicio = ordemGlobalParaMesCarreira(s.minOrdem),
-                    mesFim = ordemGlobalParaMesCarreira(s.maxOrdem),
+                    mesInicio = mesDe(s.minOrdem, nomeDoCampeonato(s.campMin)),
+                    mesFim = mesDe(s.maxOrdem, nomeDoCampeonato(s.campMax)),
                     partidas = s.partidas,
                     gols = s.gols,
                     assistencias = s.assists
@@ -1688,22 +1708,6 @@ data class HistoricoCarreira(
     val notaMediaAtual: Float
 )
 
-/**
- * Converte ordemGlobal (1..580) em mês aproximado (1..12).
- * Consistente com CalendarioScreen: temporada vai de fev (dia 39) a nov (dia 334).
- */
-internal fun ordemGlobalParaMesCarreira(ordemGlobal: Int): Int {
-    if (ordemGlobal == 1) return 1   // Supercopa
-    if (ordemGlobal == 620) return 12 // Troféu dos Campeões (mid-Dezembro)
-    val diaDoAno = (39 + (ordemGlobal - 10) * 295 / 380).coerceIn(1, 365)
-    val diasMes = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    var rem = diaDoAno
-    for (m in 1..12) {
-        if (rem <= diasMes[m]) return m
-        rem -= diasMes[m]
-    }
-    return 12
-}
 
 // ─────────────────────────────────────────────────
 //  EstadioRepository

@@ -28,19 +28,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Converte um ordemGlobal no mês do calendário (1=Jan … 12=Dez).
- * Usa a mesma fórmula canônica de CalendarioScreen:
- *   dia-do-ano = 39 + (OG-10)*295/370  (fev 8 = dia 39, nov 30 = dia 334)
- * Caso especial: OG=1 = Supercopa Rei em janeiro.
+ * O mês de um momento do jogo, pela única conversão do projeto.
+ *
+ * O [nomeCampeonato] não é decoração: ele escolhe a CURVA. O calendário
+ * argentino espalha 58 rodadas sobre o mesmo intervalo em que o brasileiro
+ * espalha 38, então a mesma `ordemGlobal` cai em meses diferentes nos dois.
+ * Esta função tinha fórmula própria, fixa em /370 e cega ao país — e é ela que
+ * decide quando os salários e o patrocínio são cobrados.
  */
-private fun ordemGlobalParaMes(ordemGlobal: Int): Int {
-    if (ordemGlobal <= 1) return 1
-    val diasMes = intArrayOf(0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    val diaDoAno = (39 + (ordemGlobal - 10) * 295 / 370).coerceIn(1, 365)
-    var rem = diaDoAno
-    for (m in 1..12) { if (rem <= diasMes[m]) return m; rem -= diasMes[m] }
-    return 12
-}
+private fun ordemGlobalParaMes(ordemGlobal: Int, nomeCampeonato: String): Int =
+    br.com.managerfoot.domain.engine.CalendarioDoJogo
+        .ordemGlobalParaMesDia(ordemGlobal, nomeCampeonato).first
 
 // ═══════════════════════════════════════════════════════════
 //  InicioViewModel
@@ -1395,8 +1393,15 @@ class DashboardViewModel @Inject constructor(
             // (temporada de liga já encerrada), ignoramos os amistosos.
             val ultimoNaoAmistoso = _ultimosResultados.value
                 .firstOrNull { it.campeonatoId != save.campeonatoAmistososId }
-            val ordemRef = (_proximaPartida.value ?: ultimoNaoAmistoso)?.ordemGlobal ?: 0
-            val mesDerived = if (ordemRef > 0) ordemGlobalParaMes(ordemRef) else save.mesAtual
+            val partidaRef = _proximaPartida.value ?: ultimoNaoAmistoso
+            val ordemRef = partidaRef?.ordemGlobal ?: 0
+            val mesDerived =
+                if (ordemRef > 0 && partidaRef != null)
+                    ordemGlobalParaMes(
+                        ordemRef,
+                        gameRepository.buscarCampeonato(partidaRef.campeonatoId)?.nome ?: ""
+                    )
+                else save.mesAtual
 
             // Fecha todos os meses até o mês vigente inclusive (<=), garantindo que
             // patrocínio e salários do mês corrente sejam registrados ao entrar nele.
@@ -3867,8 +3872,15 @@ class FinancasViewModel @Inject constructor(
             save.timeIdJogador,
             listOf(save.campeonatoId, save.copaId, save.supercopaId).filter { it > 0 }
         )
-        val ordemRef = (proximaPartida ?: ultimosResultados.firstOrNull())?.ordemGlobal ?: 0
-        _mesAtual.value = if (ordemRef > 0) ordemGlobalParaMes(ordemRef) else save.mesAtual
+        val partidaRef = proximaPartida ?: ultimosResultados.firstOrNull()
+        val ordemRef = partidaRef?.ordemGlobal ?: 0
+        _mesAtual.value =
+            if (ordemRef > 0 && partidaRef != null)
+                ordemGlobalParaMes(
+                    ordemRef,
+                    gameRepository.buscarCampeonato(partidaRef.campeonatoId)?.nome ?: ""
+                )
+            else save.mesAtual
         _anoAtual.value = save.anoAtual
         // Carrega receitas de partidas em casa
         launch {
