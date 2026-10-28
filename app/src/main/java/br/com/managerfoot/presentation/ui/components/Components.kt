@@ -1483,9 +1483,12 @@ private fun formatarPeriodoPassagem(
     // Quando há transferência delimitando a passagem, ela é a resposta exata:
     // diz quando ele chegou e quando foi para o outro clube. Os meses derivados
     // das partidas só dizem quando ele estreou e quando jogou pela última vez.
-    if (chegada != null && chegada.conhecida) {
+    // Basta o mês: uma transferência antiga não tem o dia carimbado, mas o mês
+    // dela é a data real da negociação — ainda diz melhor quando ele chegou e
+    // saiu do que o mês da primeira e da última partida.
+    if (chegada != null && chegada.temMes) {
         val ini = chegada.curta()
-        val fim = saida?.takeIf { it.conhecida }?.curta()
+        val fim = saida?.takeIf { it.temMes }?.curta()
         return when {
             fim == null  -> "Desde $ini"
             fim == ini   -> ini

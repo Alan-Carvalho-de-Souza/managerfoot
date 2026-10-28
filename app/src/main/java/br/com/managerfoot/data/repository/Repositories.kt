@@ -1364,6 +1364,18 @@ class JogadorRepository @Inject constructor(
             val novoTime: Int?,
             val data: br.com.managerfoot.domain.engine.DataDoJogo
         )
+        // O ano de uma transferência antiga não está nela: está no nome de um
+        // campeonato da temporada, que o save nunca apaga. Um lookup por
+        // temporada, reaproveitado por todas as transferências dela.
+        val anoPorTemporada = mutableMapOf<Int, Int>()
+        suspend fun anoDaTemporada(temporadaId: Int): Int = anoPorTemporada.getOrPut(temporadaId) {
+            try {
+                br.com.managerfoot.domain.engine.CalendarioDoJogo.anoDoNomeDoCampeonato(
+                    campeonatoDao.nomeDeUmCampeonatoDaTemporada(temporadaId) ?: ""
+                )
+            } catch (_: Exception) { 0 }
+        }
+
         val moves: List<Move> = transfers
             .sortedWith(compareBy({ it.temporadaId }, { it.ordemGlobal }, { it.id }))
             .map { t ->
@@ -1376,11 +1388,12 @@ class JogadorRepository @Inject constructor(
                     TipoTransferencia.FIM_CONTRATO,
                     TipoTransferencia.DISPENSADO_BASE -> null
                 }
+                val ano = if (t.ano > 0) t.ano else anoDaTemporada(t.temporadaId)
                 val data = if (t.ordemGlobal > 0)
                     br.com.managerfoot.domain.engine.CalendarioDoJogo
-                        .ordemGlobalParaData(t.ordemGlobal, t.ano)
+                        .ordemGlobalParaData(t.ordemGlobal, ano)
                 else
-                    br.com.managerfoot.domain.engine.DataDoJogo(t.ano, t.mes, 0)
+                    br.com.managerfoot.domain.engine.DataDoJogo(ano, t.mes, 0)
                 Move(t.temporadaId, t.mes, novoTime, data)
             }
 

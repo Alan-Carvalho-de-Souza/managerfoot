@@ -27,8 +27,21 @@ data class TransferenciaDetalhe(
     val temporadaId: Int,
     val mes: Int,
     val ano: Int,
-    val ordemGlobal: Int
+    val ordemGlobal: Int,
+    /**
+     * Nome de um campeonato da temporada, de onde sai o ano quando a própria
+     * transferência não o traz. É o caso de todo registro anterior à coluna
+     * `ano`: os campeonatos das temporadas passadas nunca são apagados do save,
+     * então o ano de uma venda antiga continua recuperável.
+     */
+    val nomeTemporada: String? = null
 ) {
+
+    /** O ano da negociação, do carimbo dela ou, na falta dele, da temporada. */
+    val anoEfetivo: Int
+        get() = if (ano > 0) ano
+                else CalendarioDoJogo.anoDoNomeDoCampeonato(nomeTemporada ?: "")
+
     /**
      * A data exata da negociação.
      *
@@ -38,8 +51,8 @@ data class TransferenciaDetalhe(
      * a tela mostra "mar 2027" em vez de inventar um dia.
      */
     val data: DataDoJogo
-        get() = if (ordemGlobal > 0) CalendarioDoJogo.ordemGlobalParaData(ordemGlobal, ano)
-                else DataDoJogo(ano, mes, 0)
+        get() = if (ordemGlobal > 0) CalendarioDoJogo.ordemGlobalParaData(ordemGlobal, anoEfetivo)
+                else DataDoJogo(anoEfetivo, mes, 0)
 }
 
 // ─────────────────────────────────────────────
@@ -79,7 +92,10 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
+               (SELECT c.nome FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
@@ -96,7 +112,10 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
+               (SELECT c.nome FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId
@@ -117,7 +136,10 @@ interface FinancaDao {
         SELECT t.id, j.nomeAbreviado AS jogadorNome, j.posicao AS posicao,
                orig.nome AS origemNome, orig.escudoRes AS origemEscudo,
                dest.nome AS destinoNome, dest.escudoRes AS destinoEscudo,
-               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal
+               t.valor, t.tipo, t.temporadaId, t.mes, t.ano, t.ordemGlobal,
+               (SELECT c.nome FROM campeonatos c
+                 WHERE c.temporadaId = t.temporadaId
+                 ORDER BY c.id LIMIT 1) AS nomeTemporada
         FROM transferencias t
         INNER JOIN jogadores j ON j.id = t.jogadorId
         LEFT JOIN times orig ON orig.id = t.timeOrigemId

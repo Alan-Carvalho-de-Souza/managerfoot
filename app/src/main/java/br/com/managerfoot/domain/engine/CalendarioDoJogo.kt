@@ -17,13 +17,24 @@ package br.com.managerfoot.domain.engine
 /** Um dia do calendário do jogo. [ano] vale 0 quando é desconhecido. */
 data class DataDoJogo(val ano: Int, val mes: Int, val dia: Int) {
 
-    val conhecida: Boolean get() = mes in 1..12 && dia >= 1
+    /** Tem dia exato. */
+    val conhecida: Boolean get() = temMes && dia >= 1
 
-    /** "12 mar 2027", ou "12 mar" quando o ano não é conhecido. */
+    /**
+     * Tem pelo menos o mês.
+     *
+     * É o que sobra de uma transferência gravada antes de o relógio passar a
+     * ser carimbado: o mês dela é real, o dia é que não foi registrado. Melhor
+     * mostrar "mar 2027" do que nada — e muito melhor do que inventar um dia.
+     */
+    val temMes: Boolean get() = mes in 1..12
+
+    /** "12 mar 2027", "mar 2027" sem dia, "12 mar" sem ano, "" sem mês. */
     fun curta(): String {
-        if (!conhecida) return ""
+        if (!temMes) return ""
         val mesNome = CalendarioDoJogo.MESES_ABREV[mes]
-        return if (ano > 0) "$dia $mesNome $ano" else "$dia $mesNome"
+        val comDia = if (dia >= 1) "$dia $mesNome" else mesNome
+        return if (ano > 0) "$comDia $ano" else comDia
     }
 
     /** Chave de ordenação cronológica. */

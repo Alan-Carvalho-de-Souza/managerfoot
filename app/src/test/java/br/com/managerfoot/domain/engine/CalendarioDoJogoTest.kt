@@ -129,11 +129,29 @@ class CalendarioDoJogoTest {
     }
 
     @Test
-    fun `data sem dia nao e conhecida e nao se formata`() {
-        // É o que sobra de uma transferência sem relógio: a tela cai para o mês.
+    fun `data sem dia ainda se formata pelo mes`() {
+        // É o que sobra de uma transferência gravada antes de o relógio passar
+        // a ser carimbado: o mês é real, o dia é que não foi registrado.
         val semDia = DataDoJogo(2027, 3, 0)
-        assertEquals(false, semDia.conhecida)
-        assertEquals("", semDia.curta())
+        assertEquals(false, semDia.conhecida)   // não tem dia
+        assertEquals(true, semDia.temMes)       // mas tem mês
+        assertEquals("mar 2027", semDia.curta())
+    }
+
+    @Test
+    fun `data sem mes nenhum nao se formata`() {
+        for (data in listOf(DataDoJogo(2027, 0, 0), DataDoJogo(0, 0, 0), DataDoJogo(2027, 13, 4))) {
+            assertEquals(data.toString(), false, data.temMes)
+            assertEquals(data.toString(), "", data.curta())
+        }
+    }
+
+    @Test
+    fun `o dia so aparece quando existe`() {
+        assertEquals("12 mar 2027", DataDoJogo(2027, 3, 12).curta())
+        assertEquals("mar 2027", DataDoJogo(2027, 3, 0).curta())
+        assertEquals("12 mar", DataDoJogo(0, 3, 12).curta())
+        assertEquals("mar", DataDoJogo(0, 3, 0).curta())
     }
 
     @Test
