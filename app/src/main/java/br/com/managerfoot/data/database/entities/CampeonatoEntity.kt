@@ -13,6 +13,35 @@ data class TemporadaEntity(
     val encerrada: Boolean = false
 )
 
+/**
+ * Qual calendário uma temporada segue.
+ *
+ * O jogo não guarda data: guarda `ordemGlobal`. Até a [CURVA] esse valor era um
+ * contador de slots (1..620) e o dia saía de uma curva que o espalhava sobre o
+ * ano; na [GRADE] ele passa a ser o próprio dia do ano. São duas escalas
+ * diferentes para a mesma coluna, e é por isso que a versão existe.
+ *
+ * A versão fica no CAMPEONATO, e não numa configuração global, porque toda
+ * competição de uma temporada nasce no rollover: uma temporada ou é inteira de
+ * uma escala, ou é inteira da outra. Isso dispensa migrar as partidas gravadas
+ * (seriam milhares de linhas reescritas no startup) e torna impossível, por
+ * construção, uma temporada misturar as duas — inclusive nas fases que só são
+ * geradas meses depois, porque elas herdam a versão do campeonato que já existe.
+ *
+ * O preço é que a curva antiga continua no código como LEITORA do histórico.
+ */
+object CalendarioVersao {
+
+    /** `ordemGlobal` é um contador de slots, e o dia sai de uma curva. */
+    const val CURVA = 1
+
+    /** `ordemGlobal` é o dia do ano. */
+    const val GRADE = 2
+
+    /** A versão que as temporadas novas recebem. */
+    const val ATUAL = GRADE
+}
+
 @Entity(tableName = "campeonatos")
 data class CampeonatoEntity(
     @PrimaryKey(autoGenerate = true)
@@ -24,7 +53,17 @@ data class CampeonatoEntity(
     val rodadaAtual: Int = 0,
     val totalRodadas: Int,
     val encerrado: Boolean = false,
-    val pais: String = "Brasil"
+    val pais: String = "Brasil",
+
+    /**
+     * Qual escala de `ordemGlobal` as partidas deste campeonato usam. Ver
+     * [CalendarioVersao].
+     *
+     * Um campeonato novo nasce em [CalendarioVersao.ATUAL]; os que já estão
+     * gravados ficam em [CalendarioVersao.CURVA], que é o `DEFAULT 1` da
+     * migração 36 → 37.
+     */
+    val calendarioVersao: Int = CalendarioVersao.ATUAL
 )
 
 enum class TipoCampeonato {

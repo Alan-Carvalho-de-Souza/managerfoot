@@ -11,6 +11,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import br.com.managerfoot.data.dao.*
 import br.com.managerfoot.data.database.entities.*
 
+/**
+ * A versão do esquema do banco.
+ *
+ * Fica aqui, e não só dentro da anotação, para que o teste possa cruzá-la com a
+ * corrente de migrações: uma versão subida sem a migração correspondente faz o
+ * Room cair no `fallbackToDestructiveMigration` e **apagar o save do jogador**,
+ * em silêncio. É a única falha deste arquivo que destrói dado, e é o que
+ * `AppDatabaseMigracoesTest` existe para impedir.
+ */
+object EsquemaDoBanco {
+    const val VERSAO = 37
+}
+
 @Database(
     entities = [
         TimeEntity::class,
@@ -35,7 +48,7 @@ import br.com.managerfoot.data.database.entities.*
         TecnicoEntity::class,
         PassagemTecnicoEntity::class,
     ],
-    version = 36,
+    version = EsquemaDoBanco.VERSAO,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -199,6 +212,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // 36 → 37: coluna calendarioVersao em campeonatos.
+        //
+        // O DEFAULT 1 é o ponto inteiro desta migração: todo campeonato que já
+        // está no save fica em CalendarioVersao.CURVA, a escala em que ele foi
+        // gravado, e segue sendo lido e avançado por ela. Só as temporadas
+        // criadas depois nascem em CalendarioVersao.GRADE, porque é o
+        // CampeonatoEntity que dá o valor dos registros novos.
+        //
+        // É isso que dispensa reescrever as partidas gravadas — seriam milhares
+        // de linhas convertidas no startup — e o que impede uma temporada em
+        // andamento de misturar as duas escalas.
+        private val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE campeonatos ADD COLUMN calendarioVersao " +
+                        "INTEGER NOT NULL DEFAULT ${CalendarioVersao.CURVA}"
+                )
+            }
+        }
+
+        /**
+         * Toda migração do banco, na ordem. É esta lista que o builder usa, e é
+         * ela que o teste varre à procura de um salto de versão sem caminho.
+         */
+        internal val MIGRACOES: Array<Migration> = arrayOf(
+            MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
+            MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
+            MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35,
+            MIGRATION_35_36, MIGRATION_36_37
+        )
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -207,12 +251,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "managerfoot.db"
                 )
                     //.createFromAsset("database/seed.db")   // dados iniciais (times, jogadores)
-                    .addMigrations(
-                        MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-                        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
-                        MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35,
-                        MIGRATION_35_36
-                    )
+                    .addMigrations(*MIGRACOES)
                     .fallbackToDestructiveMigration()       // fallback p/ versões sem caminho de migração
                     .build()
                     .also { INSTANCE = it }
