@@ -38,9 +38,6 @@ data class DataDoJogo(val ano: Int, val mes: Int, val dia: Int) {
         val comDia = if (dia >= 1) "$dia $mesNome" else mesNome
         return if (ano > 0) "$comDia $ano" else comDia
     }
-
-    /** Chave de ordenação cronológica. */
-    fun comoNumero(): Int = ano * 10_000 + mes * 100 + dia
 }
 
 object CalendarioDoJogo {

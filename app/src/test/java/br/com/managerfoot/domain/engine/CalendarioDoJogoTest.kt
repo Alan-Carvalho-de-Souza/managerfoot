@@ -156,25 +156,6 @@ class CalendarioDoJogoTest {
         assertEquals("mar", DataDoJogo(0, 3, 0).curta())
     }
 
-    @Test
-    fun `a chave numerica ordena cronologicamente`() {
-        val datas = listOf(
-            DataDoJogo(2027, 3, 12),
-            DataDoJogo(2026, 11, 30),
-            DataDoJogo(2027, 3, 1),
-            DataDoJogo(2028, 1, 5)
-        )
-        assertEquals(
-            listOf(
-                DataDoJogo(2026, 11, 30),
-                DataDoJogo(2027, 3, 1),
-                DataDoJogo(2027, 3, 12),
-                DataDoJogo(2028, 1, 5)
-            ),
-            datas.sortedBy { it.comoNumero() }
-        )
-    }
-
     // ── Regressão: as fórmulas divergentes que existiam ──────────────────
 
     private fun mes(og: Int, nome: String = "") =
