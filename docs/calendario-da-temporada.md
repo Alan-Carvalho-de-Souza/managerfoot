@@ -330,7 +330,7 @@ preguiçosamente na leitura, onde a mistura de escalas é inofensiva.
   preservada pela migração, e nenhuma partida da temporada corrente fica na
   escala velha.
 
-### Etapa 3 — restrições reais *(revisada depois da enumeração)*
+### Etapa 3 — restrições reais ✅ *(feita: a grade semanal)*
 
 A enumeração completa achou **mais conflitos do que o §2.2 tinha**, e três
 classes novas que a análise por perfil não cobria:
@@ -358,8 +358,82 @@ que não cabe em 295. O reparo tem de ser **por perfil** — só competições q
 mesmo clube pode disputar juntas se excluem —, e aí vira um problema de
 coloração com janelas estreitas.
 
-O validador que julga tudo isso já existe (`conflitosDoPerfil`) e está testado.
-Falta montar os perfis reais sobre as tabelas e mover os dias até zerar.
+#### O que foi feito
+
+A enumeração do calendário real, agora completa (29 competições, **14 perfis**
+de clube), achou **22 colisões de mesmo dia e 41 de dias seguidos**.
+
+E mostrou que a causa não era o `ordemGlobal`: dentro de um perfil ele nunca
+repete, por construção — os comentários de `MotorCampeonato` são verdadeiros. A
+causa é a **resolução da curva**. Ela espalha 370 casas sobre 295 dias, a 0,8 dia
+por casa, então duas casas vizinhas caem no mesmo dia ou em dias seguidos: a
+Champions em 303 e a Europa League em 304 são o caso puro.
+
+Por isso o conserto não foi empurrar 63 jogos um a um — seria coloração com
+janelas estreitas, como esta seção previa. Foi **trocar a curva por uma grade em
+que a colisão é impossível**:
+
+```
+semana w:   +0 ........ +3 ..... +5     semana w+1:  +0
+distância:      3          2        2
+```
+
+43 semanas a partir de 8 de fevereiro, três casas por semana: o fim de semana
+(pontos corridos) e dois meios de semana (copas e continentais). Duas casas
+distintas **nunca** são o mesmo dia nem dias seguidos, qualquer que seja a
+alocação. Isso troca o problema de coloração por um de **alocação de conjuntos**,
+que se resolve lendo uma tabela:
+
+| Casa | Quem joga |
+|---|---|
+| fim de semana | ligas, Apertura/Clausura, Intermediário, playoff uruguaio |
+| meio de semana 1 | Champions, Copa do Brasil, Copa Argentina, excedente de liga longa |
+| meio de semana 2 | Europa League, Libertadores, Sul-Americana, FA Cup, Copa do Rei, Coppa Italia |
+
+Duas regras de disjunção fecham o resto, e as duas são **por construção**, não
+por sorte:
+
+- **A Sul-Americana joga uma semana depois da Libertadores.** Não basta dizer
+  que um clube disputa só uma: o eliminado da Fase 3 da Pré-Libertadores entra
+  nos grupos da Sul-Americana, então existe elenco com jogo nas duas.
+- **As copas nacionais de meio de semana 2 jogam uma semana depois das
+  europeias**, porque um inglês pode estar na Europa League e na FA Cup.
+
+Ambas só funcionam porque o conjunto de origem não tem duas semanas seguidas —
+e há um teste que exige exatamente isso, para o dia em que alguma dessas
+competições ganhar rodadas.
+
+#### O que mudou de visível
+
+| | Antes | Depois |
+|---|---|---|
+| 1ª rodada da liga | 8 fev | 8 fev |
+| última rodada da liga | 30 nov | 29 nov |
+| Supercopa da UEFA | 25 jan (junto da nacional) | 1º fev |
+| Recopa (ida/volta) | 7 e 10 fev | 29 jan e 3 fev |
+| amistosos de dezembro | os dois em 20 dez | 20 e 23 dez |
+| Championship, rodadas 44–46 | as três em 31 dez | dentro da janela |
+
+#### Onde está
+
+- `CalendarioDaTemporada` — a grade, as semanas de cada competição e o validador.
+- `CalendarioDasCompeticoes` — os dias de cada uma das 29 competições e os 14
+  perfis de clube. **É daqui que a etapa 2 vai ler.**
+- `CalendarioDasCompeticoesTest` — exige zero conflito nos 14 perfis, e nomeia
+  cada defeito antigo para que a regressão diga *qual* voltou.
+
+`diaDaCasa` continua no lugar, agora como **leitor** do histórico: as temporadas
+gravadas antes da etapa 2 seguem na escala que entendem.
+
+#### Um defeito que a própria grade criou, e o teste pegou
+
+A primeira versão mandava o excedente de uma liga longa (Championship, 46
+rodadas em 43 semanas) para o meio de semana de qualquer semana — inclusive a
+última, cujo meio de semana cai em 4 de dezembro, depois do fim da liga. Era o
+mesmo defeito de antes com outra roupa. O excedente agora para na penúltima
+semana, e a distinção entre `ULTIMO_DIA_DE_LIGA` (29 nov, pontos corridos) e
+`ULTIMO_DIA_DA_GRADE` (4 dez, finais) ficou explícita — confundir as duas foi o
+que deixou a rodada vazar.
 
 #### Impacto em saves: faça a etapa 3 SEM tocar nas tabelas vivas
 
@@ -397,7 +471,7 @@ ele é específico:
 de pontos corridos) só afetam a temporada seguinte, porque o save corrente já
 tem o calendário completo delas. A correção da Championship é desta classe.
 
-**Decisão: a etapa 3 fica no (A).** A troca das tabelas vivas vai junto com a
+**Decisão: a etapa 3 ficou no (A).** A troca das tabelas vivas vai junto com a
 etapa 2, que já precisa de migração — **uma ruptura só, com migração, em vez de
 duas sem**. A migração da etapa 2 resolve os quatro pontos acima de uma vez:
 converte a temporada corrente inteira, então não há mistura, o `isClausura` não

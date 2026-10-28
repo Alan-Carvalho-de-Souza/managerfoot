@@ -16,10 +16,93 @@ class CalendarioDaTemporadaTest {
     private fun comp(chave: String, dias: List<Int>, pais: String = INTERNACIONAL) =
         CompeticaoNoCalendario(chave, pais, dias)
 
-    // ── A janela ─────────────────────────────────────────────────────────
+    // ── A grade ──────────────────────────────────────────────────────────
 
     @Test
-    fun `uma liga comeca em 8 de fevereiro e termina em 30 de novembro`() {
+    fun `a temporada abre em 8 de fevereiro e a ultima semana e 29 de novembro`() {
+        assertEquals(39, CalendarioDaTemporada.dia(0, CalendarioDaTemporada.FIM_DE_SEMANA))
+        assertEquals(333, CalendarioDaTemporada.ULTIMO_DIA_DE_LIGA)
+        assertEquals(
+            CalendarioDaTemporada.ULTIMO_DIA_DE_LIGA,
+            CalendarioDaTemporada.dia(
+                CalendarioDaTemporada.SEMANAS - 1, CalendarioDaTemporada.FIM_DE_SEMANA
+            )
+        )
+        // 29 de novembro.
+        assertEquals(11 to 29, CalendarioDoJogo.diaDoAnoParaMesDia(333))
+    }
+
+    @Test
+    fun `duas casas distintas da grade nunca sao o mesmo dia nem dias seguidos`() {
+        // É A garantia da grade, e é dela que todo o resto depende: se duas
+        // casas distintas podem ficar a menos de 2 dias, nenhuma alocação de
+        // competições salva o calendário.
+        val todas = (0 until CalendarioDaTemporada.SEMANAS).flatMap { semana ->
+            CalendarioDaTemporada.CASAS.map { casa -> CalendarioDaTemporada.dia(semana, casa) }
+        }
+        assertEquals(todas.size, todas.distinct().size)
+        val ordenados = todas.sorted()
+        for (i in 0 until ordenados.size - 1) {
+            assertTrue(
+                "${ordenados[i]} e ${ordenados[i + 1]} distam menos de 2 dias",
+                ordenados[i + 1] - ordenados[i] >= 2
+            )
+        }
+    }
+
+    @Test
+    fun `a ultima casa de uma semana dista 2 dias da primeira da seguinte`() {
+        // É o ponto mais apertado da grade: 2 dias exatos. Encurtar a semana ou
+        // empurrar MEIO_DE_SEMANA_2 para +6 quebraria aqui, e em nenhum outro
+        // lugar — por isso este teste existe separado do anterior.
+        val fim = CalendarioDaTemporada.dia(0, CalendarioDaTemporada.MEIO_DE_SEMANA_2)
+        val inicioDaSeguinte = CalendarioDaTemporada.dia(1, CalendarioDaTemporada.FIM_DE_SEMANA)
+        assertEquals(2, inicioDaSeguinte - fim)
+    }
+
+    @Test
+    fun `semanas espacadas pegam as duas pontas`() {
+        val semanas = CalendarioDaTemporada.semanasEspacadas(18)
+        assertEquals(18, semanas.size)
+        assertEquals(0, semanas.first())
+        assertEquals(CalendarioDaTemporada.SEMANAS - 1, semanas.last())
+        assertEquals(semanas.sorted(), semanas)
+        assertEquals(18, semanas.distinct().size)
+    }
+
+    @Test
+    fun `os conjuntos deslocados de uma semana exigem que o original tenha folga`() {
+        // SEMANAS_SULAMERICANA e SEMANAS_COPA_EUROPEIA são "a semana seguinte" de
+        // outro conjunto, e isso só os torna disjuntos se o conjunto de origem
+        // não tiver duas semanas seguidas. Se algum dia couberem mais rodadas
+        // numa dessas competições, é aqui que o calendário avisa.
+        for (origem in listOf(
+            CalendarioDaTemporada.SEMANAS_LIBERTADORES,
+            CalendarioDaTemporada.SEMANAS_EUROPEIAS
+        )) {
+            for (i in 0 until origem.size - 1) {
+                assertTrue(
+                    "semanas ${origem[i]} e ${origem[i + 1]} são seguidas",
+                    origem[i + 1] - origem[i] >= 2
+                )
+            }
+        }
+        assertEquals(
+            emptyList<Int>(),
+            CalendarioDaTemporada.SEMANAS_LIBERTADORES
+                .intersect(CalendarioDaTemporada.SEMANAS_SULAMERICANA.toSet()).toList()
+        )
+        assertEquals(
+            emptyList<Int>(),
+            CalendarioDaTemporada.SEMANAS_EUROPEIAS
+                .intersect(CalendarioDaTemporada.SEMANAS_COPA_EUROPEIA.toSet()).toList()
+        )
+    }
+
+    // ── Pontos corridos ──────────────────────────────────────────────────
+
+    @Test
+    fun `uma liga comeca em 8 de fevereiro e termina na ultima semana`() {
         val dias = CalendarioDaTemporada.diasDeLiga(38)
         assertEquals(38, dias.size)
         assertEquals(CalendarioDaTemporada.PRIMEIRO_DIA, dias.first())
@@ -27,37 +110,60 @@ class CalendarioDaTemporadaTest {
     }
 
     @Test
-    fun `a liga de 38 rodadas mantem as datas que o jogo ja usa`() {
-        // A fórmula antiga era 39 + (rodada*10 - 10) * 295 / 370, e o aparelho
-        // confirmou as datas dela. Esta tabela não pode mudá-las.
-        val dias = CalendarioDaTemporada.diasDeLiga(38)
-        for (rodada in 1..38) {
-            val antiga = 39 + (rodada * 10 - 10) * 295 / 370
-            assertEquals("rodada $rodada", antiga, dias[rodada - 1])
+    fun `toda rodada de liga cai num fim de semana da grade`() {
+        // A fórmula antiga era 39 + (rodada*10 - 10) * 295 / 370, de resolução
+        // 0,8 dia por casa de ordemGlobal — e era essa resolução que colava dois
+        // jogos no mesmo dia. A troca pela grade é o conserto, então a tabela
+        // antiga não vale mais como referência: o que vale é a casa.
+        for (rodadas in listOf(15, 20, 38, 43)) {
+            val dias = CalendarioDaTemporada.diasDeLiga(rodadas)
+            for (dia in dias) {
+                assertEquals(
+                    "$rodadas rodadas: o dia $dia não é um fim de semana",
+                    CalendarioDaTemporada.FIM_DE_SEMANA,
+                    (dia - CalendarioDaTemporada.PRIMEIRO_DIA) % 7
+                )
+            }
         }
     }
 
     @Test
     fun `qualquer numero de rodadas cabe na janela`() {
         // O bug que isto conserta: a EFL Championship tem 46 rodadas e usava a
-        // curva calibrada para 38. Da 39ª em diante caía depois de 30 de
-        // novembro, e as rodadas 44, 45 e 46 colapsavam as três em 31 de
+        // curva calibrada para 38. Da 39ª em diante caía depois do fim da
+        // janela, e as rodadas 44, 45 e 46 colapsavam as três em 31 de
         // dezembro — três rodadas no mesmo dia.
-        for (rodadas in listOf(20, 30, 38, 46, 58)) {
+        for (rodadas in listOf(20, 30, 38, 43, 46, 58)) {
             val dias = CalendarioDaTemporada.diasDeLiga(rodadas)
             assertEquals("$rodadas rodadas", rodadas, dias.size)
             assertEquals("$rodadas rodadas", rodadas, dias.distinct().size)
-            assertTrue("$rodadas rodadas: ${dias.last()}", dias.last() <= CalendarioDaTemporada.ULTIMO_DIA_DE_LIGA)
-            assertTrue("$rodadas rodadas: ${dias.first()}", dias.first() >= CalendarioDaTemporada.PRIMEIRO_DIA)
+            assertTrue(
+                "$rodadas rodadas: ${dias.last()}",
+                dias.last() <= CalendarioDaTemporada.ULTIMO_DIA_DE_LIGA
+            )
+            assertTrue(
+                "$rodadas rodadas: ${dias.first()}",
+                dias.first() >= CalendarioDaTemporada.PRIMEIRO_DIA
+            )
             assertEquals("$rodadas rodadas", dias.sorted(), dias)
         }
     }
 
     @Test
     fun `a championship de 46 rodadas nao repete mais nenhum dia`() {
-        val dias = CalendarioDaTemporada.diasDeLiga(46)
+        val dias = CalendarioDasCompeticoes.championship()
         assertEquals(46, dias.distinct().size)
         assertEquals(emptyList<Int>(), CalendarioDaTemporada.diasForaDaJanela(comp("EFL", dias)))
+    }
+
+    @Test
+    fun `um torneio de faixa anda semana a semana`() {
+        val apertura = CalendarioDaTemporada.diasDeFaixa(0, 20)
+        assertEquals(20, apertura.size)
+        assertEquals(CalendarioDaTemporada.PRIMEIRO_DIA, apertura.first())
+        for (i in 0 until apertura.size - 1) {
+            assertEquals(7, apertura[i + 1] - apertura[i])
+        }
     }
 
     @Test
@@ -65,6 +171,10 @@ class CalendarioDaTemporadaTest {
         assertEquals(emptyList<Int>(), CalendarioDaTemporada.diasDeLiga(0))
         assertEquals(emptyList<Int>(), CalendarioDaTemporada.diasDeLiga(-3))
         assertEquals(listOf(CalendarioDaTemporada.PRIMEIRO_DIA), CalendarioDaTemporada.diasDeLiga(1))
+        assertEquals(emptyList<Int>(), CalendarioDaTemporada.semanasEspacadas(0))
+        assertEquals(emptyList<Int>(), CalendarioDaTemporada.semanasEscolhidas(listOf(1, 2), 0))
+        assertEquals(emptyList<Int>(), CalendarioDaTemporada.semanasEscolhidas(emptyList(), 3))
+        assertEquals(emptyList<Int>(), CalendarioDaTemporada.diasDeFaixa(0, 0))
     }
 
     // ── Dia do ano ───────────────────────────────────────────────────────
@@ -84,8 +194,10 @@ class CalendarioDaTemporadaTest {
     }
 
     @Test
-    fun `a casa de ordemGlobal vira o dia que a tela mostra`() {
-        // Validado no aparelho: Champions R2 (casa 67) cai em 25 de março.
+    fun `a casa de ordemGlobal continua lendo o historico`() {
+        // diaDaCasa sobrevive como LEITOR das temporadas gravadas antes da
+        // etapa 2. Validado no aparelho: Champions R2 (casa 67) cai em 25 de
+        // março.
         assertEquals(
             CalendarioDaTemporada.diaDoAno(3, 25),
             CalendarioDaTemporada.diaDaCasa(67, "Champions League 2027")
@@ -135,9 +247,9 @@ class CalendarioDaTemporadaTest {
 
     @Test
     fun `dois dias de folga nao sao conflito`() {
-        // O ritmo observado no aparelho tem 2 dias entre a continental e a
-        // rodada seguinte da liga. Isso é o calendário real do jogo, não um
-        // defeito — exigir mais obrigaria a reconstruir tudo.
+        // 2 dias é exatamente a folga mínima da grade (a última casa de uma
+        // semana para a primeira da seguinte). Exigir 3 invalidaria a grade
+        // inteira, então o validador tem de aceitar 2.
         val perfil = listOf(comp("Liga", listOf(100)), comp("Champions", listOf(102)))
         assertEquals(emptyList<ConflitoDeCalendario>(), CalendarioDaTemporada.conflitosDoPerfil(perfil))
     }
@@ -159,8 +271,10 @@ class CalendarioDaTemporadaTest {
     // ── Fora da janela ───────────────────────────────────────────────────
 
     @Test
-    fun `rodada depois de 30 de novembro e apontada`() {
-        val fora = CalendarioDaTemporada.diasForaDaJanela(comp("Liga", listOf(39, 334, 340, 365)))
+    fun `rodada depois do fim da janela e apontada`() {
+        val fora = CalendarioDaTemporada.diasForaDaJanela(
+            comp("Liga", listOf(39, 333, 340, 365))
+        )
         assertEquals(listOf(340, 365), fora)
     }
 
@@ -172,3 +286,4 @@ class CalendarioDaTemporadaTest {
         assertEquals(emptyList<Int>(), CalendarioDaTemporada.diasForaDaJanela(comp("Liga", liga)))
     }
 }
+
