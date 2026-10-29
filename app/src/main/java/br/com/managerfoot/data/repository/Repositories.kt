@@ -136,13 +136,48 @@ class JogadorRepository @Inject constructor(
         return ano to ordemGlobal
     }
     companion object {
+        /** Não há janela aberta neste mês: o mercado está fechado. */
+        const val JANELA_FECHADA = -1
+
         /**
-         * Janela de transferências monotônica: 2 por temporada
-         * (início: meses 1–6 → índice 0; final: meses 7–12 → índice 1).
-         * Usada para liberar a revenda de um jogador pela IA só na PRÓXIMA janela.
+         * A janela de transferências aberta no mês, ou [JANELA_FECHADA].
+         *
+         * São duas por temporada, e elas têm meses de verdade:
+         *
+         *  - **pré-temporada**, meses 1 e 2;
+         *  - **fim de ano**, meses 10, 11 e 12.
+         *
+         * Nos meses 3 a 9 o mercado está FECHADO. Antes, a função dividia o ano
+         * em duas metades (1–6 e 7–12) e não existia mês sem janela, o que fazia
+         * a IA negociar o ano inteiro.
+         *
+         * O índice é monotônico dentro do save (cresce com a temporada), que é o
+         * que permite comparar o carimbo de um jogador com a janela corrente. E
+         * começa em `temporadaId * 2`, nunca em 0, para não colidir com o valor
+         * padrão da coluna nos registros antigos.
          */
-        fun janelaTransferencia(temporadaId: Int, mes: Int): Int =
-            temporadaId * 2 + if (mes <= 6) 0 else 1
+        fun janelaTransferencia(temporadaId: Int, mes: Int): Int = when (mes) {
+            1, 2 -> temporadaId * 2
+            10, 11, 12 -> temporadaId * 2 + 1
+            else -> JANELA_FECHADA
+        }
+
+        /**
+         * Se um jogador pode trocar de clube agora.
+         *
+         * Uma janela dura mais de um mês — dois na pré-temporada, três no fim
+         * do ano — e as sub-rotinas de mercado da IA rodam uma vez por mês. O
+         * conjunto de "já negociados" que elas compartilham é recriado a cada
+         * mês, então sozinho ele só impede duas trocas no MESMO mês: no mês
+         * seguinte, ainda dentro da janela, o jogador ficaria livre de novo. É
+         * este carimbo que fecha a janela inteira.
+         *
+         * Vale para todas as rotinas, e não só para a de clube a clube: se
+         * amanhã alguma delas passar a tirar jogador de elenco, ela já nasce
+         * protegida.
+         */
+        fun podeTrocarDeClube(janelaUltimaTransferencia: Int, janelaAtual: Int): Boolean =
+            janelaAtual != JANELA_FECHADA && janelaUltimaTransferencia < janelaAtual
     }
 
     fun observeElenco(timeId: Int): Flow<List<Jogador>> =
@@ -253,7 +288,12 @@ class JogadorRepository @Inject constructor(
             // Novo clube renegocia o salário (mercado). Jogador solto (mercado livre) mantém o salário.
             aplicarSalarioContratacao(oferta.jogadorId, oferta.salarioProposto)
         } else {
-            jogadorDao.transferirJogador(oferta.jogadorId, null)
+            // Carimba a janela tambem ao mandar para o mercado livre: sem isso
+            // o jogador volta ao mercado com o carimbo antigo e poderia ser
+            // assinado de novo dentro da mesma janela.
+            jogadorDao.transferirJogadorComJanela(
+                oferta.jogadorId, null, janelaTransferencia(temporadaId, mes)
+            )
         }
         jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
 

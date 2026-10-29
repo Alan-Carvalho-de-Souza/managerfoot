@@ -586,7 +586,10 @@ private fun TransferenciaRow(t: TransferenciaDetalhe, positivo: Boolean, prefixo
                 Text(
                     dataLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // onSurface, e não onSurfaceVariant: a data é a informação
+                    // que o jogador procura nesta linha, e o cinza-ardósia a
+                    // deixava com menos contraste que o nome do clube.
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }

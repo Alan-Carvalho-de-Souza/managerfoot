@@ -5912,21 +5912,28 @@ class GameRepository @Inject constructor(
         if (anoAtual > 0) {
             jogadorRepository.processarRetornosEmprestimo(anoAtual, mes, temporadaId)
         }
-        // ── Set global de jogadores já negociados neste mês ──
-        // Compartilhado entre TODAS as sub-rotinas de IA do mercado para impedir
-        // que o mesmo jogador seja transferido várias vezes na mesma janela
-        // (bug onde Time A vendia → mercado livre → Time B comprava de novo).
-        val jogadoresNegociadosNoMes = mutableSetOf<Int>()
+        // ── O mercado só funciona com a janela aberta ──────────────────────
+        // São duas por temporada: pré-temporada (meses 1 e 2) e fim de ano (10,
+        // 11 e 12). Fora delas a IA não negocia — antes ela negociava o ano
+        // inteiro, porque a janela era "metade do ano" e nunca fechava.
+        //
+        // O set é de jogadores já negociados NESTE MÊS, e é compartilhado entre
+        // todas as sub-rotinas. Ele sozinho não fecha a janela: um jogador
+        // movido no mês 1 voltaria a estar livre no mês 2, que é a mesma janela.
+        // Quem fecha é o carimbo `janelaUltimaTransferencia`, que cada rotina
+        // consulta por JogadorRepository.podeTrocarDeClube.
+        if (JogadorRepository.janelaTransferencia(temporadaId, mes) !=
+            JogadorRepository.JANELA_FECHADA
+        ) {
+            val jogadoresNegociadosNoMes = mutableSetOf<Int>()
 
-        // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
-        executarContratacoesLivresIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
-        // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
-        executarReforcoMensalIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
-        // IA faz reforços emergenciais quando o time está com desempenho ruim nos campeonatos
-        executarReforcoDesempenhoIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
-        // Nos meses de início (1-2) e final (10-12) da temporada, gera propostas de
-        // times da IA para jogadores do time do usuário
-        if (mes in setOf(1, 2, 10, 11, 12)) {
+            // IA contrata jogadores do mercado livre (cada time IA verifica necessidades)
+            executarContratacoesLivresIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
+            // IA avalia reforço mensal: tenta melhorar a posição mais fraca do time titular
+            executarReforcoMensalIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
+            // IA faz reforços emergenciais quando o time está com desempenho ruim
+            executarReforcoDesempenhoIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
+            // Propostas de times da IA para jogadores do time do usuário
             gerarPropostasIAParaTimeJogador(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
             executarTransferenciasIAParaIA(timeId, temporadaId, mes, jogadoresNegociadosNoMes)
         }
@@ -6309,6 +6316,8 @@ class GameRepository @Inject constructor(
         mes: Int,
         jogadoresMovidos: MutableSet<Int>
     ) {
+        // A janela dura seis meses; o conjunto de já negociados é mensal.
+        val janelaAtual = JogadorRepository.janelaTransferencia(temporadaId, mes)
         val todos = timeRepository.buscarTodosOrdenadosPorReputacao()
         val mercadoLivre = jogadorRepository.buscarMercado(limite = 40)
         if (mercadoLivre.isEmpty()) return
@@ -6323,7 +6332,10 @@ class GameRepository @Inject constructor(
             val ofertas = IATimeRival.decidirContratacoes(
                 time         = time,
                 elencoAtual  = elenco,
-                mercado      = mercadoLivre.filter { it.timeId == null && it.id !in jogadoresMovidos },
+                mercado      = mercadoLivre.filter {
+                it.timeId == null && it.id !in jogadoresMovidos &&
+                    JogadorRepository.podeTrocarDeClube(it.janelaUltimaTransferencia, janelaAtual)
+            },
                 orcamento    = time.saldo
             )
 
@@ -6345,6 +6357,8 @@ class GameRepository @Inject constructor(
         mes: Int,
         jogadoresMovidos: MutableSet<Int>
     ) {
+        // A janela dura seis meses; o conjunto de já negociados é mensal.
+        val janelaAtual = JogadorRepository.janelaTransferencia(temporadaId, mes)
         val todos  = timeRepository.buscarTodosOrdenadosPorReputacao()
         val livres = jogadorRepository.buscarMercado(limite = 60).filter { it.timeId == null }
         if (livres.isEmpty()) return
@@ -6365,6 +6379,9 @@ class GameRepository @Inject constructor(
 
             val candidato = livres
                 .filter { it.id !in jogadoresMovidos }
+                .filter {
+                    JogadorRepository.podeTrocarDeClube(it.janelaUltimaTransferencia, janelaAtual)
+                }
                 .filter { it.posicao == posNecessaria || it.posicaoSecundaria == posNecessaria }
                 .filter { it.forca > maisFrago.jogador.forca }
                 .filter { it.valorMercado <= orcamentoReforco }
@@ -6404,6 +6421,8 @@ class GameRepository @Inject constructor(
         mes: Int,
         jogadoresMovidos: MutableSet<Int>
     ) {
+        // A janela dura seis meses; o conjunto de já negociados é mensal.
+        val janelaAtual = JogadorRepository.janelaTransferencia(temporadaId, mes)
         val tiposCopa = setOf(
             TipoCampeonato.COPA_NACIONAL,
             TipoCampeonato.CONTINENTAL
@@ -6440,6 +6459,9 @@ class GameRepository @Inject constructor(
                 for (posicao in posicoesPrioritarias) {
                     if (contratados >= qtd) break
                     val candidato = livresDisponiveis
+                        .filter {
+                            JogadorRepository.podeTrocarDeClube(it.janelaUltimaTransferencia, janelaAtual)
+                        }
                         .filter { it.posicao == posicao || it.posicaoSecundaria == posicao }
                         .maxByOrNull { it.forca } ?: continue
 
@@ -7553,7 +7575,9 @@ class GameRepository @Inject constructor(
                     elencoVendedor
                         .filter { !it.lesionado && !it.categoriaBase }
                         .filter { it.id !in jogadoresMovidos }  // não negociar jogador já transferido
-                        .filter { it.janelaUltimaTransferencia < janelaAtual }  // só libera na próxima janela
+                        .filter {
+                            JogadorRepository.podeTrocarDeClube(it.janelaUltimaTransferencia, janelaAtual)
+                        }
                         .filter { it.forca in (forcaMediaComprador - 8)..(forcaMediaComprador + 12) }
                         .filter { (it.valorMercado * 0.90).toLong() <= orcamento }
                         .map { jogador -> Pair(timeVendedor.id, jogador) }

@@ -2794,7 +2794,9 @@ private fun TransferenciaCard(t: br.com.managerfoot.data.dao.TransferenciaDetalh
                 Text(
                     t.data.curta().ifBlank { "Temp. ${t.temporadaId} · Mês ${t.mes}" },
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    // Aqui estava `outline`, que é OutlineSubtle — branco a 8%,
+                    // uma cor de BORDA. Como texto ficava quase invisível.
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
