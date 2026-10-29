@@ -193,7 +193,7 @@ especificação própria em [calendario-avanco-dia-a-dia.md](calendario-avanco-d
 | **4** — transferências pelo dia | ✅ (saiu com a 2) | `a0c4c20`, `7014cfc` |
 | **5** — o dia governa a simulação *(versão enxuta)* | ✅ | `310d6b0` |
 | — correção do carimbo de transferência | ✅ | `ab590b1` |
-| — ordenar a próxima partida pela temporada | ✅ | `183f970` |
+| — ordenar a próxima partida pela temporada | ✅ | `28d8477` |
 
 A ordem de execução foi 0 → 1 → **3** → 2 → 4 → 5: a 3 veio antes da 2 porque,
 se o `ordemGlobal` virasse o dia com os conflitos ainda de pé, dois jogos do
