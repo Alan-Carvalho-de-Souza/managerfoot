@@ -111,14 +111,23 @@ class JogadorRepository @Inject constructor(
     /**
      * O carimbo de data de uma transferência: (ano, ordemGlobal).
      *
-     * `ordemGlobal` é o relógio da temporada e dá o DIA exato da negociação pela
-     * mesma conversão que data as partidas; o ano vem do nome de um campeonato
-     * da temporada, que é onde ele mora. Nenhuma das duas falhas é motivo para
-     * perder a transferência: sem carimbo o histórico cai para mês/temporada,
-     * como era antes.
+     * `ordemGlobal` é o relógio e dá o DIA exato da negociação pela mesma
+     * conversão que data as partidas; o ano vem do nome de um campeonato da
+     * temporada, que é onde ele mora.
+     *
+     * O relógio é o do CLUBE da negociação ([timeId]), não o da temporada: o
+     * máximo da temporada percorre toda competição e todo clube, e basta uma
+     * partida qualquer estar adiante para o carimbo saltar meses. Ver
+     * `ordemGlobalAtualDoTime`.
+     *
+     * Nenhuma das duas falhas é motivo para perder a transferência: sem carimbo
+     * o histórico cai para mês/temporada, como era antes.
      */
-    private suspend fun carimboDeData(temporadaId: Int): Pair<Int, Int> {
-        val ordemGlobal = try { partidaDao.ordemGlobalAtual(temporadaId) } catch (_: Exception) { 0 }
+    private suspend fun carimboDeData(temporadaId: Int, timeId: Int?): Pair<Int, Int> {
+        val ordemGlobal = try {
+            if (timeId == null || timeId <= 0) 0
+            else partidaDao.ordemGlobalAtualDoTime(temporadaId, timeId)
+        } catch (_: Exception) { 0 }
         val ano = try {
             br.com.managerfoot.domain.engine.CalendarioDoJogo.anoDoNomeDoCampeonato(
                 campeonatoDao.nomeDeUmCampeonatoDaTemporada(temporadaId) ?: ""
@@ -191,7 +200,7 @@ class JogadorRepository @Inject constructor(
         temporadaId: Int,
         mes: Int
     ) {
-        val (ano, ordemGlobal) = carimboDeData(temporadaId)
+        val (ano, ordemGlobal) = carimboDeData(temporadaId, oferta.timeCompradorId)
         // Mudar dono do jogador (carimbando a janela → anti-revenda IA na mesma janela)
         jogadorDao.transferirJogadorComJanela(
             oferta.jogadorId, oferta.timeCompradorId, janelaTransferencia(temporadaId, mes)
@@ -233,7 +242,8 @@ class JogadorRepository @Inject constructor(
         temporadaId: Int,
         mes: Int
     ) {
-        val (ano, ordemGlobal) = carimboDeData(temporadaId)
+        val (ano, ordemGlobal) =
+            carimboDeData(temporadaId, oferta.timeVendedorId ?: oferta.timeCompradorId)
         // compradorId <= 0 significa "sem comprador" → jogador vai para o mercado livre (timeId = null)
         val novoTimeId = if (oferta.timeCompradorId > 0) oferta.timeCompradorId else null
 
@@ -275,7 +285,8 @@ class JogadorRepository @Inject constructor(
         anoRetorno: Int,
         mesRetorno: Int
     ) {
-        val (ano, ordemGlobal) = carimboDeData(temporadaId)
+        val (ano, ordemGlobal) =
+            carimboDeData(temporadaId, oferta.timeVendedorId ?: oferta.timeCompradorId)
         jogadorDao.transferirJogadorComJanela(oferta.jogadorId, oferta.timeCompradorId, janelaTransferencia(temporadaId, mes))
         jogadorDao.atualizarEscalacaoSemPosicao(oferta.jogadorId, 0)
         oferta.timeVendedorId?.let { origem ->
@@ -305,10 +316,11 @@ class JogadorRepository @Inject constructor(
      * ao clube de origem, registrando um [TipoTransferencia.EMPRESTIMO_RETORNO].
      */
     suspend fun processarRetornosEmprestimo(anoAtual: Int, mesAtual: Int, temporadaId: Int) {
-        val (ano, ordemGlobal) = carimboDeData(temporadaId)
         val expirados = jogadorDao.buscarEmprestadosParaRetorno(anoAtual, mesAtual)
         for (j in expirados) {
             val origemId = j.timeOrigemEmprestimo ?: continue
+            // Dentro do laço: cada retorno é de um clube, e o relógio é o dele.
+            val (ano, ordemGlobal) = carimboDeData(temporadaId, origemId)
             jogadorDao.transferirJogador(j.id, origemId)
             jogadorDao.atualizarEscalacaoSemPosicao(j.id, 0)
             jogadorDao.limparEmprestimo(j.id)
@@ -936,7 +948,7 @@ class JogadorRepository @Inject constructor(
     suspend fun dispensarJunior(jogadorId: Int, temporadaId: Int, mes: Int) {
         val entity = jogadorDao.buscarPorId(jogadorId) ?: return
         val timeOrigemId = entity.timeId
-        val (ano, ordemGlobal) = carimboDeData(temporadaId)
+        val (ano, ordemGlobal) = carimboDeData(temporadaId, timeOrigemId)
         jogadorDao.dispensarJuniorDb(jogadorId)
         financaDao.inserirTransferencia(
             TransferenciaEntity(

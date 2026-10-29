@@ -227,14 +227,27 @@ interface PartidaDao {
     """)
     fun observeOrdemGlobalAtual(temporadaAtual: Int): Flow<Int>
 
-    /** O mesmo relógio, para quem precisa carimbar o "agora" numa gravação. */
+    /**
+     * O relógio de UM CLUBE: o maior `ordemGlobal` que ele já jogou na temporada.
+     *
+     * É este o "agora" de uma negociação, e não o da temporada inteira. O máximo
+     * da temporada percorre TODA competição e TODO clube — inclusive os que o
+     * jogador não disputa — e basta uma partida qualquer estar adiante para o
+     * carimbo saltar meses no futuro. Foi o que apareceu no aparelho: uma venda
+     * feita em março gravada como 2 de dezembro.
+     *
+     * Zero quando o clube ainda não jogou nada na temporada (a janela de
+     * janeiro). Aí não existe dia, e o histórico mostra só o mês — que é melhor
+     * do que inventar um.
+     */
     @Query("""
         SELECT COALESCE(MAX(p.ordemGlobal), 0)
         FROM partidas p
         INNER JOIN campeonatos c ON c.id = p.campeonatoId
         WHERE p.jogada = 1 AND c.temporadaId = :temporadaAtual
+          AND (p.timeCasaId = :timeId OR p.timeForaId = :timeId)
     """)
-    suspend fun ordemGlobalAtual(temporadaAtual: Int): Int
+    suspend fun ordemGlobalAtualDoTime(temporadaAtual: Int, timeId: Int): Int
 
     @Query("DELETE FROM partidas")
     suspend fun deleteAll()

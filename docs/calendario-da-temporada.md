@@ -293,6 +293,34 @@ seus slots e voltava em silêncio para a curva antiga. Foi o teste de
 `reconhece` que acusou — é a mesma pegadinha de ordem de ramos que a
 Intercontinental já tinha.
 
+#### O que a validação no aparelho achou
+
+O calendário passou: num jogo novo, os 40 jogos da temporada caem exatamente nos
+dias da tabela, com zero colisões e intervalo mínimo de 3 dias. O save antigo
+migrou e continua lendo pela curva, com as mesmas datas de antes.
+
+Mas apareceu um defeito **no carimbo da transferência**, e ele não era do
+calendário: uma venda feita em março foi gravada como **2 de dezembro**.
+
+A causa é que o carimbo usava o relógio da TEMPORADA — `MAX(ordemGlobal)` sobre
+toda partida jogada —, e esse máximo percorre toda competição e todo clube,
+inclusive os que o jogador não disputa. Basta uma partida qualquer estar adiante
+para o carimbo saltar meses no futuro.
+
+O conserto é o relógio do CLUBE da negociação (`ordemGlobalAtualDoTime`), que é
+o que "agora" significa para quem joga. Isso vale qualquer que seja a competição
+adiantada, hoje ou amanhã. Verificado no emulador: a venda seguinte saiu em 22 de
+março, o dia exato da última partida do clube.
+
+Duas observações honestas:
+
+- **O defeito é anterior à etapa 2.** Na escala da curva o mesmo máximo daria a
+  casa 383, que é a final da Copa do Brasil e exibe 3 de dezembro — o mesmo
+  salto, com outra data. A etapa 2 só o tornou visível.
+- **Transferências já gravadas ficam com a data errada.** Não há como recuperar
+  o valor certo depois do fato, e são registros de histórico; o conserto vale
+  para as próximas.
+
 #### O que NÃO está coberto por teste
 
 - **O `ALTER TABLE` de verdade.** Executá-lo pede SQLite real, e o projeto não
