@@ -180,38 +180,66 @@ abstratos por dias reais nas faixas que já existem**, e validar o resultado.
 
 ### Estado atual
 
-| Etapa | Estado | Onde |
+**Todas as etapas foram feitas.** O que falta é uma extensão opcional da 5, com
+especificação própria em [calendario-avanco-dia-a-dia.md](calendario-avanco-dia-a-dia.md).
+
+| Etapa | Estado | Commit |
 |---|---|---|
-| **0a** — ordenar por `(temporadaId, ordemGlobal)` | ✅ **feito** | `1e0af35` |
-| **0b** — unificar os conversores de mês | ✅ **feito** | `b48e8d2`, e o resto abaixo |
-| **1** — calendário como dado explícito | ✅ **feito** | `CalendarioDaTemporada` |
-| **2** — `ordemGlobal` passa a ser o dia | ⬜ não começou | |
-| **3** — restrições reais | 🟡 **validador pronto, conflitos abertos** | ver §5.3 |
-| **4** — transferências e demais dados pelo dia | 🟡 **base pronta** | `b48e8d2`, `e1751f3` |
-| **5** — simulação dirigida por data | ⬜ não começou (opcional) | |
+| **0a** — ordenar por `(temporadaId, ordemGlobal)` | ✅ | `1e0af35` |
+| **0b** — uma única fórmula de data no projeto | ✅ | `b48e8d2`, `f611521` |
+| **1** — calendário como dado explícito | ✅ | `3f33bbd` |
+| **3** — a grade semanal, sem colisões | ✅ | `ce04ec1` |
+| **2** — `ordemGlobal` passa a ser o dia | ✅ | `2a18067`, `a0c4c20` |
+| **4** — transferências pelo dia | ✅ (saiu com a 2) | `a0c4c20`, `7014cfc` |
+| **5** — o dia governa a simulação *(versão enxuta)* | ✅ | `310d6b0` |
+| — correção do carimbo de transferência | ✅ | `ab590b1` |
 
-**0b:** existe **uma única fórmula de data no projeto**, em `CalendarioDoJogo`.
-As quatro cópias foram embora em dois passos — `CalendarioScreen` e
-`DashboardScreen` em `b48e8d2`, e os dois divergentes depois.
+A ordem de execução foi 0 → 1 → **3** → 2 → 4 → 5: a 3 veio antes da 2 porque,
+se o `ordemGlobal` virasse o dia com os conflitos ainda de pé, dois jogos do
+mesmo clube passariam a ter o mesmo valor e a ordenação ficaria ambígua.
 
-O que mudou de comportamento ao unificar:
+#### O que o jogador vê de diferente
 
-| Conversor removido | Era | Decidia |
+| | Antes | Depois |
 |---|---|---|
-| `ViewModels.ordemGlobalParaMes` | /370, cego ao país | `mesDerived` — quando salários e patrocínio são cobrados |
-| `Repositories.ordemGlobalParaMesCarreira` | /380, cego ao país | a que clube cada partida pertence no histórico de carreira |
+| Rodadas da liga | 8, 8, 8, 6 dias de intervalo | 7 dias, com pausas de seleção |
+| Última rodada | 30 nov | 29 nov |
+| Supercopa da UEFA | 25 jan, junto da nacional | 1º fev |
+| Recopa | 7 e 10 fev | 29 jan e 3 fev |
+| Amistosos de dezembro | os dois em 20 dez | 20 e 23 dez |
+| Championship, rodadas 44–46 | as três em 31 dez | dentro da janela |
+| Data de uma transferência | mês e temporada | dia, mês e ano |
+| Championship (46 rodadas) | no passo da Premier (38) | um ritmo à frente |
+| Champions League | encerrada em abril | acompanha o calendário dela |
 
-Os dois passaram a receber o **nome do campeonato**, que é o que seleciona a
-curva. Três testes de regressão fixam o que divergia: as 5 rodadas da Série A em
-que /370 e /380 discordavam, as rodadas argentinas em que a curva própria difere
-da genérica, e o fato de a seleção depender de "Primera División Argentina"
-aparecer no nome — se isso mudar, a curva volta a ser a genérica em silêncio.
+#### As peças
 
-**4, o que já foi:** a transferência carimba `ano` e `ordemGlobal` no momento em
-que acontece, e o histórico já deriva a data daí. Falta só o `ordemGlobal` virar
-o dia (etapa 2) para a data ficar exata sem conversão.
+| Arquivo | O que é |
+|---|---|
+| `CalendarioDoJogo` | a única conversão de `ordemGlobal` em data; guarda a curva antiga como leitora do histórico |
+| `CalendarioDaTemporada` | a grade semanal, as semanas de cada competição e o validador de conflitos |
+| `CalendarioDasCompeticoes` | os dias das 26 competições e os 14 perfis de clube |
+| `CalendarioDeSlots` | traduz o slot que os geradores produzem no dia do ano |
+| `AvancoPorDia` | quais partidas o mundo deve ter jogado até hoje |
+| `CalendarioVersao` | a escala de uma temporada: `CURVA` (slots) ou `GRADE` (dias) |
 
+#### As três decisões que seguraram tudo
 
+1. **A versão do calendário mora no campeonato**, não numa configuração global.
+   Toda competição de uma temporada nasce no rollover, então uma temporada ou é
+   inteira de uma escala ou é inteira da outra. Isso dispensou reescrever
+   milhares de partidas gravadas e tornou impossível, por construção, uma
+   temporada misturar as duas.
+
+2. **A tradução acontece num ponto só**, na hora de gravar a partida. Os ~109
+   lugares que montam calendário continuam produzindo os slots de sempre; o que
+   muda é o valor que vai para o banco. Trocar o valor na origem seria um
+   refactor largo para um ganho nenhum.
+
+3. **A grade torna a colisão impossível**, em vez de consertá-la caso a caso.
+   Três casas por semana (+0, +3, +5) nunca ficam a menos de 2 dias uma da
+   outra, qualquer que seja a alocação — o que troca um problema de coloração
+   por um de alocação de conjuntos.
 
 ### Etapa 0 — o relógio que zera a cada temporada *(independente, barato, urgente)*
 
@@ -450,7 +478,7 @@ coloração com janelas estreitas.
 
 #### O que foi feito
 
-A enumeração do calendário real, agora completa (29 competições, **14 perfis**
+A enumeração do calendário real, agora completa (26 competições, **14 perfis**
 de clube), achou **22 colisões de mesmo dia e 41 de dias seguidos**.
 
 E mostrou que a causa não era o `ordemGlobal`: dentro de um perfil ele nunca
@@ -507,7 +535,7 @@ competições ganhar rodadas.
 #### Onde está
 
 - `CalendarioDaTemporada` — a grade, as semanas de cada competição e o validador.
-- `CalendarioDasCompeticoes` — os dias de cada uma das 29 competições e os 14
+- `CalendarioDasCompeticoes` — os dias de cada uma das 26 competições e os 14
   perfis de clube. **É daqui que a etapa 2 vai ler.**
 - `CalendarioDasCompeticoesTest` — exige zero conflito nos 14 perfis, e nomeia
   cada defeito antigo para que a regressão diga *qual* voltou.
@@ -537,7 +565,7 @@ ele é específico:
 
 1. **Nada se perde.** As tabelas são lidas na geração, então as partidas já
    gravadas ficam como estão. Nenhum histórico quebra.
-2. **Mas a temporada corrente fica MISTA.** Há 14 funções `verificarEAvancarFase*`
+2. **Mas a temporada corrente fica MISTA.** Há 15 funções `verificarEAvancarFase*`
    que geram partidas DURANTE a temporada — grupos da Libertadores, oitavas da
    Champions, fases da Copa do Rei, playoff uruguaio. Num save a meio de
    temporada, o que já existe usa os dias velhos e o que vier usa os novos:
@@ -763,11 +791,27 @@ O que um aparelho **não** dá: o banco. O APK instalado é de release, então
 `run-as` não abre o diretório do app, e instalar um debug exigiria desinstalar —
 o que apagaria o save. As checagens acima são todas por tela e por logcat.
 
-## 9. O que NÃO foi verificado
+## 9. O que foi e o que não foi verificado no app
 
-- Nada disto foi executado no app nem num save real. As colisões e as
-  divergências de mês foram calculadas sobre as fórmulas e as tabelas do código.
-- O descompasso financeiro em clube argentino (§2.1) é o que a fórmula produz;
-  não foi reproduzido jogando.
-- O calendário uruguaio (`ordemGlobal` até 520) e os amistosos (~5 / ~450) não
-  entraram na checagem de colisões por perfil.
+Verificado no emulador, com build de release e save real:
+
+- **a migração 36 → 37** rodou sobre um save existente e ele carregou intacto,
+  com as datas da curva idênticas às de antes;
+- **a grade**: num jogo novo, os 40 jogos da temporada caem exatamente nos dias
+  da tabela, com zero colisões e intervalo mínimo de 3 dias;
+- **a data da transferência**: uma venda feita em março saiu em 22 de março, o
+  dia da última partida do clube;
+- **o ritmo das competições**: Premier J=8 contra Championship J=9, e a Champions
+  ainda na Fase de Liga com a liga em 26 de abril.
+
+Não verificado:
+
+- **o `ALTER TABLE` em si** não tem teste automatizado. Executá-lo pede SQLite
+  real, e o projeto não tem infraestrutura instrumentada — um `androidTest`
+  exigiria instalar no aparelho, o que apagaria o save do usuário. O que está
+  coberto é a corrente de migrações, que é o que destrói dado.
+- **perfis com continental na primeira temporada**: o clube de teste não pegou
+  vaga em Libertadores nos grupos, só na Pré.
+- **o descompasso financeiro em clube argentino** (§2.1) é o que a fórmula
+  produz; nunca foi reproduzido jogando.
+- **o aparelho do usuário** não foi tocado em momento nenhum.
