@@ -193,6 +193,7 @@ especificação própria em [calendario-avanco-dia-a-dia.md](calendario-avanco-d
 | **4** — transferências pelo dia | ✅ (saiu com a 2) | `a0c4c20`, `7014cfc` |
 | **5** — o dia governa a simulação *(versão enxuta)* | ✅ | `310d6b0` |
 | — correção do carimbo de transferência | ✅ | `ab590b1` |
+| — ordenar a próxima partida pela temporada | ✅ | `183f970` |
 
 A ordem de execução foi 0 → 1 → **3** → 2 → 4 → 5: a 3 veio antes da 2 porque,
 se o `ordemGlobal` virasse o dia com os conflitos ainda de pé, dois jogos do
@@ -222,6 +223,25 @@ mesmo clube passariam a ter o mesmo valor e a ordenação ficaria ambígua.
 | `CalendarioDeSlots` | traduz o slot que os geradores produzem no dia do ano |
 | `AvancoPorDia` | quais partidas o mundo deve ter jogado até hoje |
 | `CalendarioVersao` | a escala de uma temporada: `CURVA` (slots) ou `GRADE` (dias) |
+
+#### A virada de temporada
+
+A temporada em andamento fica na `CURVA` até o fim; a seguinte nasce inteira na
+`GRADE`, porque toda competição dela é criada no rollover. Três coisas a observar
+nessa única virada:
+
+1. **Transferências já gravadas com data errada ficam erradas.** Não há como
+   recuperar o valor certo depois do fato.
+2. **A janela de 12 meses sai torta por uma temporada.** As duas consultas de
+   `PartidaDao` (linhas ~199–210) comparam o `ordemGlobal` da temporada corrente
+   com o da anterior; quando as duas estão em escalas diferentes, esse recorte de
+   forma e estatística erra. Sem perda de dado.
+3. **`buscarProximaPartida` era cega à temporada**, e isso foi consertado: sem
+   a temporada na frente, uma partida que tivesse sobrado por jogar do ano velho
+   guardaria um *slot*, e os slots baixos (1 da Supercopa, 13 e 33 da Copa do
+   Brasil, 15 a 35 da Pré-Libertadores) ficam abaixo do dia 39, que é a primeira
+   rodada da temporada nova — o jogo mandaria o jogador para uma partida do ano
+   passado.
 
 #### As três decisões que seguraram tudo
 

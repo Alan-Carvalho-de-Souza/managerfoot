@@ -74,11 +74,29 @@ interface PartidaDao {
     """)
     suspend fun migrarOrdemGlobalCopaBrasil()
 
+    /**
+     * A próxima partida do clube.
+     *
+     * A ordenação precisa da TEMPORADA na frente, e a razão é a mesma do cálculo
+     * de moral: `ordemGlobal` é o relógio de UMA temporada. Ordenando só por ele,
+     * uma partida que tenha sobrado por jogar do ano passado compete em pé de
+     * igualdade com as do ano corrente.
+     *
+     * Antes da grade isso quase nunca aparecia, porque as duas temporadas usavam
+     * a mesma escala de slots. Com a grade a temporada nova começa no dia 39, e
+     * qualquer sobra do ano velho com slot baixo — a Supercopa em 1, a Copa do
+     * Brasil em 13 e 33, a Pré-Libertadores de 15 a 35 — passaria à frente da
+     * primeira rodada. O jogador seria mandado para uma partida do ano passado.
+     *
+     * Com a temporada na frente, a sobra é jogada primeiro, que é o certo
+     * cronologicamente, e a virada de temporada fica imune à troca de escala.
+     */
     @Query("""
-        SELECT * FROM partidas
-        WHERE (timeCasaId = :timeId OR timeForaId = :timeId) AND jogada = 0
-          AND campeonatoId NOT IN (SELECT id FROM campeonatos WHERE tipo = 'AMISTOSO')
-        ORDER BY ordemGlobal
+        SELECT p.* FROM partidas p
+        INNER JOIN campeonatos c ON c.id = p.campeonatoId
+        WHERE (p.timeCasaId = :timeId OR p.timeForaId = :timeId) AND p.jogada = 0
+          AND c.tipo != 'AMISTOSO'
+        ORDER BY c.temporadaId, p.ordemGlobal
         LIMIT 1
     """)
     suspend fun buscarProximaPartida(timeId: Int): PartidaEntity?
