@@ -821,12 +821,20 @@ class GameRepository @Inject constructor(
      *
      * [outrosCampeonatoIds] — IDs dos campeonatos paralelos (Séries B, C, D e Copa) que
      * devem ter sua rodada atual simulada simultaneamente ao jogo do jogador.
+     *
+     * [continentaisIds] — Champions, Europa League, Libertadores e Sul-Americana.
+     * Elas NÃO entram em [outrosCampeonatoIds] de propósito: ali o caminho da
+     * CURVA faria cada uma andar uma rodada por partida do jogador, que é o
+     * ritmo errado para quem joga a cada duas ou três semanas. Aqui elas só
+     * andam pelo DIA, e numa temporada da curva ficam como sempre estiveram —
+     * na máquina de fases delas.
      */
     suspend fun finalizarPartidaComJogador(
         ctx: ContextoSimulacaoMetade,
         golsCasaFinal: Int,
         golsForaFinal: Int,
-        outrosCampeonatoIds: List<Int> = emptyList()
+        outrosCampeonatoIds: List<Int> = emptyList(),
+        continentaisIds: List<Int> = emptyList()
     ): ResultadoPartida {
         val escalacaoCasa = if (ctx.ehMandante) ctx.escalacaoJogadorOriginal else ctx.escalacaoAdversario
         val escalacaoFora = if (ctx.ehMandante) ctx.escalacaoAdversario else ctx.escalacaoJogadorOriginal
@@ -901,8 +909,11 @@ class GameRepository @Inject constructor(
             .toSet()
         aplicarTreinamentoAutomaticoIA(iaTimeIdsLiga)
 
-        // Simula rodada atual em todos os outros campeonatos paralelos (Séries B, C, D, Copa)
-        simularRodadaEmOutrosCampeonatos(ctx.campeonatoId, outrosCampeonatoIds)
+        // Põe os outros campeonatos em dia. Numa temporada da grade o critério é o
+        // DIA em que o jogador acabou de jogar; na curva, uma rodada cada.
+        val diaDoJogador = partidaDao.buscarPorId(ctx.partidaDoJogadorId)?.ordemGlobal ?: 0
+        simularRodadaEmOutrosCampeonatos(ctx.campeonatoId, outrosCampeonatoIds, diaDoJogador)
+        porEmDiaAsContinentais(ctx.campeonatoId, continentaisIds, diaDoJogador)
 
         // Verifica Copa (agregado + pênaltis)
         var precisaPenaltis = false
@@ -3623,8 +3634,14 @@ class GameRepository @Inject constructor(
 
         val pendentesLiga = todas.filter { !it.jogada && it.fase == null }
         if (pendentesLiga.isNotEmpty()) {
-            // Uma rodada por chamada, começando pela mais antiga pendente.
-            simularRodada(championsId, pendentesLiga.minOf { it.rodada })
+            // Numa temporada da GRADE a Fase de Liga anda pelo calendário, em
+            // porEmDiaAsContinentais. Jogar uma rodada aqui a empurraria para a
+            // frente do dia corrente — era assim que a Champions corria na
+            // velocidade da liga nacional, e não na dela.
+            if (camp.calendarioVersao == CalendarioVersao.CURVA) {
+                // Uma rodada por chamada, começando pela mais antiga pendente.
+                simularRodada(championsId, pendentesLiga.minOf { it.rodada })
+            }
         } else {
             val pendentesMataMata = todas.filter { !it.jogada && it.fase != null }
             pendentesMataMata.map { it.rodada }.toSortedSet().forEach { rodada ->
@@ -6471,27 +6488,90 @@ class GameRepository @Inject constructor(
      * a próxima rodada pendente (rodadaAtual + 1) de forma a manter todos os campeonatos
      * progredindo em sincronismo com o jogo do jogador.
      */
+    /**
+     * Põe as outras competições em dia depois de uma partida do jogador.
+     *
+     * [diaDoJogador] é o dia do ano em que ele acabou de jogar. Numa temporada da
+     * GRADE é ele que manda: tudo que estava marcado até esse dia já aconteceu, e
+     * a rodada de cada competição vira consequência disso. Ver [AvancoPorDia].
+     *
+     * Numa temporada da CURVA o `ordemGlobal` é um contador de slots e não se
+     * compara entre competições, então o caminho antigo continua: cada uma anda
+     * exatamente uma rodada. É o que todo save anterior à grade espera.
+     */
     private suspend fun simularRodadaEmOutrosCampeonatos(
         playerCampeonatoId: Int,
-        outrasIds: List<Int>
+        outrasIds: List<Int>,
+        diaDoJogador: Int
     ) {
         for (campId in outrasIds) {
             if (campId <= 0 || campId == playerCampeonatoId) continue
             val camp = campeonatoDao.buscarPorId(campId) ?: continue
             if (camp.encerrado) continue
 
-            // Recupera e simula partidas atrasadas de rodadas já encerradas nesta liga
-            val atrasadas = partidaDao.buscarTodasPorCampeonato(campId)
-                .filter { !it.jogada && it.rodada <= camp.rodadaAtual && it.fase == null }
-            for (partida in atrasadas) {
-                try { simularPartidaInterna(partida) } catch (_: Exception) {}
-            }
-
-            val proximaRodada = camp.rodadaAtual + 1
-            if (proximaRodada <= camp.totalRodadas) {
-                simularRodada(campId, proximaRodada)
-            }
+            val porDia = camp.calendarioVersao != CalendarioVersao.CURVA && diaDoJogador > 0
+            if (porDia) avancarCampeonatoAteODia(campId, diaDoJogador)
+            else avancarCampeonatoUmaRodada(camp)
         }
+    }
+
+    /**
+     * Põe as continentais em dia, e SÓ por dia.
+     *
+     * Elas não têm o caminho de "uma rodada por partida do jogador": numa
+     * temporada da CURVA ficam intocadas aqui, como sempre estiveram, e quem as
+     * move é `simularProximaRodadaContinentalSeNecessario`.
+     *
+     * O que entra é a fase de pontos corridos — a Fase de Liga das europeias e a
+     * fase de grupos das sul-americanas, ambas com `fase = null`. O mata-mata
+     * continua no gatilho de fase, que é quem sabe montar o chaveamento.
+     */
+    private suspend fun porEmDiaAsContinentais(
+        playerCampeonatoId: Int,
+        continentaisIds: List<Int>,
+        diaDoJogador: Int
+    ) {
+        if (diaDoJogador <= 0) return
+        for (campId in continentaisIds) {
+            if (campId <= 0 || campId == playerCampeonatoId) continue
+            val camp = campeonatoDao.buscarPorId(campId) ?: continue
+            if (camp.encerrado) continue
+            if (camp.calendarioVersao == CalendarioVersao.CURVA) continue
+            avancarCampeonatoAteODia(campId, diaDoJogador)
+        }
+    }
+
+    /** O caminho antigo: uma rodada por partida do jogador. */
+    private suspend fun avancarCampeonatoUmaRodada(camp: CampeonatoEntity) {
+        // Recupera e simula partidas atrasadas de rodadas já encerradas nesta liga
+        val atrasadas = partidaDao.buscarTodasPorCampeonato(camp.id)
+            .filter { !it.jogada && it.rodada <= camp.rodadaAtual && it.fase == null }
+        for (partida in atrasadas) {
+            try { simularPartidaInterna(partida) } catch (_: Exception) {}
+        }
+
+        val proximaRodada = camp.rodadaAtual + 1
+        if (proximaRodada <= camp.totalRodadas) {
+            simularRodada(camp.id, proximaRodada)
+        }
+    }
+
+    /** O caminho novo: joga tudo que estava marcado até [ateODia]. */
+    private suspend fun avancarCampeonatoAteODia(campId: Int, ateODia: Int) {
+        val todas = partidaDao.buscarTodasPorCampeonato(campId)
+        val aJogar = AvancoPorDia.partidasAtePorDia(todas, ateODia)
+        if (aJogar.isEmpty()) return
+
+        for (partida in aJogar) {
+            try { simularPartidaInterna(partida) } catch (_: Exception) {}
+        }
+
+        val rodada = AvancoPorDia.rodadaDepoisDoAvanco(todas, ateODia)
+        if (rodada > 0) campeonatoDao.adiantarRodadaAte(campId, rodada)
+
+        aplicarTreinamentoAutomaticoIA(
+            aJogar.flatMap { listOf(it.timeCasaId, it.timeForaId) }.toSet()
+        )
     }
 
 

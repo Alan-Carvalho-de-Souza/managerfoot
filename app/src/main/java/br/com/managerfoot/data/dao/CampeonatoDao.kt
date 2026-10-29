@@ -76,6 +76,17 @@ interface CampeonatoDao {
     @Query("UPDATE campeonatos SET rodadaAtual = rodadaAtual + 1 WHERE id = :campeonatoId")
     suspend fun avancarRodada(campeonatoId: Int)
 
+    /**
+     * Põe `rodadaAtual` num valor, em vez de somar 1.
+     *
+     * É o que o avanço por DIA precisa: ali a rodada não é mais o que anda — ela
+     * passa a ser consequência de quais partidas já foram jogadas, e pode pular
+     * mais de uma de uma vez (uma liga de 46 rodadas anda mais rápido que uma de
+     * 38 no mesmo intervalo de dias).
+     */
+    @Query("UPDATE campeonatos SET rodadaAtual = :rodada WHERE id = :campeonatoId AND rodadaAtual < :rodada")
+    suspend fun adiantarRodadaAte(campeonatoId: Int, rodada: Int)
+
     @Query("UPDATE campeonatos SET encerrado = 1 WHERE id = :campeonatoId")
     suspend fun encerrar(campeonatoId: Int)
 

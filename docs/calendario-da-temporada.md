@@ -590,7 +590,66 @@ da curva.
 
 - **Saves:** nenhum impacto; o fallback para registros sem relógio já existe.
 
-### Etapa 5 — simulação dirigida por data *(opcional, e a cara)*
+### Etapa 5 — simulação dirigida por data ✅ *(feita: a versão enxuta)*
+
+#### O que foi feito
+
+A interação do jogador **não mudou**: ele continua jogando a próxima partida
+dele. O que mudou é o que acontece ENTRE duas partidas suas. Antes era "avança
+uma rodada em todo mundo"; agora é **"tudo que estava marcado até hoje já
+aconteceu"** (`AvancoPorDia`).
+
+A regra tem três propriedades, e são elas que dispensam uma rotina de
+reconciliação para saves em andamento:
+
+- **idempotente** — partidas já jogadas não entram de novo;
+- **recupera atraso sozinha** — uma competição parada volta a estar em dia na
+  primeira chamada;
+- **não depende da ordem** em que as competições são percorridas.
+
+Fica de fora o mata-mata (`fase != null`), que nasce de `verificarEAvancarFase*`
+quando a fase anterior termina. Jogá-lo por data atropelaria esse encadeamento.
+
+#### O defeito que isso conserta
+
+Com uma rodada por partida do jogador, **toda competição andava na velocidade da
+liga nacional**, independentemente de quantas rodadas ela tivesse. O efeito,
+medido no emulador:
+
+| Competição | Antes | Depois |
+|---|---|---|
+| Premier League (38 rodadas) | J=8 | J=8 |
+| EFL Championship (46 rodadas) | J=8 | **J=9** |
+| Champions League (18 jogos) | **encerrada** com a liga em abril | Fase de Liga em andamento |
+
+A Champions era o caso extremo: ela liquidava as 18 datas dela em 18 partidas do
+jogador e terminava em abril. E era isso que carimbava as transferências com a
+data da final dela — o "2 de dezembro" que apareceu no histórico.
+
+#### As continentais entram, mas por outra porta
+
+Champions, Europa League, Libertadores e Sul-Americana **não** foram para a
+lista de `outrosCampeonatoIds`: ali o caminho da CURVA faria cada uma andar uma
+rodada por partida do jogador, que é justamente o ritmo errado. Elas têm uma
+lista própria (`continentaisIds`) que **só** anda por dia, e numa temporada da
+curva ficam onde sempre estiveram, na máquina de fases delas.
+
+E `simularProximaRodadaContinentalSeNecessario` ganhou uma trava: numa temporada
+da grade ela não joga mais rodadas da Fase de Liga, porque isso as empurraria
+para a frente do dia corrente.
+
+#### O que ficou de fora
+
+O avanço dia a dia **na interface**. Um dia pode não ter jogo do clube do jogador
+e ter jogo dos outros; hoje esses dias são atravessados em silêncio. Dar ao
+jogador um "avançar dia" é a versão completa, e é a que mexe em tela.
+
+Os placares ao vivo também seguem como "outros jogos da mesma rodada", e não
+"outros jogos de hoje".
+
+---
+
+### Etapa 5 — como era descrita
 
 Trocar "o jogador joga uma rodada → todo mundo joga a próxima rodada dele"
 (`simularRodadaEmOutrosCampeonatos`) por "avança para o próximo dia com jogos".

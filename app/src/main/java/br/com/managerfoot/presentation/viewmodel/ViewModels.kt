@@ -908,12 +908,23 @@ class DashboardViewModel @Inject constructor(
             } else {
                 emptyList()
             }
+            // As continentais vão à parte: elas só andam pelo DIA, e por isso não
+            // dependem de o jogo do jogador ter sido de liga. Pôr o mundo em dia
+            // é idempotente — joga o que estava marcado até hoje e mais nada.
+            val continentais = listOf(
+                save.championsId,
+                save.europaLeagueId,
+                save.libertadoresId,
+                save.sulAmericanaId
+            ).filter { it > 0 && it != ctx.campeonatoId }
+
             val resultadoFinal = withContext(Dispatchers.Default) {
                 gameRepository.finalizarPartidaComJogador(
                     ctx                  = ctx,
                     golsCasaFinal        = golsCasa,
                     golsForaFinal        = golsFora,
-                    outrosCampeonatoIds  = outrosCampeonatos
+                    outrosCampeonatoIds  = outrosCampeonatos,
+                    continentaisIds      = continentais
                 )
             }
             _resultadoSimulado.value = resultadoFinal
