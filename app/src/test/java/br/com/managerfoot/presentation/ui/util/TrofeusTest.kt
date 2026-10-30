@@ -132,4 +132,102 @@ class TrofeusTest {
         assertEquals(Trofeus.GENERICO, t.drawable)
         assertEquals(true, t.tintable)
     }
+    // ── As seis imagens novas ────────────────────────────────────────────
+    //
+    // Duas delas têm o nome do TROFÉU diferente do nome do CAMPEONATO: a FA Cup
+    // se chama "Copa da Inglaterra" no rollover, e a Copa do Rei se chama "Copa
+    // Espanhola". Casar pelo nome do troféu não acharia nada.
+
+    @Test
+    fun `as ligas europeias tem o trofeu delas`() {
+        assertEquals(Trofeus.PREMIER_LEAGUE, resolver("Premier League 2027/28").drawable)
+        assertEquals(Trofeus.EFL_CHAMPIONSHIP, resolver("EFL Championship 2027/28").drawable)
+        assertEquals(Trofeus.LA_LIGA, resolver("La Liga 2027/28").drawable)
+    }
+
+    @Test
+    fun `as copas europeias tem o trofeu delas, pelo nome do campeonato`() {
+        assertEquals(Trofeus.FA_CUP, resolver("Copa da Inglaterra 2027").drawable)
+        assertEquals(Trofeus.COPA_DO_REI, resolver("Copa Espanhola 2027").drawable)
+    }
+
+    @Test
+    fun `a copa sul-americana deixou de usar o placeholder`() {
+        val t = resolver("Copa Sul-Americana 2027")
+        assertEquals(Trofeus.SULAMERICANA, t.drawable)
+        assertNotEquals(Trofeus.GENERICO, t.drawable)
+        assertEquals(false, t.tintable)
+    }
+
+    @Test
+    fun `nenhuma das seis renderiza com tint`() {
+        // tintable = false faz a imagem manter as cores dela. Se alguma voltasse
+        // ao placeholder, o tint a pintaria de uma cor só e ninguém notaria.
+        for (nome in listOf(
+            "Premier League 2027/28", "EFL Championship 2027/28", "La Liga 2027/28",
+            "Copa da Inglaterra 2027", "Copa Espanhola 2027", "Copa Sul-Americana 2027"
+        )) {
+            assertEquals(nome, false, resolver(nome).tintable)
+        }
+    }
+
+    @Test
+    fun `as seis sao imagens distintas entre si`() {
+        val drawables = listOf(
+            Trofeus.PREMIER_LEAGUE, Trofeus.EFL_CHAMPIONSHIP, Trofeus.LA_LIGA,
+            Trofeus.FA_CUP, Trofeus.COPA_DO_REI, Trofeus.SULAMERICANA
+        )
+        assertEquals(drawables.size, drawables.distinct().size)
+    }
+
+    @Test
+    fun `o pais de cada uma e o certo`() {
+        assertEquals(Trofeus.Pais.INGLATERRA, resolver("Premier League 2027/28").pais)
+        assertEquals(Trofeus.Pais.INGLATERRA, resolver("EFL Championship 2027/28").pais)
+        assertEquals(Trofeus.Pais.INGLATERRA, resolver("Copa da Inglaterra 2027").pais)
+        assertEquals(Trofeus.Pais.ESPANHA, resolver("La Liga 2027/28").pais)
+        assertEquals(Trofeus.Pais.ESPANHA, resolver("Copa Espanhola 2027").pais)
+    }
+
+    // ── As colisões que os ramos novos poderiam criar ────────────────────
+
+    @Test
+    fun `a premier league nao e confundida com as europeias`() {
+        // "Premier League" contém "league", como "Champions League" e "Europa
+        // League". Os ramos continentais casam o nome inteiro, não só "league".
+        val t = resolver("Premier League 2027/28")
+        assertNotEquals(Trofeus.CHAMPIONS_LEAGUE, t.drawable)
+        assertNotEquals(Trofeus.EUROPA_LEAGUE, t.drawable)
+    }
+
+    @Test
+    fun `a championship continua fora da champions, agora com imagem propria`() {
+        val t = resolver("EFL Championship 2027/28", divisao = 21)
+        assertEquals(Trofeus.EFL_CHAMPIONSHIP, t.drawable)
+        assertNotEquals(Trofeus.CHAMPIONS_LEAGUE, t.drawable)
+    }
+
+    @Test
+    fun `as copas europeias nao capturam as outras copas`() {
+        // Os ramos novos casam por "copa", como os do Brasil e da Argentina.
+        assertEquals(Trofeus.COPA_BRASIL, resolver("Copa do Brasil 2027").drawable)
+        assertEquals(Trofeus.COPA_ARGENTINA, resolver("Copa Argentina 2027").drawable)
+        assertEquals(Trofeus.SULAMERICANA, resolver("Copa Sul-Americana 2027").drawable)
+        assertEquals(Trofeus.INTERCONTINENTAL, resolver("Copa Intercontinental 2027").drawable)
+    }
+
+    @Test
+    fun `a supercopa da espanha nao virou copa do rei`() {
+        // "Supercopa da Espanha" contém "espanha", mas não "copa espanhola";
+        // e o ramo das supercopas vem antes de qualquer jeito.
+        assertEquals("Supercopa da Espanha", resolver("Supercopa da Espanha 2027").nomeCurto)
+        assertNotEquals(Trofeus.COPA_DO_REI, resolver("Supercopa da Espanha 2027").drawable)
+    }
+
+    @Test
+    fun `a coppa italia segue sem imagem propria`() {
+        // Não entrou nesta leva: continua no genérico, e isto fixa o fato para
+        // quem for adicionar a imagem dela depois.
+        assertEquals(Trofeus.GENERICO, resolver("Copa Italiana 2027").drawable)
+    }
 }

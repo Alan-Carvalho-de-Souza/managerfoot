@@ -14,15 +14,18 @@ import br.com.managerfoot.presentation.ui.theme.SulAmericanaTeal
 /**
  * Mapeamento de campeonato → drawable de troféu + tier (cor de destaque).
  *
- * **Como usar:** todas as constantes apontam atualmente para o mesmo
- * placeholder vetorial (`ic_trophy_placeholder`). Para substituir por
- * PNG real de um campeonato específico:
+ * **Como usar:** as competições sem imagem própria apontam para o placeholder
+ * vetorial (`ic_trophy_placeholder`). Para dar imagem real a uma delas:
  *
- * 1. Adicione o arquivo `.png` em `res/drawable/` (ex: `trofeu_serie_a.png`)
+ * 1. Adicione o arquivo `.png` em `res/drawable/` (ex: `ic_trophy_laliga.png`)
  * 2. Mude apenas a constante correspondente abaixo:
- *    `val SERIE_A: Int = R.drawable.trofeu_serie_a`
+ *    `val LA_LIGA: Int = R.drawable.ic_trophy_laliga`
+ * 3. Garanta que [resolver] tem um ramo que chega nela — o nome do campeonato
+ *    é o que seleciona, e os nomes vêm do rollover em `GameRepository`.
  *
- * O resto do app (ConquistasScreen / TrofeuCard) detecta automaticamente.
+ * O resto do app (ConquistasScreen / TrofeuCard) detecta automaticamente: o
+ * `tintable` da [TrofeuInfo] vira `false` sozinho quando o drawable deixa de
+ * ser o placeholder, e a imagem passa a renderizar com as cores dela.
  *
  * **Tier:** define a cor de destaque (gold para divisão de elite, prata
  * para segunda divisão, etc). Independente do drawable.
@@ -36,6 +39,17 @@ object Trofeus {
     @DrawableRes val SERIE_D: Int      = R.drawable.ic_trophy_brasileirao_seried
     @DrawableRes val COPA_BRASIL: Int  = R.drawable.ic_trophy_copadobrasil
     @DrawableRes val SUPERCOPA_REI: Int = R.drawable.ic_trophy_supercoparei
+
+    // ── Inglaterra ────────────────────────────────────────────
+    @DrawableRes val PREMIER_LEAGUE: Int   = R.drawable.ic_trophy_premierleague
+    @DrawableRes val EFL_CHAMPIONSHIP: Int = R.drawable.ic_trophy_eflchampionship
+    // A FA Cup se chama "Copa da Inglaterra" no rollover; a imagem é a do nome real.
+    @DrawableRes val FA_CUP: Int           = R.drawable.ic_trophy_facup
+
+    // ── Espanha ───────────────────────────────────────────────
+    @DrawableRes val LA_LIGA: Int     = R.drawable.ic_trophy_laliga
+    // Idem: o campeonato se chama "Copa Espanhola", o troféu é a Copa do Rei.
+    @DrawableRes val COPA_DO_REI: Int = R.drawable.ic_trophy_copadorei
 
     // ── Argentina ─────────────────────────────────────────────
     @DrawableRes val PRIMERA_ARG: Int  = R.drawable.ic_trophy_placeholder
@@ -61,6 +75,7 @@ object Trofeus {
     @DrawableRes val EUROPA_LEAGUE: Int    = R.drawable.ic_trophy_europaleague
     @DrawableRes val LIBERTADORES: Int     = R.drawable.ic_trophy_libertadores
     @DrawableRes val INTERCONTINENTAL: Int = R.drawable.ic_trophy_intercontinental
+    @DrawableRes val SULAMERICANA: Int     = R.drawable.ic_trophy_copasulamericana
     // Sem imagem própria ainda: para usar PNG real, adicione
     // `ic_trophy_supercopauefa.png` em res/drawable/ e troque a referência.
     @DrawableRes val SUPERCOPA_UEFA: Int   = R.drawable.ic_trophy_placeholder
@@ -84,7 +99,7 @@ object Trofeus {
         val tintable: Boolean = true
     )
 
-    enum class Pais { BRASIL, ARGENTINA, URUGUAI, INTERNACIONAL }
+    enum class Pais { BRASIL, ARGENTINA, URUGUAI, INGLATERRA, ESPANHA, INTERNACIONAL }
 
     /**
      * Identifica o troféu a partir do nome do campeonato e (opcionalmente)
@@ -129,10 +144,9 @@ object Trofeus {
                 return@run TrofeuInfo(GENERICO, SulAmericanaTeal, "Recopa Sul-Americana", Pais.INTERNACIONAL)
             }
             // Antes do ramo genérico de "copa", que capturaria "Copa
-            // Sul-Americana". Ainda sem imagem própria: quando houver, basta
-            // trocar GENERICO por ela, como nas supercopas.
+            // Sul-Americana".
             if (nome.contains("sul-americana") || nome.contains("sul americana")) {
-                return@run TrofeuInfo(GENERICO, SulAmericanaTeal, "Copa Sul-Americana", Pais.INTERNACIONAL)
+                return@run TrofeuInfo(SULAMERICANA, SulAmericanaTeal, "Copa Sul-Americana", Pais.INTERNACIONAL)
             }
 
             // ── Supercopas ────────────────────────────────────────────
@@ -168,6 +182,29 @@ object Trofeus {
             }
             if (nome.contains("copa do brasil") || (nome.contains("copa") && nome.contains("brasil"))) {
                 return@run TrofeuInfo(COPA_BRASIL, GoldChampion, "Copa do Brasil", Pais.BRASIL)
+            }
+
+            // Copas da Inglaterra e da Espanha. Ficam aqui, depois das copas do
+            // Brasil e da Argentina, porque todas casam por "copa" e a ordem é
+            // o que separa uma da outra.
+            if (nome.contains("copa da inglaterra")) {
+                return@run TrofeuInfo(FA_CUP, GoldChampion, "FA Cup", Pais.INGLATERRA)
+            }
+            if (nome.contains("copa espanhola") || nome.contains("copa do rei")) {
+                return@run TrofeuInfo(COPA_DO_REI, GoldChampion, "Copa do Rei", Pais.ESPANHA)
+            }
+
+            // Ligas europeias. A Championship vem ANTES da Premier só por
+            // clareza — não há colisão entre as duas —, mas as duas precisam
+            // vir antes do ramo por divisão, que as mandaria para o genérico.
+            if (nome.contains("championship")) {
+                return@run TrofeuInfo(EFL_CHAMPIONSHIP, SilverRunnerUp, "EFL Championship", Pais.INGLATERRA)
+            }
+            if (nome.contains("premier league")) {
+                return@run TrofeuInfo(PREMIER_LEAGUE, GoldChampion, "Premier League", Pais.INGLATERRA)
+            }
+            if (nome.contains("la liga")) {
+                return@run TrofeuInfo(LA_LIGA, GoldChampion, "La Liga", Pais.ESPANHA)
             }
 
             // Argentina — Apertura/Clausura específicos
