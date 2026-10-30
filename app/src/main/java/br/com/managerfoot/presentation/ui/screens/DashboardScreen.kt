@@ -365,7 +365,15 @@ private fun AbaInicio(
                     rodadaAtual = proximaPartida?.rodada ?: 0,
                     mes = mesChip,
                     dia = diaChip,
-                    ano = saveState?.anoAtual ?: 0,
+                    // No intervalo entre dezembro (temporada encerrada) e o clique em
+                    // "encerrar temporada", o mês já virou janeiro e o ano já foi
+                    // incrementado (avancarMes no fechamento de dezembro). Mas o
+                    // header ainda referencia o ÚLTIMO jogo — dezembro da temporada
+                    // que acabou —, então mostra o ano DELA (anoAtual-1), senão
+                    // apareceria "Dez 2027" para uma partida que foi em dezembro/2026.
+                    ano = (saveState?.anoAtual ?: 0).let {
+                        if (proximaPartida == null && (saveState?.mesAtual ?: 0) == 1) it - 1 else it
+                    },
                     forma = forma
                 )
                 // Linha do técnico abaixo do header
@@ -479,7 +487,12 @@ private fun AbaInicio(
                 )
             } else {
                 EncerrarTemporadaCard(
-                    proximoAno = (saveState?.anoAtual ?: 2026) + 1,
+                    // O ano já foi incrementado ao fechar dezembro (mesAtual==1),
+                    // então a próxima temporada é o PRÓPRIO anoAtual; somar +1 aqui
+                    // mostraria um ano a mais (ex.: "iniciar 2028" em vez de 2027).
+                    proximoAno = (saveState?.anoAtual ?: 2026).let {
+                        if ((saveState?.mesAtual ?: 1) == 1) it else it + 1
+                    },
                     simulando = uiState == DashboardUiState.Simulando,
                     onEncerrar = onEncerrarTemporada,
                     modifier = Modifier.padding(horizontal = Spacing.lg)
