@@ -249,50 +249,66 @@ object ListaDeAcessoLibertadores {
         // ── Vagas nacionais, país por país ──────────────────────────────
         val cotas = cotasEfetivas(porPais.keys)
         for ((pais, cota) in cotas) {
-            // ── Porta 1: a vaga de título do país ───────────────────────
-            // Sai da cota de GRUPOS daquele país, não é uma vaga extra. Se o
-            // detentor não existe, não é daquele país ou já entrou por outra
-            // porta, a vaga DESCE para o colocado seguinte da liga — é a mesma
-            // regra de queda que a Europa League usa para o campeão da copa.
-            var vagasDeGrupoUsadas = 0
-            val detentorDoTitulo = vagasDeTitulo[pais]
+            // Detentores das vagas de título do país, enquanto ainda elegíveis
+            // (existem, são daquele país e não entraram como campeão vigente). São
+            // um PISO de destino, não uma vaga extra: saem da cota do país.
+            //   • detentorGrupo = campeão da Copa do Brasil (destino: GRUPOS)
+            //   • detentorPre   = vice da Copa do Brasil   (destino: PRÉ)
+            val detentorGrupo = vagasDeTitulo[pais]
                 ?.let { id -> porPais[pais].orEmpty().firstOrNull { it.timeId == id } }
-                ?.takeIf { it.timeId !in escolhidos }
-            if (detentorDoTitulo != null && cota.grupos > 0) {
-                vagas += VagaLibertadores(detentorDoTitulo, PortaDaLibertadores.VAGA_DE_TITULO)
-                escolhidos += detentorDoTitulo.timeId
-                vagasDeGrupoUsadas++
-            }
-
-            // ── Porta 2: a vaga de título que começa na Pré ─────────────
-            // Mesma regra de queda da anterior, mas descontando da cota de PRÉ:
-            // sem detentor elegível, a vaga desce para a liga e o país manda um
-            // colocado a mais às fases prévias.
-            var vagasDePreUsadas = 0
-            val detentorNaPre = vagasDeTituloNaPre[pais]
+                ?.takeIf { it.timeId !in escolhidos && cota.grupos > 0 }
+            val detentorPre = vagasDeTituloNaPre[pais]
                 ?.let { id -> porPais[pais].orEmpty().firstOrNull { it.timeId == id } }
-                ?.takeIf { it.timeId !in escolhidos }
-            if (detentorNaPre != null && cota.pre > 0) {
-                vagas += VagaLibertadores(detentorNaPre, PortaDaLibertadores.VAGA_DE_TITULO_PRE)
-                escolhidos += detentorNaPre.timeId
-                vagasDePreUsadas++
-            }
+                ?.takeIf { it.timeId !in escolhidos && cota.pre > 0 }
 
-            // ── Porta 3: a colocação na liga nacional ───────────────────
-            // A fila já está na ordem de preferência, então os melhores pegam as
-            // vagas diretas e os seguintes vão à Pré-Libertadores. Quem entrou
-            // por título já saiu da fila, que é o que faz a vaga dele CASCATEAR
-            // para o próximo colocado quando ele se classificaria de todo jeito.
+            // A fila na ordem de preferência (colocação na liga), já sem quem entrou
+            // como campeão vigente. Os detentores de título ficam NA fila — é o que
+            // permite a regra da "vaga mais benéfica" (Art. 5 do regulamento): um
+            // detentor cujo destino é a Pré (o vice) mas que termina na zona de
+            // grupos sobe aos grupos, e a vaga de Pré cascateia para o próximo
+            // colocado. O campeão (destino grupos) já está no melhor destino.
             val fila = porPais[pais].orEmpty().filter { it.timeId !in escolhidos }
-            val vagasDeGrupoRestantes = cota.grupos - vagasDeGrupoUsadas
-            val vagasDePreRestantes = cota.pre - vagasDePreUsadas
-            fila.take(vagasDeGrupoRestantes).forEach {
-                vagas += VagaLibertadores(it, PortaDaLibertadores.GRUPOS)
-                escolhidos += it.timeId
-            }
-            fila.drop(vagasDeGrupoRestantes).take(vagasDePreRestantes).forEach {
-                vagas += VagaLibertadores(it, PortaDaLibertadores.PRE_LIBERTADORES)
-                escolhidos += it.timeId
+
+            var grupos = cota.grupos
+            var pre = cota.pre
+            // Reserva de 1 vaga para um detentor de título ainda não alcançado na
+            // fila — garante o piso dele quando termina mal colocado, sem roubar a
+            // vaga de quem vem antes.
+            var reservaGrupo = if (detentorGrupo != null) 1 else 0
+            var reservaPre = if (detentorPre != null) 1 else 0
+
+            for (clube in fila) {
+                when {
+                    detentorGrupo != null && clube.timeId == detentorGrupo.timeId -> {
+                        vagas += VagaLibertadores(clube, PortaDaLibertadores.VAGA_DE_TITULO)
+                        escolhidos += clube.timeId
+                        grupos--; reservaGrupo = 0
+                    }
+                    detentorPre != null && clube.timeId == detentorPre.timeId -> {
+                        // Vaga mais benéfica: havendo vaga de grupo livre (além da
+                        // reservada ao campeão), o vice sobe aos grupos e a Pré desce.
+                        if (grupos - reservaGrupo > 0) {
+                            vagas += VagaLibertadores(clube, PortaDaLibertadores.GRUPOS)
+                            grupos--
+                        } else {
+                            vagas += VagaLibertadores(clube, PortaDaLibertadores.VAGA_DE_TITULO_PRE)
+                            pre--
+                        }
+                        escolhidos += clube.timeId
+                        reservaPre = 0
+                    }
+                    grupos - reservaGrupo > 0 -> {
+                        vagas += VagaLibertadores(clube, PortaDaLibertadores.GRUPOS)
+                        escolhidos += clube.timeId
+                        grupos--
+                    }
+                    pre - reservaPre > 0 -> {
+                        vagas += VagaLibertadores(clube, PortaDaLibertadores.PRE_LIBERTADORES)
+                        escolhidos += clube.timeId
+                        pre--
+                    }
+                    // Esgotada a cota do país: os demais ficam para a Sul-Americana.
+                }
             }
         }
 

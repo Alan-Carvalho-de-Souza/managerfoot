@@ -165,12 +165,29 @@ class VagasDoBrasileiraoTest {
             campeaoDaCopa = De(1),
             viceDaCopa = De(3)
         )
-        // O 1º fica com a vaga de grupo do campeão e o 3º com a de PRÉ do vice —
-        // o destino é da vaga, não da colocação. A liga completa os grupos com
-        // 2º, 4º, 5º e 6º, e a Pré com o 7º. Do 1º ao 7º, todos com vaga.
-        assertEquals(listOf(1, 2, 4, 5, 6), posicoes(G, z))
-        assertEquals(listOf(3, 7), posicoes(P, z))
+        // Vaga mais benéfica (Art. 5): o 1º (campeão) e o 3º (vice) já têm vaga de
+        // grupo pela colocação, então vão aos grupos; a vaga de Pré do vice
+        // cascateia. Grupos: 1º ao 5º; Pré: 6º e 7º. Do 1º ao 7º, todos com vaga.
+        assertEquals(listOf(1, 2, 3, 4, 5), posicoes(G, z))
+        assertEquals(listOf(6, 7), posicoes(P, z))
         assertTrue((1..7).all { z.zona(it) == G || z.zona(it) == P })
+    }
+
+    @Test
+    fun `o vice no G5 vai aos grupos e a Pre cascateia`() {
+        // Art. 5: o vice da Copa do Brasil detém uma vaga de PRÉ, mas terminando na
+        // zona de grupos fica com a vaga de grupo da colocação (a mais benéfica), e
+        // a vaga de Pré desce para o próximo colocado sem dono de vaga.
+        val z = VagasDoBrasileirao.distribuir(
+            campeaoDaCopa = SemDetentor,  // campeão sem detentor elegível
+            viceDaCopa = De(2)            // vice no G5
+        )
+        assertEquals(G, z.zona(2))        // subiu aos grupos, não ficou na Pré
+        assertEquals(listOf(1, 2, 3, 4, 5), posicoes(G, z))
+        assertEquals(listOf(6, 7), posicoes(P, z))
+        // A conta por destino não muda: 5 grupos + 2 Pré.
+        assertEquals(5, z.quantas(G))
+        assertEquals(2, z.quantas(P))
     }
 
     // ── O efeito cascata dos campeões continentais ───────────────────────

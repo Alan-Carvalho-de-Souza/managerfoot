@@ -223,6 +223,34 @@ class LibertadoresTest {
     }
 
     @Test
+    fun `o vice da Copa no G5 sobe aos grupos e a Pre cascateia`() {
+        // Art. 5 do regulamento (vaga mais benéfica): o vice detém uma vaga de PRÉ,
+        // mas terminando na zona de grupos fica com a vaga de grupo da colocação; a
+        // vaga de Pré desce para o próximo colocado do Brasil.
+        val todos = candidatosDasDezAssociacoes()
+        val vice = todos.first { it.pais == "Brasil" && it.posicaoLiga == 2 }.timeId
+        val vagas = acesso.montar(todos, vagasDeTituloNaPre = mapOf("Brasil" to vice))
+
+        val doVice = vagas.first { it.candidato.timeId == vice }
+        assertEquals(PortaDaLibertadores.GRUPOS, doVice.porta)
+        assertTrue(acesso.diretosNosGrupos(vagas).any { it.timeId == vice })
+        assertTrue(acesso.naPreLibertadores(vagas).none { it.timeId == vice })
+
+        // A cota do Brasil não muda: 5 grupos + 2 Pré, e a Pré do vice cascateou
+        // para colocados da liga (nenhuma vaga de título na Pré sobrou).
+        val doBrasil = vagas.filter { it.candidato.pais == "Brasil" }
+        val cota = acesso.COTAS_OFICIAIS.getValue("Brasil")
+        assertEquals(cota.total, doBrasil.size)
+        assertEquals(
+            cota.pre,
+            doBrasil.count {
+                it.porta == PortaDaLibertadores.PRE_LIBERTADORES ||
+                    it.porta == PortaDaLibertadores.VAGA_DE_TITULO_PRE
+            }
+        )
+    }
+
+    @Test
     fun `sem detentor a vaga da pre desce para a liga`() {
         // Regra de queda: um vice que não é candidato — rebaixado para a Série B,
         // ou de outro país — devolve a vaga ao Brasileirão.
